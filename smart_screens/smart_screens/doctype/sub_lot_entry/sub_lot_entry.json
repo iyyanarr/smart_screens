@@ -1,0 +1,146 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-04-10 13:53:16.913004",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_ur5m",
+  "sslnscaned_sub_lot_number",
+  "column_break_uxqe",
+  "stage",
+  "section_break_omws",
+  "item_code",
+  "item_group",
+  "warehouse",
+  "column_break_lixz",
+  "batch",
+  "column_break_htuc",
+  "sublot_qty",
+  "sublot_number",
+  "sublot_batch",
+  "column_break_niqy",
+  "barcode",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_ur5m",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "sslnscaned_sub_lot_number",
+   "fieldtype": "Data",
+   "label": "SSLN(Scaned Sub Lot Number)"
+  },
+  {
+   "fieldname": "section_break_omws",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item Code",
+   "options": "Item"
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "label": "Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "column_break_lixz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "column_break_htuc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sublot_qty",
+   "fieldtype": "Float",
+   "label": "Sublot Qty"
+  },
+  {
+   "fieldname": "column_break_uxqe",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Link",
+   "label": "Stage",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "sublot_number",
+   "fieldtype": "Data",
+   "label": "Sublot Number"
+  },
+  {
+   "fieldname": "sublot_batch",
+   "fieldtype": "Link",
+   "label": "Sublot Batch",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "column_break_niqy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "barcode",
+   "fieldtype": "Barcode",
+   "label": "Barcode"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Sub Lot Entry",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-04-10 14:01:00.075476",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Sub Lot Entry",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
