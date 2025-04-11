@@ -17,8 +17,8 @@ class SubLotEntry(Document):
         Perform validations before saving the Sub Lot Entry document.
         """
         # Validate that the lot number is not empty
-        if not self.lot_number:
-            frappe.throw("Lot Number is required.")
+        if not self.sublot_number:
+            frappe.throw("SubLot Number is required.")
 
         # Validate that the batch number is not empty
         if not self.batch_number:
