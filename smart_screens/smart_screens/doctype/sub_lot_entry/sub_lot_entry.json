@@ -9,19 +9,26 @@
   "sslnscaned_sub_lot_number",
   "column_break_uxqe",
   "stage",
+  "column_break_wrzy",
+  "source_warehouse",
+  "column_break_jqlw",
   "section_break_omws",
   "item_code",
   "item_group",
-  "warehouse",
-  "column_break_lixz",
+  "column_break_grro",
   "batch",
-  "column_break_htuc",
+  "batch_qty",
+  "column_break_lixz",
+  "target_warehouse",
   "sublot_qty",
+  "create_sublot",
+  "column_break_htuc",
   "sublot_number",
   "sublot_batch",
   "column_break_niqy",
   "barcode",
-  "amended_from"
+  "amended_from",
+  "stockentry_ref"
  ],
  "fields": [
   {
@@ -73,16 +80,11 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "item_group.item_group_name",
    "fieldname": "stage",
    "fieldtype": "Link",
    "label": "Stage",
    "options": "Item Group"
-  },
-  {
-   "fieldname": "warehouse",
-   "fieldtype": "Link",
-   "label": "Warehouse",
-   "options": "Warehouse"
   },
   {
    "fieldname": "sublot_number",
@@ -113,13 +115,53 @@
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "column_break_grro",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_qty",
+   "fieldtype": "Float",
+   "label": "Batch Qty"
+  },
+  {
+   "fieldname": "column_break_wrzy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_jqlw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "create_sublot",
+   "fieldtype": "Button",
+   "label": "Create Sublot"
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Target Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "stockentry_ref",
+   "fieldtype": "Link",
+   "label": "Stockentry Ref",
+   "options": "Stock Entry"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-10 14:01:00.075476",
+ "modified": "2025-04-11 13:06:18.621741",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Sub Lot Entry",
