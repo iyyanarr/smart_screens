@@ -2,7 +2,9 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 # Import utility functions
 from smart_screens.smart_screens.utils.generate_barcode import generate_barcode_image
@@ -12,54 +14,77 @@ from smart_screens.smart_screens.utils.uom_convertion import get_uom_details
 
 
 class SubLotEntry(Document):
+    """
+    SubLotEntry DocType for managing sub-lot creation from a parent batch.
+    
+    This document allows creating sub-lots with unique identifiers from a parent batch,
+    including generating barcodes and creating necessary stock entries.
+    """
+    
     def validate(self):
         """
-        Perform validations before saving the Sub Lot Entry document.
+        Perform validations before saving the Sub Lot Entry document:
+        - Check for required fields
+        - Validate numeric values
+        - Ensure proper relationships between fields
         """
-        # Validate that the lot number is not empty
-        if not self.sublot_number:
-            frappe.throw("SubLot Number is required.")
-
-        # Validate that the batch number is not empty
-        if not self.batch_number:
-            frappe.throw("Batch Number is required.")
-
-        # Validate that the warehouse is not empty
-        if not self.warehouse:
-            frappe.throw("Warehouse is required.")
-
-        # Validate that the quantity is greater than zero
-        if self.quantity <= 0:
-            frappe.throw("Quantity must be greater than zero.")
-
-        # Check if the batch exists in the specified warehouse
-        batch_exists = frappe.db.exists(
-            "Item Batch Stock Balance",
-            {"batch_no": self.batch_number, "warehouse": self.warehouse}
-        )
-        if not batch_exists:
-            frappe.throw(
-                f"Batch {self.batch_number} does not exist in Warehouse {self.warehouse}."
+        self.validate_required_fields()
+        self.validate_numeric_values()
+        self.validate_warehouses()
+        
+    def validate_required_fields(self):
+        """Validate that all required fields are provided."""
+        required_fields = {
+            "batch": _("Source Batch Number"),
+            "sublot_number": _("Sub Lot Number"),
+            "sublot_qty": _("Sub Lot Quantity"),
+            "source_warehouse": _("Source Warehouse"),
+            "target_warehouse": _("Target Warehouse"),
+            "item_code": _("Item Code")
+        }
+        
+        for field, label in required_fields.items():
+            if not self.get(field):
+                frappe.throw(_("{0} is required").format(label))
+    
+    def validate_numeric_values(self):
+        """Validate that all numeric values are positive."""
+        numeric_fields = {
+            "sublot_qty": _("Sub Lot Quantity"),
+            "batch_qty": _("Batch Quantity")
+        }
+        
+        for field, label in numeric_fields.items():
+            value = flt(self.get(field))
+            if value <= 0:
+                frappe.throw(_("{0} must be greater than zero").format(label))
+            
+            # Update the field with the formatted float value
+            self.set(field, value)
+        
+        # Ensure sub-lot quantity doesn't exceed batch quantity
+        if flt(self.sublot_qty) > flt(self.batch_qty):
+            frappe.throw(_("Sub Lot Quantity cannot exceed Batch Quantity"))
+    
+    def validate_warehouses(self):
+        """Validate warehouse-related conditions."""
+        if self.source_warehouse == self.target_warehouse:
+            frappe.msgprint(
+                _("Source and Target Warehouse are the same. Consider using different warehouses."),
+                indicator="orange", 
+                alert=True
             )
-
-        # After validation, pass the data to the create_sub_lot function
-        self.create_sub_lot()
-
-    def create_sub_lot(self):
+    
+    def on_submit(self):
         """
-        Create a sub-lot entry after validation.
+        Actions to perform when the document is submitted:
+        - Update stock entry status
+        - Log the operation
         """
-        # Logic to create the sub-lot entry
-        try:
-            # Example: Insert a new document in a custom doctype or perform other operations
-            sub_lot_doc = frappe.get_doc({
-                "doctype": "Sub Lot",
-                "lot_number": self.lot_number,
-                "batch_number": self.batch_number,
-                "warehouse": self.warehouse,
-                "quantity": self.quantity
-            })
-            sub_lot_doc.insert()
-            frappe.msgprint(f"Sub Lot created successfully for Lot Number: {self.lot_number}")
-        except Exception as e:
-            frappe.throw(f"Failed to create Sub Lot: {str(e)}")
+        if self.stockentry_ref:
+            # Update any associated references
+            frappe.db.set_value("Stock Entry", self.stockentry_ref, "sub_lot_entry", self.name)
+            frappe.db.commit()
+    
+
+
