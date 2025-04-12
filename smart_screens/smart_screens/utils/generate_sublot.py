@@ -52,13 +52,15 @@ def get_next_available_batch_number(batch_number):
                 "parent_type": "Stock Entry",
                 "batch_no": batch_number
             },
-            fields=["parent"]
+            fields=["parent"],
+            ignore_permissions=True  # Add this parameter to bypass permission checks
         )
         
         # Get unique parent entries with purpose "Repack"
         repack_entry_names = set()
         for entry in repack_entries:
-            parent_entry = frappe.get_doc("Stock Entry", entry.parent)
+            # Also set ignore_permissions=True when getting the parent document
+            parent_entry = frappe.get_doc("Stock Entry", entry.parent, ignore_permissions=True)
             if parent_entry.purpose == "Repack":
                 repack_entry_names.add(parent_entry.name)
         
