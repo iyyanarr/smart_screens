@@ -53,6 +53,7 @@
   {
    "fieldname": "item_group",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Item Group",
    "options": "Item Group"
   },
@@ -162,7 +163,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-12 12:06:05.547012",
+ "modified": "2025-04-12 12:09:01.853148",
  "modified_by": "iyyanarr@alphaworkz.com",
  "module": "Smart Screens",
  "name": "Sub Lot Entry",

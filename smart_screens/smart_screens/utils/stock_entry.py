@@ -111,9 +111,9 @@ def create_stock_entry(item_code, qty, source_warehouse, target_warehouse, purpo
                 "batch_no": batch_no
             })
 
-        # Insert and submit the Stock Entry with ignore_permissions=True
-        stock_entry.insert(ignore_permissions=True)
-        stock_entry.submit(ignore_permissions=True)
+        # Insert the Stock Entry into the database
+        stock_entry.insert()
+        stock_entry.submit()
 
         return stock_entry.name
     except Exception as e:
