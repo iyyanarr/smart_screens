@@ -30,7 +30,7 @@ def get_next_available_batch_number(batch_number):
     """
     Get the next available batch number for the given batch.
     
-    1. Count the number of repack entries made against the given batch
+    1. Count the number of repack entries made against the given batch using SQL
     2. Create proposed 'new batch no.' by incrementing 1 to the count
     3. Check if proposed batch number already exists, and increment until we find an available one
     
@@ -44,28 +44,18 @@ def get_next_available_batch_number(batch_number):
         frappe.throw("Batch Number is required to generate next batch number.")
     
     try:
-        # Step 1: Get the number of repack entries made against the given batch
-        # Using get_list instead of direct count since mix_barcode is in a child table
-        repack_entries = frappe.get_list(
-            "Stock Entry Detail", 
-            filters={
-                "parent_type": "Stock Entry",
-                "batch_no": batch_number
-            },
-            fields=["parent"],
-            ignore_permissions=True  # Add this parameter to bypass permission checks
-        )
+        # Step 1: Use SQL to directly query repack entries referencing this batch
+        query = """
+            SELECT COUNT(DISTINCT se.name) as repack_count
+            FROM `tabStock Entry` se
+            INNER JOIN `tabStock Entry Detail` sed ON sed.parent = se.name
+            WHERE se.purpose = 'Repack'
+            AND sed.batch_no = %s
+            AND se.docstatus = 1
+        """
         
-        # Get unique parent entries with purpose "Repack"
-        repack_entry_names = set()
-        for entry in repack_entries:
-            # Also set ignore_permissions=True when getting the parent document
-            parent_entry = frappe.get_doc("Stock Entry", entry.parent, ignore_permissions=True)
-            if parent_entry.purpose == "Repack":
-                repack_entry_names.add(parent_entry.name)
-        
-        # Count unique entries
-        repack_entries_count = len(repack_entry_names)
+        result = frappe.db.sql(query, (batch_number,), as_dict=True)
+        repack_entries_count = result[0].repack_count if result else 0
         
         # Step 2: Create proposed new batch number by incrementing 1 to the count
         proposed_suffix = repack_entries_count + 1
