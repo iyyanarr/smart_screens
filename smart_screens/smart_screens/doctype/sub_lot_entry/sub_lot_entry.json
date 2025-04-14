@@ -6,29 +6,42 @@
  "engine": "InnoDB",
  "field_order": [
   "section_break_ur5m",
-  "sslnscaned_sub_lot_number",
+  "column_break_zqbf",
+  "location_details",
   "column_break_uxqe",
-  "stage",
+  "sslnscaned_sub_lot_number",
+  "sublot_qty",
+  "html_get_lot_validation",
+  "column_break_ftgt",
+  "uom",
   "column_break_wrzy",
-  "source_warehouse",
+  "html_create_sublot",
   "column_break_jqlw",
+  "html_lot_status",
   "section_break_omws",
+  "html_anvm",
   "item_code",
   "item_group",
-  "column_break_grro",
+  "html_lxyh",
   "batch",
   "batch_qty",
-  "column_break_lixz",
+  "column_break_grro",
+  "html_gsvs",
+  "stage",
+  "source_warehouse",
   "target_warehouse",
-  "sublot_qty",
-  "create_sublot",
+  "column_break_lixz",
   "column_break_htuc",
+  "html_uxdz",
+  "final_sublot_qty",
   "sublot_number",
   "sublot_batch",
+  "html_xirx",
+  "stockentry_ref",
   "column_break_niqy",
+  "html_pmni",
   "barcode",
-  "amended_from",
-  "stockentry_ref"
+  "amended_from"
  ],
  "fields": [
   {
@@ -48,14 +61,16 @@
    "fieldname": "item_code",
    "fieldtype": "Link",
    "label": "Item Code",
-   "options": "Item"
+   "options": "Item",
+   "read_only": 1
   },
   {
    "fieldname": "item_group",
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
    "label": "Item Group",
-   "options": "Item Group"
+   "options": "Item Group",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_lixz",
@@ -66,7 +81,8 @@
    "fieldtype": "Link",
    "ignore_user_permissions": 1,
    "label": "Batch",
-   "options": "Batch"
+   "options": "Batch",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_htuc",
@@ -125,7 +141,8 @@
   {
    "fieldname": "batch_qty",
    "fieldtype": "Float",
-   "label": "Batch Qty"
+   "label": "Batch Qty",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_wrzy",
@@ -134,11 +151,6 @@
   {
    "fieldname": "column_break_jqlw",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "create_sublot",
-   "fieldtype": "Button",
-   "label": "Create Sublot"
   },
   {
    "fieldname": "source_warehouse",
@@ -157,13 +169,79 @@
    "fieldtype": "Link",
    "label": "Stockentry Ref",
    "options": "Stock Entry"
+  },
+  {
+   "fieldname": "column_break_ftgt",
+   "fieldtype": "Column Break",
+   "max_height": "100px"
+  },
+  {
+   "fieldname": "column_break_zqbf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "html_anvm",
+   "fieldtype": "HTML",
+   "options": "<h3>Item Details</h3>"
+  },
+  {
+   "fieldname": "html_uxdz",
+   "fieldtype": "HTML",
+   "options": "<h3>Sublot Details</h3>"
+  },
+  {
+   "fieldname": "html_lxyh",
+   "fieldtype": "HTML",
+   "options": "<h3>Batch Details</h3>"
+  },
+  {
+   "fieldname": "html_gsvs",
+   "fieldtype": "HTML",
+   "options": "<h3>Wharehouse Details</h3>"
+  },
+  {
+   "fieldname": "html_pmni",
+   "fieldtype": "HTML",
+   "options": "<h3>Barecode Details</h3>"
+  },
+  {
+   "fieldname": "html_xirx",
+   "fieldtype": "HTML",
+   "options": "<h3>Stock Entry Details</h3>"
+  },
+  {
+   "fieldname": "html_get_lot_validation",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "html_lot_status",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "html_create_sublot",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "final_sublot_qty",
+   "fieldtype": "Float",
+   "label": "Final Sublot Qty"
+  },
+  {
+   "fieldname": "location_details",
+   "fieldtype": "HTML",
+   "options": "<h4>Sublot Status</h4>"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Select",
+   "label": "UOM"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-12 12:09:01.853148",
+ "modified": "2025-04-14 14:03:35.528326",
  "modified_by": "iyyanarr@alphaworkz.com",
  "module": "Smart Screens",
  "name": "Sub Lot Entry",

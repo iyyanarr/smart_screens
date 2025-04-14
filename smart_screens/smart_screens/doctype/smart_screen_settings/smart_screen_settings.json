@@ -5,7 +5,9 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "sub_lot_warehouse"
+  "sub_lot_warehouse",
+  "section_break_xuhi",
+  "sublot_location_mapping"
  ],
  "fields": [
   {
@@ -13,13 +15,23 @@
    "fieldtype": "Link",
    "label": "Sub Lot Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_break_xuhi",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "sublot_location_mapping",
+   "fieldtype": "Table",
+   "label": "Sublot Location Mapping",
+   "options": "Sublot Operation Mapping Details"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-10 15:52:26.457493",
+ "modified": "2025-04-14 12:32:55.217938",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Smart Screen Settings",

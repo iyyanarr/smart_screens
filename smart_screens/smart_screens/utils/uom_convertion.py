@@ -1,5 +1,6 @@
 import frappe
 
+@frappe.whitelist()
 def get_uom_details(item_code):
     """
     Fetch the UOM details of an item in ERPNext.

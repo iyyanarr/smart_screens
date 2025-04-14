@@ -1,0 +1,79 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-04-14 11:47:43.209164",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "location",
+  "stage",
+  "role",
+  "source_warehouse",
+  "target_warehouse",
+  "transaction_type"
+ ],
+ "fields": [
+  {
+   "fieldname": "location",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Location",
+   "options": "Address",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Stage",
+   "options": "Item Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Role",
+   "options": "Role",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "transaction_type",
+   "fieldtype": "Link",
+   "label": "Transaction Type",
+   "options": "Stock Entry Type",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-04-14 12:23:57.453010",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Sublot Operation Mapping Details",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
