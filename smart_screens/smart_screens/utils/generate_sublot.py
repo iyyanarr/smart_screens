@@ -29,11 +29,7 @@ def strip_leading_alphabets(text):
 
 def get_next_available_batch_number(batch_number):
     """
-    Get the next available batch number for the given batch.
-    
-    1. Count the number of repack entries made against the given batch
-    2. Create proposed 'new batch no.' by incrementing 1 to the count
-    3. Check if proposed batch number already exists, and increment until we find an available one
+    Get the next available batch number for the given batch - OPTIMIZED VERSION.
     
     Args:
         batch_number (str): The parent batch number.
@@ -45,57 +41,42 @@ def get_next_available_batch_number(batch_number):
         frappe.throw("Batch Number is required to generate next batch number.")
     
     try:
-        # Step 1: Get distinct Stock Entries with purpose "Repack" containing the batch
-        # repack_entries = frappe.get_list(
-        #     "Stock Entry Detail",
-        #     filters={
-        #         "batch_no": batch_number,
-        #         "docstatus": 1,
-        #         "parenttype": "Stock Entry"
-        #     },
-        #     fields=["parent"],
-        #     distinct=True,
-        #     as_list=False
-        # )
-        repack_entries = frappe.get_all('Stock Entry Detail',parent_doctype='Stock Entry',
-            filters={
-                'batch_no': batch_number,
-                'docstatus': 1,
-                'parenttype': 'Stock Entry'
-            },
-            fields=['parent'],
-            distinct=True
-        )
+        # Get count of repack entries in a single, optimized query
+        repack_count = frappe.db.sql("""
+            SELECT COUNT(DISTINCT sed.parent) 
+            FROM `tabStock Entry Detail` sed
+            JOIN `tabStock Entry` se ON sed.parent = se.name
+            WHERE sed.batch_no = %s 
+            AND sed.docstatus = 1
+            AND se.purpose = 'Repack'
+        """, batch_number)[0][0]
         
-        # Get only the entries where parent Stock Entry has purpose "Repack"
-        repack_entry_parents = set()
-        for entry in repack_entries:
-            parent_purpose = frappe.get_value("Stock Entry", entry.parent, "purpose")
-            if parent_purpose == "Repack":
-                repack_entry_parents.add(entry.parent)
+        # Create proposed new batch number by incrementing the count
+        proposed_suffix = repack_count + 1
         
-        repack_entries_count = len(repack_entry_parents)
+        # Check existing batch numbers in one query to determine next available suffix
+        existing_batches = frappe.db.sql("""
+            SELECT name FROM `tabBatch`
+            WHERE name LIKE %s
+            ORDER BY name
+        """, f"{batch_number}-%")
         
-        # Step 2: Create proposed new batch number by incrementing 1 to the count
-        proposed_suffix = repack_entries_count + 1
+        existing_suffixes = set()
+        for batch in existing_batches:
+            try:
+                suffix = int(batch[0].split('-')[-1])
+                existing_suffixes.add(suffix)
+            except (ValueError, IndexError):
+                continue
         
-        # Step 3: Check if the proposed batch number already exists
-        while True:
-            proposed_batch_number = f"{batch_number}-{proposed_suffix}"
-            
-            # Check if the batch exists
-            batch_exists = frappe.db.exists("Batch", proposed_batch_number)
-            
-            if not batch_exists:
-                # If the batch does not exist, we found our next available batch number
-                break
-                
-            # If the batch exists, increment the suffix and try again
+        # Find the next available suffix
+        while proposed_suffix in existing_suffixes:
             proposed_suffix += 1
-        
-        return proposed_batch_number
+            
+        return f"{batch_number}-{proposed_suffix}"
         
     except Exception as e:
+        frappe.logger().error(f"Error in get_next_available_batch_number: {str(e)}")
         frappe.throw(f"Failed to generate next available batch number: {str(e)}")
 
 

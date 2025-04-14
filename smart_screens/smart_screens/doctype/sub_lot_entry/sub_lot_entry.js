@@ -185,9 +185,16 @@ frappe.ui.form.on("Sub Lot Entry", {
                                     frm.set_df_property('html_create_sublot', 'options', `
                                         <div class="sublot-form-container">
                                             <div class="sublot-form-row">
-                                                <button class="btn btn-primary btn-block create-sublot-btn responsive-btn">
-                                                    Create Sub Lot
-                                                </button>
+                                                <div style="flex: 3; padding-right: 5px;">
+                                                    <button class="btn btn-primary btn-block create-sublot-btn responsive-btn" id="create-sublot-btn">
+                                                        Create Sub Lot
+                                                    </button>
+                                                </div>
+                                                <div style="flex: 2;">
+                                                    <button class="btn btn-default btn-block clear-fields-btn responsive-btn">
+                                                        <i class="fa fa-refresh"></i> Clear
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     `);
@@ -200,8 +207,19 @@ frappe.ui.form.on("Sub Lot Entry", {
                                             return;
                                         }
                                         
+                                        // Disable the button to prevent multiple submissions
+                                        const createBtn = $(this);
+                                        createBtn.prop('disabled', true);
+                                        createBtn.html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+                                        
                                         // Trigger the create_sublot action
                                         frm.trigger('create_sublot');
+                                    });
+                                    
+                                    // Add click handler for the Clear Fields button
+                                    $(frm.fields_dict.html_create_sublot.wrapper).find('.clear-fields-btn').on('click', function() {
+                                        // Clear form fields
+                                        clear_form_fields(frm);
                                     });
                                 },
                                 error: function(err) {
@@ -219,9 +237,16 @@ frappe.ui.form.on("Sub Lot Entry", {
                                     frm.set_df_property('html_create_sublot', 'options', `
                                         <div class="sublot-form-container">
                                             <div class="sublot-form-row">
-                                                <button class="btn btn-primary btn-block create-sublot-btn responsive-btn">
-                                                    Create Sub Lot
-                                                </button>
+                                                <div style="flex: 3; padding-right: 5px;">
+                                                    <button class="btn btn-primary btn-block create-sublot-btn responsive-btn" id="create-sublot-btn">
+                                                        Create Sub Lot
+                                                    </button>
+                                                </div>
+                                                <div style="flex: 2;">
+                                                    <button class="btn btn-default btn-block clear-fields-btn responsive-btn">
+                                                        <i class="fa fa-refresh"></i> Clear
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     `);
@@ -234,8 +259,19 @@ frappe.ui.form.on("Sub Lot Entry", {
                                             return;
                                         }
                                         
+                                        // Disable the button to prevent multiple submissions
+                                        const createBtn = $(this);
+                                        createBtn.prop('disabled', true);
+                                        createBtn.html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+                                        
                                         // Trigger the create_sublot action
                                         frm.trigger('create_sublot');
+                                    });
+                                    
+                                    // Add click handler for the Clear Fields button
+                                    $(frm.fields_dict.html_create_sublot.wrapper).find('.clear-fields-btn').on('click', function() {
+                                        // Clear form fields
+                                        clear_form_fields(frm);
                                     });
                                 }
                             });
@@ -336,7 +372,8 @@ frappe.ui.form.on("Sub Lot Entry", {
                         // Set form fields with the returned data
                         frm.set_value("sublot_batch", data.new_batch_number);
                         frm.set_value("sublot_number", data.sub_lot_number);
-                        frm.set_value("barcode", data.barcode_image);
+                        // Set barcode field to the sublot_batch value instead of barcode_image
+                        frm.set_value("barcode", data.new_batch_number);
                         frm.set_value("stockentry_ref", data.stock_entry_name);
                         
                         // Set final_sublot_qty from the actual processed quantity
@@ -344,37 +381,7 @@ frappe.ui.form.on("Sub Lot Entry", {
                             frm.set_value("final_sublot_qty", data.processed_qty);
                         }
                         
-                        // Show timing information in a detailed success message
-                        let timingHtml = '';
-                        if (data.timing) {
-                            timingHtml = `
-                                <div style="margin-top: 15px; border-top: 1px solid #e5e5e5; padding-top: 10px;">
-                                    <div><strong>Performance Details</strong> (times in ms)</div>
-                                    <table class="table table-condensed" style="font-size: 12px; margin-top: 5px;">
-                                        <tr>
-                                            <td>Getting batch number</td>
-                                            <td class="text-right">${data.timing.get_batch_number || 0}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Creating new batch</td>
-                                            <td class="text-right">${data.timing.create_batch || 0}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Generating barcode</td>
-                                            <td class="text-right">${data.timing.generate_barcode || 0}</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Creating stock entry</td>
-                                            <td class="text-right">${data.timing.create_stock_entry || 0}</td>
-                                        </tr>
-                                        <tr style="font-weight: bold;">
-                                            <td>Total processing time</td>
-                                            <td class="text-right">${data.timing.total || 0}</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            `;
-                        }
+                        // Remove timing HTML - no longer showing performance details
                         
                         // Update status in html_lot_status
                         frm.set_df_property('html_lot_status', 'options', `
@@ -386,7 +393,6 @@ frappe.ui.form.on("Sub Lot Entry", {
                                     <div><strong>Quantity:</strong> ${data.processed_qty}</div>
                                     <div><strong>Stock Entry:</strong> ${data.stock_entry_name}</div>
                                 </div>
-                                ${timingHtml}
                             </div>
                         `);
                         
@@ -394,15 +400,20 @@ frappe.ui.form.on("Sub Lot Entry", {
                         frm.set_df_property('html_create_sublot', 'options', '');
                         frm.toggle_display('uom', false);
                         
-                        // Save and submit the document
-                        frm.save().then(() => {
-                            frm.savesubmit().then(() => {
+                        // Save and submit the document without prompts
+                        frm.save()
+                            .then(() => frm.submit())
+                            .then(() => {
                                 frappe.show_alert({
                                     message: "Sub Lot Entry submitted successfully!",
                                     indicator: "green"
                                 });
+                                
+                                // Refresh the page after a short delay
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
                             });
-                        });
                     } else {
                         // If response doesn't indicate success
                         frm.set_df_property('html_lot_status', 'options', `
@@ -410,6 +421,9 @@ frappe.ui.form.on("Sub Lot Entry", {
                                 <i class="fa fa-exclamation-triangle"></i> Sub Lot was created but with some issues. Please check the system.
                             </div>
                         `);
+                        
+                        // Re-enable the create button in case of issues
+                        re_enable_create_button(frm);
                     }
                 },
                 error: function (error) {
@@ -421,6 +435,9 @@ frappe.ui.form.on("Sub Lot Entry", {
                             <i class="fa fa-exclamation-circle"></i> Failed to create sub lot. Please check the inputs.
                         </div>
                     `);
+                    
+                    // Re-enable the create button on error
+                    re_enable_create_button(frm);
                 }
             });
         } else {
@@ -429,6 +446,9 @@ frappe.ui.form.on("Sub Lot Entry", {
                     <i class="fa fa-exclamation-triangle"></i> Please ensure Batch, Batch Quantity, Source Warehouse, Target Warehouse, and Sublot Qty are filled before creating a sub lot.
                 </div>
             `);
+            
+            // Re-enable the create button if validation fails
+            re_enable_create_button(frm);
         }
     }
 });
@@ -516,5 +536,77 @@ function fetch_location_details_by_role(frm) {
                 </div>
             `);
         }
+    });
+}
+
+// Function to clear form fields
+function clear_form_fields(frm) {
+    // Clear main input fields
+    frm.set_value("sslnscaned_sub_lot_number", "");
+    frm.set_value("sublot_qty", "");
+    frm.set_value("sublot_number", "");
+    frm.set_value("sublot_batch", "");
+    frm.set_value("barcode", "");
+    frm.set_value("stockentry_ref", "");
+    frm.set_value("final_sublot_qty", "");
+    
+    // Clear item related fields
+    frm.set_value("item_code", "");
+    frm.set_value("item_group", "");
+    frm.set_value("batch", "");
+    frm.set_value("batch_qty", "");
+    
+    // Reset HTML fields
+    frm.set_df_property('html_lot_status', 'options', '');
+    frm.set_df_property('html_create_sublot', 'options', '');
+    
+    // Hide UOM field
+    frm.toggle_display('uom', false);
+    
+    // Show message
+    frappe.show_alert({
+        message: "Form fields cleared",
+        indicator: "blue"
+    });
+}
+
+// Function to re-enable the create sublot button
+function re_enable_create_button(frm) {
+    // Recreate the buttons with enabled state
+    frm.set_df_property('html_create_sublot', 'options', `
+        <div class="sublot-form-container">
+            <div class="sublot-form-row">
+                <div style="flex: 3; padding-right: 5px;">
+                    <button class="btn btn-primary btn-block create-sublot-btn responsive-btn" id="create-sublot-btn">
+                        Create Sub Lot
+                    </button>
+                </div>
+                <div style="flex: 2;">
+                    <button class="btn btn-default btn-block clear-fields-btn responsive-btn">
+                        <i class="fa fa-refresh"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    // Re-attach click handlers
+    $(frm.fields_dict.html_create_sublot.wrapper).find('.create-sublot-btn').on('click', function() {
+        if (!frm.doc.sublot_qty) {
+            frappe.msgprint("Please enter a quantity in the 'Sublot Qty' field before creating a sub lot.");
+            return;
+        }
+        
+        // Disable the button to prevent multiple submissions
+        const createBtn = $(this);
+        createBtn.prop('disabled', true);
+        createBtn.html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+        
+        frm.trigger('create_sublot');
+    });
+    
+    // Add click handler for the Clear Fields button
+    $(frm.fields_dict.html_create_sublot.wrapper).find('.clear-fields-btn').on('click', function() {
+        clear_form_fields(frm);
     });
 }
