@@ -18,8 +18,7 @@ def Lot_validation(mixed_barcode, stage, warehouse):
     """
     start_time = time.time()
     
-    # Fixed query - removed the non-existent se.item_group column
-    # Item group might be in the Stock Entry Detail table or need to join with Item table
+    # Fixed query - removed reference to non-existent se.mix_barcode column
     result = frappe.db.sql("""
         SELECT 
             sed.batch_no, 
@@ -34,11 +33,70 @@ def Lot_validation(mixed_barcode, stage, warehouse):
         WHERE 
             se.stock_entry_type = 'Manufacture'
             AND item.item_group = %s
-            AND se.mix_barcode = %s
+            AND sed.mix_barcode = %s
             AND sed.is_finished_item = 1
         LIMIT 1
     """, (stage, mixed_barcode), as_dict=1)
 
+    if not result:
+        # Try one more approach if the first fails
+        try:
+            # First check if mix_barcode exists in any Stock Entry Detail
+            entry_details = frappe.db.sql("""
+                SELECT 
+                    sed.batch_no, 
+                    sed.item_code,
+                    sed.parent as stock_entry_name
+                FROM 
+                    `tabStock Entry Detail` sed
+                INNER JOIN
+                    `tabItem` item ON sed.item_code = item.name
+                INNER JOIN
+                    `tabStock Entry` se ON sed.parent = se.name
+                WHERE 
+                    sed.mix_barcode = %s
+                    AND item.item_group = %s
+                    AND se.stock_entry_type = 'Manufacture'
+                    AND sed.is_finished_item = 1
+                LIMIT 1
+            """, (mixed_barcode, stage), as_dict=1)
+            
+            if entry_details:
+                result = entry_details
+            else:
+                # If still not found, try the alternative approach
+                stock_entry_details = frappe.db.sql("""
+                    SELECT name 
+                    FROM `tabStock Entry` 
+                    WHERE stock_entry_type = 'Manufacture' 
+                    AND docstatus = 1
+                """, as_dict=1)
+                
+                if stock_entry_details:
+                    # Check each stock entry for matching detail records
+                    for se in stock_entry_details:
+                        entry_details = frappe.get_all(
+                            "Stock Entry Detail",
+                            filters={
+                                "parent": se.name,
+                                "is_finished_item": 1,
+                                "mix_barcode": mixed_barcode
+                            },
+                            fields=["batch_no", "item_code"]
+                        )
+                        
+                        if entry_details:
+                            item = frappe.get_doc("Item", entry_details[0].item_code)
+                            if item.item_group == stage:
+                                result = [{
+                                    "batch_no": entry_details[0].batch_no,
+                                    "item_code": entry_details[0].item_code,
+                                    "stock_entry_name": se.name
+                                }]
+                                break
+        except Exception as e:
+            frappe.logger().error(f"Error in alternative lookup: {e}")
+    
     if not result:
         frappe.throw(f"No Stock Entry found for Mixed Barcode: {mixed_barcode} and Stage: {stage}")
 
@@ -49,9 +107,9 @@ def Lot_validation(mixed_barcode, stage, warehouse):
     # Get Batch Quantity with optimized query
     batch_qty_result = frappe.db.sql("""
         SELECT 
-            SUM(qty) as qty
+            SUM(actual_qty) as qty
         FROM 
-            `tabItem Batch Stock Balance`
+            `tabStock Ledger Entry`
         WHERE 
             batch_no = %s
             AND warehouse = %s
