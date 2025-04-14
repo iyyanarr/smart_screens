@@ -18,8 +18,8 @@ def Lot_validation(mixed_barcode, stage, warehouse):
     """
     start_time = time.time()
     
-    # Single optimized query using SQL JOIN to get both stock entry and batch details
-    # This replaces the first two separate queries
+    # Fixed query - removed the non-existent se.item_group column
+    # Item group might be in the Stock Entry Detail table or need to join with Item table
     result = frappe.db.sql("""
         SELECT 
             sed.batch_no, 
@@ -29,9 +29,11 @@ def Lot_validation(mixed_barcode, stage, warehouse):
             `tabStock Entry` se
         INNER JOIN 
             `tabStock Entry Detail` sed ON se.name = sed.parent
+        INNER JOIN
+            `tabItem` item ON sed.item_code = item.name
         WHERE 
             se.stock_entry_type = 'Manufacture'
-            AND se.item_group = %s
+            AND item.item_group = %s
             AND se.mix_barcode = %s
             AND sed.is_finished_item = 1
         LIMIT 1
