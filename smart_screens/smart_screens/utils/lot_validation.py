@@ -1,10 +1,12 @@
 import frappe
 from frappe.utils import flt
+import time
 
 @frappe.whitelist()
 def Lot_validation(mixed_barcode, stage, warehouse):
     """
     Validate the lot by querying stock entry and batch details using Frappe ORM.
+    Optimized version to improve performance.
 
     Args:
         mixed_barcode (str): The mixed barcode to validate.
@@ -14,61 +16,63 @@ def Lot_validation(mixed_barcode, stage, warehouse):
     Returns:
         dict: A dictionary containing the item code, warehouse, batch number, and batch quantity available in the warehouse.
     """
-    # Step 1: Query Stock Entry for the given mixed_barcode, stage, and type 'Manufacture'
-    stock_entry = frappe.get_all(
-        "Stock Entry",
-        filters={
-            "stock_entry_type": "Manufacture",
-            "item_group": stage,
-            "mix_barcode": mixed_barcode,
-            "is_finished_item": 1
-        },
-        fields=["name"],
-        limit_page_length=1
-    )
+    start_time = time.time()
+    
+    # Single optimized query using SQL JOIN to get both stock entry and batch details
+    # This replaces the first two separate queries
+    result = frappe.db.sql("""
+        SELECT 
+            sed.batch_no, 
+            sed.item_code,
+            se.name as stock_entry_name
+        FROM 
+            `tabStock Entry` se
+        INNER JOIN 
+            `tabStock Entry Detail` sed ON se.name = sed.parent
+        WHERE 
+            se.stock_entry_type = 'Manufacture'
+            AND se.item_group = %s
+            AND se.mix_barcode = %s
+            AND sed.is_finished_item = 1
+        LIMIT 1
+    """, (stage, mixed_barcode), as_dict=1)
 
-    if not stock_entry:
+    if not result:
         frappe.throw(f"No Stock Entry found for Mixed Barcode: {mixed_barcode} and Stage: {stage}")
 
-    stock_entry_name = stock_entry[0].get("name")
+    fg_batch_no = result[0].get("batch_no")
+    item_code = result[0].get("item_code")
+    stock_entry_name = result[0].get("stock_entry_name")
 
-    # Step 2: Get Finished Goods Batch Number and Item Code from Stock Entry Detail
-    fg_batch = frappe.get_all(
-        "Stock Entry Detail",
-        filters={
-            "parent": stock_entry_name,
-            "is_finished_item": 1
-        },
-        fields=["batch_no", "item_code"],
-        limit_page_length=1
-    )
+    # Get Batch Quantity with optimized query
+    batch_qty_result = frappe.db.sql("""
+        SELECT 
+            SUM(qty) as qty
+        FROM 
+            `tabItem Batch Stock Balance`
+        WHERE 
+            batch_no = %s
+            AND warehouse = %s
+    """, (fg_batch_no, warehouse), as_dict=1)
 
-    if not fg_batch:
-        frappe.throw(f"No Finished Goods Batch found for Stock Entry: {stock_entry_name}")
-
-    fg_batch_no = fg_batch[0].get("batch_no")
-    item_code = fg_batch[0].get("item_code")
-
-    # Step 3: Get Batch Quantity in the specified warehouse
-    batch_quantity = frappe.get_all(
-        "Item Batch Stock Balance",
-        filters={
-            "batch_no": fg_batch_no,
-            "warehouse": warehouse
-        },
-        fields=["qty"],
-        limit_page_length=1
-    )
-
-    if not batch_quantity:
+    if not batch_qty_result or not batch_qty_result[0].get("qty"):
         frappe.throw(f"No Batch Quantity found for Batch: {fg_batch_no} in Warehouse: {warehouse}")
 
-    quantity = flt(batch_quantity[0].get("qty"))
+    quantity = flt(batch_qty_result[0].get("qty"))
+    
+    # Get UOM information for the item
+    uom = frappe.db.get_value("Item", item_code, "stock_uom")
+    
+    # Log performance metrics
+    execution_time = time.time() - start_time
+    frappe.logger().info(f"Lot_validation execution time: {execution_time:.2f}s for barcode: {mixed_barcode}")
 
     # Return the results
     return {
         "item_code": item_code,
         "warehouse": warehouse,
         "batch_no": fg_batch_no,
-        "batch_quantity": quantity
+        "batch_quantity": quantity,
+        "uom": uom,
+        "stock_entry": stock_entry_name
     }
