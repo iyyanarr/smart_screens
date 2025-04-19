@@ -1,0 +1,206 @@
+.finishing-process-center .section {
+    margin-bottom: 30px;
+}
+
+.finishing-process-center .section-head {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e1e9ef;
+}
+
+/* Process Selection Cards Styling */
+.process-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    height: 100%;
+    margin-bottom: 15px;
+}
+
+.process-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.process-card.selected {
+    border: 2px solid #4aa3df;
+    background-color: #f0f7ff;
+}
+
+.process-card .card-title {
+    font-weight: bold;
+    color: #1a3e5e;
+}
+
+/* Action Buttons Styling */
+.action-section .btn {
+    margin-bottom: 15px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-section .btn i {
+    margin-right: 10px;
+    font-size: 18px;
+}
+
+/* Dashboard Styling */
+.dashboard-section .card {
+    margin-bottom: 20px;
+}
+
+.dashboard-section .card-header {
+    font-weight: bold;
+    background-color: #f5f7fa;
+}
+
+/* Validation Result Areas */
+#lot_validation_result,
+#employee_validation_result,
+#inspector_validation_result {
+    margin-top: 10px;
+}
+
+/* Custom Alert Styling */
+.alert {
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.alert-success {
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.alert-info {
+    border-left: 4px solid #17a2b8;
+}
+
+/* Workflow Tabs Styling */
+.workflow-tabs {
+    margin-bottom: 30px;
+}
+
+.workflow-tabs .nav-pills {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.workflow-tabs .nav-link {
+    border-radius: 5px;
+    padding: 15px;
+    position: relative;
+    margin: 0 5px;
+    text-align: center;
+}
+
+.workflow-tabs .nav-link .step-number {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    line-height: 28px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.5);
+    border: 1px solid;
+    margin-right: 10px;
+    text-align: center;
+}
+
+.workflow-tabs .nav-link.active .step-number {
+    background-color: #fff;
+}
+
+.workflow-tabs .nav-link.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.workflow-tabs .nav-link.active {
+    background-color: #4aa3df;
+    color: white;
+}
+
+/* Workflow Step Styling */
+.workflow-step {
+    margin-bottom: 30px;
+}
+
+.workflow-step .section-head {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e1e9ef;
+}
+
+/* Resource Tagging Table */
+#resource_table {
+    margin-top: 20px;
+}
+
+#resource_table th {
+    background-color: #f5f7fa;
+    font-weight: 600;
+}
+
+/* Button Styling */
+.workflow-step .btn {
+    margin-right: 10px;
+    padding: 8px 15px;
+}
+
+.workflow-step .btn i {
+    margin-right: 5px;
+}
+
+/* Form Field Styling */
+.form-group label {
+    font-weight: 500;
+}
+
+.form-control:focus {
+    border-color: #4aa3df;
+    box-shadow: 0 0 0 0.2rem rgba(74, 163, 223, 0.25);
+}
+
+/* Table Styling */
+.table td, .table th {
+    vertical-align: middle;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .action-section .btn {
+        font-size: 14px;
+    }
+    
+    .process-card .card-title {
+        font-size: 16px;
+    }
+    
+    .process-card .card-text {
+        font-size: 13px;
+    }
+    
+    .workflow-tabs .nav-link {
+        padding: 10px 5px;
+    }
+    
+    .workflow-tabs .nav-link .step-number {
+        width: 24px;
+        height: 24px;
+        line-height: 22px;
+        margin-right: 5px;
+    }
+    
+    .workflow-tabs .nav-link .step-title {
+        font-size: 14px;
+    }
+}

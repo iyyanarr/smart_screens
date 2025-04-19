@@ -3,7 +3,128 @@ from frappe.utils import flt
 import time
 
 @frappe.whitelist()
-def Lot_validation(mixed_barcode, stage, warehouse):
+def sub_lot_validation(sublot, stage, warehouse):
+    """
+    Validate the sublot by querying repack stock entry and item batch balance.
+    
+    Args:
+        sublot (str): The sublot/lot number to validate (matches spp_batch_number in Stock Entry Detail).
+        stage (str): The item group (stage) to filter.
+        warehouse (str): The warehouse to check the batch quantity.
+        
+    Returns:
+        dict: A dictionary containing the item code, warehouse, batch number, and batch quantity available in the warehouse.
+    """
+    start_time = time.time()
+    
+    # First, find the repack stock entry where spp_batch_number in Stock Entry Detail matches the sublot
+    result = frappe.db.sql("""
+        SELECT 
+            se.name as stock_entry_name,
+            se.from_warehouse,
+            se.to_warehouse
+        FROM 
+            `tabStock Entry` se
+        INNER JOIN
+            `tabStock Entry Detail` sed ON se.name = sed.parent
+        WHERE 
+            se.stock_entry_type = 'Repack'
+            AND sed.spp_batch_number = %s
+            AND se.docstatus = 1
+        GROUP BY se.name
+        ORDER BY se.creation DESC
+        LIMIT 1
+    """, (sublot), as_dict=1)
+    
+    if not result:
+        frappe.throw(f"No Repack Stock Entry found for Lot Number: {sublot}")
+    
+    stock_entry_name = result[0].get("stock_entry_name")
+    
+    # Get item and batch details from the stock entry detail
+    item_details = frappe.db.sql("""
+        SELECT 
+            sed.batch_no, 
+            sed.item_code,
+            sed.qty,
+            sed.is_finished_item,
+            sed.spp_batch_number,
+            item.item_group
+        FROM 
+            `tabStock Entry Detail` sed
+        INNER JOIN
+            `tabItem` item ON sed.item_code = item.name
+        WHERE 
+            sed.parent = %s
+            AND sed.is_finished_item = 1
+    """, (stock_entry_name), as_dict=1)
+    
+    if not item_details:
+        frappe.throw(f"No finished item details found in the Repack Stock Entry: {stock_entry_name}")
+    
+    # If stage is provided, filter for matching item_group
+    if stage:
+        filtered_items = [item for item in item_details if item.get("item_group") == stage]
+        if filtered_items:
+            item_details = filtered_items
+    
+    # Get the first finished item
+    item_detail = item_details[0]
+    item_code = item_detail.get("item_code")
+    batch_no = item_detail.get("batch_no")
+    spp_batch_number = item_detail.get("spp_batch_number") or sublot
+    
+    # Now get batch quantity from Item Batch Balance List if it exists
+    batch_qty_result = frappe.db.sql("""
+        SELECT 
+            SUM(qty) as qty
+        FROM 
+            `tabItem Batch Stock Balance`
+        WHERE 
+            batch_no = %s
+            AND warehouse = %s
+    """, (batch_no, warehouse), as_dict=1)
+    
+    # If no results from Item Batch Balance List, try Stock Ledger Entry
+    if not batch_qty_result or not batch_qty_result[0].get("qty"):
+        # Get Batch Quantity from Stock Ledger Entry
+        batch_qty_result = frappe.db.sql("""
+            SELECT 
+                SUM(actual_qty) as qty
+            FROM 
+                `tabStock Ledger Entry`
+            WHERE 
+                batch_no = %s
+                AND warehouse = %s
+        """, (batch_no, warehouse), as_dict=1)
+    
+    if not batch_qty_result or batch_qty_result[0].get("qty") is None:
+        frappe.throw(f"No Batch Quantity found for Batch: {batch_no} in Warehouse: {warehouse}")
+    
+    quantity = flt(batch_qty_result[0].get("qty"))
+    
+    # Get UOM information for the item
+    uom = frappe.db.get_value("Item", item_code, "stock_uom")
+    
+    # Log performance metrics
+    execution_time = time.time() - start_time
+    frappe.logger().info(f"sub_lot_validation execution time: {execution_time:.2f}s for sublot: {sublot}")
+    
+    # Return the results
+    return {
+        "item_code": item_code,
+        "warehouse": warehouse,
+        "batch_no": batch_no,
+        "batch_quantity": quantity,
+        "uom": uom,
+        "stock_entry": stock_entry_name,
+        "from_warehouse": result[0].get("from_warehouse"),
+        "to_warehouse": result[0].get("to_warehouse"),
+        "spp_batch_number": spp_batch_number
+    }
+
+@frappe.whitelist()
+def lot_validation(mixed_barcode, stage, warehouse):
     """
     Validate the lot by querying stock entry and batch details using Frappe ORM.
     Optimized version to improve performance.

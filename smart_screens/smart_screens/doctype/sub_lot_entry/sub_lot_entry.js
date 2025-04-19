@@ -114,9 +114,9 @@ frappe.ui.form.on("Sub Lot Entry", {
                 frm.toggle_display('uom', false);
                 
                 frappe.call({
-                    method: "smart_screens.smart_screens.utils.lot_validation.Lot_validation",
+                    method: "smart_screens.smart_screens.utils.lot_validation.sub_lot_validation",
                     args: {
-                        mixed_barcode: frm.doc.sslnscaned_sub_lot_number,
+                        sublot: frm.doc.sslnscaned_sub_lot_number,
                         stage: frm.doc.stage,
                         warehouse: frm.doc.source_warehouse
                     },
@@ -139,6 +139,8 @@ frappe.ui.form.on("Sub Lot Entry", {
                                         <div><strong>Batch:</strong> ${data.batch_no}</div>
                                         <div><strong>Quantity:</strong> ${data.batch_quantity}</div>
                                         <div><strong>Warehouse:</strong> ${data.warehouse}</div>
+                                        <div><strong>Stock Entry:</strong> ${data.stock_entry}</div>
+                                        <div><strong>SPP Batch Number:</strong> ${data.spp_batch_number || frm.doc.sslnscaned_sub_lot_number}</div>
                                     </div>
                                 </div>
                             `);
@@ -309,7 +311,7 @@ frappe.ui.form.on("Sub Lot Entry", {
                 // Show warning message in html_lot_status
                 frm.set_df_property('html_lot_status', 'options', `
                     <div class="alert alert-warning">
-                        <i class="fa fa-exclamation-triangle"></i> Please ensure Mixed Barcode, Stage, and Warehouse are filled before fetching stock information.
+                        <i class="fa fa-exclamation-triangle"></i> Please ensure Lot Number, Stage, and Warehouse are filled before fetching stock information.
                     </div>
                 `);
                 
@@ -463,7 +465,7 @@ function fetch_location_details_by_role(frm) {
     `);
     
     frappe.call({
-        method: "smart_screens.smart_screens.doctype.sub_lot_entry.sub_lot_entry.get_location_by_role",
+        method: "smart_screens.smart_screens.utils.emp_validation.get_location_by_role",
         args: {
             user: frappe.session.user
         },
@@ -475,6 +477,8 @@ function fetch_location_details_by_role(frm) {
                 // Set values from mapping to form fields
                 frm.set_value("source_warehouse", locationMapping.source_warehouse);
                 frm.set_value("target_warehouse", locationMapping.target_warehouse);
+                // Set the warehouse value for validation
+              
                 if (locationMapping.stage) {
                     frm.set_value("stage", locationMapping.stage);
                 }

@@ -1,0 +1,402 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "INSP-.#####",
+ "creation": "2023-03-28 16:31:13.024001",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "inspection_type",
+  "scan_inspector",
+  "scan_production_lot",
+  "sample_or_trial",
+  "column_break_5",
+  "posting_date",
+  "inspector_code",
+  "inspector_name",
+  "source_warehouse",
+  "warehouse",
+  "section_break_1",
+  "lot_no",
+  "product_ref_no",
+  "operator_name",
+  "machine_no",
+  "batch_no",
+  "spp_batch_number",
+  "column_break_10",
+  "stage",
+  "uom",
+  "inspected_qty_nos",
+  "available_qty_nos",
+  "available_qty_kgs",
+  "total_inspected_qty_nos",
+  "total_inspected_qty",
+  "one_kg_equal_nos",
+  "one_no_qty_equal_kgs",
+  "total_rejected_qty",
+  "total_rejected_qty_in_percentage",
+  "total_rejected_qty_kg",
+  "column_break_ufay",
+  "html_location_details",
+  "specification_section",
+  "id_minimum",
+  "id_maximum",
+  "column_break_spec1",
+  "od_minimum",
+  "od_maximum",
+  "column_break_spec2",
+  "hardness",
+  "thickness",
+  "references_section",
+  "stock_entry_reference",
+  "vs_pdir_stock_entry_ref",
+  "moulding_production_completed",
+  "vs_pdir_qty",
+  "section_break_3e8ja",
+  "items",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "inspection_type",
+   "fieldtype": "Select",
+   "label": "Inspection Type",
+   "options": "\nPatrol Inspection\nLine Inspection\nLot Inspection\nIncoming Inspection\nFinal Visual Inspection",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.inspection_type",
+   "fieldname": "scan_inspector",
+   "fieldtype": "Data",
+   "label": "Scan inspector",
+   "options": "Barcode"
+  },
+  {
+   "depends_on": "eval:doc.inspection_type",
+   "fieldname": "scan_production_lot",
+   "fieldtype": "Data",
+   "label": "Scan Production Lot",
+   "options": "Barcode"
+  },
+  {
+   "default": "0",
+   "fieldname": "sample_or_trial",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Sample or Trial"
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "lot_no",
+   "fieldtype": "Data",
+   "label": "Lot No",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "product_ref_no",
+   "fieldtype": "Link",
+   "label": "Product Ref No",
+   "options": "Item"
+  },
+  {
+   "fieldname": "operator_name",
+   "fieldtype": "Data",
+   "label": "Operator Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "inspector_name",
+   "fieldtype": "Data",
+   "label": "Inspector Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "inspector_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Inspector ID",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "spp_batch_number",
+   "fieldtype": "Data",
+   "label": "SPP Batch Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_3e8ja",
+   "fieldtype": "Section Break",
+   "label": "Defect Details"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Inspection Entry Item"
+  },
+  {
+   "fieldname": "column_break_ufay",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "html_location_details",
+   "fieldtype": "HTML",
+   "label": "Location Details"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Inspection Entry",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Link",
+   "label": "Stage",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "inspected_qty_nos",
+   "fieldtype": "Float",
+   "label": "Inspected Qty (Nos)",
+   "precision": 3
+  },
+  {
+   "fieldname": "total_inspected_qty_nos",
+   "fieldtype": "Float",
+   "label": "Total Inspected Qty (Nos)",
+   "precision": 3
+  },
+  {
+   "description": "Note: This field is auto-calculated based on the rejected quantities entered in the items table",
+   "fieldname": "total_rejected_qty",
+   "fieldtype": "Float",
+   "label": "Total Rejected Qty",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "description": "Percentage of the rejected quantity compared to the total inspected quantity",
+   "fieldname": "total_rejected_qty_in_percentage",
+   "fieldtype": "Float",
+   "label": "Total Rejected Qty (%)",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_rejected_qty_kg",
+   "fieldtype": "Float",
+   "label": "Total Rejected Qty (Kgs)",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "description": "Conversion factor for a single unit to kg",
+   "fieldname": "one_no_qty_equal_kgs",
+   "fieldtype": "Float",
+   "label": "1 No Qty = X Kgs",
+   "precision": 5
+  },
+  {
+   "fieldname": "available_qty_nos",
+   "fieldtype": "Float",
+   "label": "Available Qty (Nos)",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "fieldname": "available_qty_kgs",
+   "fieldtype": "Float",
+   "label": "Available Qty (Kgs)",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "description": "Conversion factor for kg to number of units",
+   "fieldname": "one_kg_equal_nos",
+   "fieldtype": "Float",
+   "label": "1 Kg = X Nos",
+   "precision": 5
+  },
+  {
+   "fieldname": "machine_no",
+   "fieldtype": "Link",
+   "label": "Machine No",
+   "options": "Workstation"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "specification_section",
+   "fieldtype": "Section Break",
+   "label": "Specifications"
+  },
+  {
+   "fieldname": "id_minimum",
+   "fieldtype": "Float",
+   "label": "ID Minimum",
+   "precision": 3
+  },
+  {
+   "fieldname": "id_maximum",
+   "fieldtype": "Float",
+   "label": "ID Maximum",
+   "precision": 3
+  },
+  {
+   "fieldname": "column_break_spec1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "od_minimum",
+   "fieldtype": "Float",
+   "label": "OD Minimum",
+   "precision": 3
+  },
+  {
+   "fieldname": "od_maximum",
+   "fieldtype": "Float",
+   "label": "OD Maximum",
+   "precision": 3
+  },
+  {
+   "fieldname": "column_break_spec2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "hardness",
+   "fieldtype": "Data",
+   "label": "Hardness"
+  },
+  {
+   "fieldname": "thickness",
+   "fieldtype": "Float",
+   "label": "Thickness",
+   "precision": 3
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References"
+  },
+  {
+   "fieldname": "stock_entry_reference",
+   "fieldtype": "Link",
+   "label": "Stock Entry Reference",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vs_pdir_stock_entry_ref",
+   "fieldtype": "Link",
+   "label": "F/G Stock Entry Reference",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "moulding_production_completed",
+   "fieldtype": "Check",
+   "label": "Moulding Production Completed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vs_pdir_qty",
+   "fieldtype": "Float",
+   "label": "PDIR Qty",
+   "precision": 3,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Production Details"
+  },
+  {
+   "fieldname": "column_break_10",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "total_inspected_qty",
+   "fieldtype": "Float",
+   "label": "Total Inspected Qty (Kgs)",
+   "non_negative": 1,
+   "precision": 3,
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-04-19 11:33:30.997879",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Inspection Entry",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,248 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "LRST-.YYYY.-.#####",
+ "creation": "2023-03-30 11:48:51.777823",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "posting_date",
+  "lot_location_details",
+  "column_break_vcuq",
+  "user_input_section",
+  "column_break_ckzz",
+  "validate_op_html",
+  "column_break_ffzn",
+  "qtynos",
+  "operation_type",
+  "submit_tag_html",
+  "section_break_dwru",
+  "html_cgae",
+  "operator_id",
+  "designation",
+  "operator_name",
+  "employee_operations",
+  "column_break_lyyu",
+  "html_nope",
+  "product_ref",
+  "batch_no",
+  "spp_batch_no",
+  "column_break_eqvi",
+  "html_rqju",
+  "warehouse",
+  "stage",
+  "available_qty",
+  "column_break_hptb",
+  "html_fjae",
+  "workstation",
+  "bom_no",
+  "operations",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "operations",
+   "fieldtype": "Small Text",
+   "label": "Operations"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "workstation",
+   "fieldtype": "Link",
+   "label": "Workstation",
+   "options": "Workstation"
+  },
+  {
+   "fieldname": "bom_no",
+   "fieldtype": "Data",
+   "label": "Bom No"
+  },
+  {
+   "fieldname": "available_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Available Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "spp_batch_no",
+   "fieldtype": "Data",
+   "label": "SPP Batch No"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee_operations",
+   "fieldtype": "Small Text",
+   "label": "Employee Operations"
+  },
+  {
+   "fieldname": "operation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Operation Type"
+  },
+  {
+   "fieldname": "operator_id",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Operator ID",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "operator_name",
+   "fieldtype": "Data",
+   "label": "Operator Name"
+  },
+  {
+   "fieldname": "product_ref",
+   "fieldtype": "Link",
+   "label": "Product Ref.",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "qtynos",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty(No's)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "user_input_section",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "lot_location_details",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "column_break_vcuq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_ckzz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_ffzn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Data",
+   "label": "Stage"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "validate_op_html",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "section_break_dwru",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "html_cgae",
+   "fieldtype": "HTML",
+   "options": "<h3>Operator Information</h3>"
+  },
+  {
+   "fieldname": "column_break_lyyu",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_hptb",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_eqvi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "html_nope",
+   "fieldtype": "HTML",
+   "options": "<h3>Product Information</h3>"
+  },
+  {
+   "fieldname": "html_rqju",
+   "fieldtype": "HTML",
+   "options": "<h3>Warehouse  Information</h3>"
+  },
+  {
+   "fieldname": "html_fjae",
+   "fieldtype": "HTML",
+   "options": "<h3>BOM Information</h3>"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Lot Resource Tagging",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "label": "Designation",
+   "options": "Designation"
+  },
+  {
+   "fieldname": "submit_tag_html",
+   "fieldtype": "HTML"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-04-17 11:22:07.331000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Lot Resource Tagging",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

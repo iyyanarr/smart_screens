@@ -6,6 +6,10 @@
  "engine": "InnoDB",
  "field_order": [
   "sub_lot_warehouse",
+  "section_break_lhit",
+  "lot_resource_location_mapping",
+  "column_break_wmaz",
+  "designation_and_operation_mapping",
   "section_break_xuhi",
   "sublot_location_mapping"
  ],
@@ -25,13 +29,33 @@
    "fieldtype": "Table",
    "label": "Sublot Location Mapping",
    "options": "Sublot Operation Mapping Details"
+  },
+  {
+   "fieldname": "section_break_lhit",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "lot_resource_location_mapping",
+   "fieldtype": "Table",
+   "label": "Lot Resource location Mapping",
+   "options": "smart screen lot resource mapping"
+  },
+  {
+   "fieldname": "column_break_wmaz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "designation_and_operation_mapping",
+   "fieldtype": "Table",
+   "label": "Designation And Operation Mapping  ",
+   "options": "Lot Resource Role Mapper"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-14 12:32:55.217938",
+ "modified": "2025-04-16 21:24:40.994069",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Smart Screen Settings",
