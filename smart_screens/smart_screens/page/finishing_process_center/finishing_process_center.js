@@ -113,145 +113,7 @@ class FinishingProcessCenter {
         this.make();
         this.load_data();
         
-        // Add location card after initialization with single row layout
-        if (locationData && locationData.location) {
-            let locationCard = $(`
-                <div class="location-info-card card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">
-                            <i class="fa fa-info-circle mr-2"></i>Working Information
-                        </h5>
-                    </div>
-                    <div class="card-body p-3">
-                        <div class="factory-info-row">
-                            <!-- Location Info Section -->
-                            <div class="factory-info-section">
-                                <div class="factory-info-title">
-                                    <i class="fa fa-map-marker-alt mr-1"></i> Location Details
-                                </div>
-                                <div class="factory-info-content">
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Location:</span>
-                                        <span class="factory-info-value">${locationData.location || 'Not specified'}</span>
-                                    </div>
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Role:</span>
-                                        <span class="factory-info-value">${locationData.role || 'Not specified'}</span>
-                                    </div>
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Stage:</span>
-                                        <span class="factory-info-value">${locationData.stage || 'Not specified'}</span>
-                                    </div>
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Source Warehouse:</span>
-                                        <span class="factory-info-value">${locationData.source_warehouse || 'Not specified'}</span>
-                                    </div>
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Target Warehouse:</span>
-                                        <span class="factory-info-value">${locationData.target_warehouse || 'Not specified'}</span>
-                                    </div>
-                                    <div class="factory-info-item">
-                                        <span class="factory-info-label">Transaction Type:</span>
-                                        <span class="factory-info-value">${locationData.transaction_type || 'Not specified'}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Lot Info Section -->
-                            <div class="factory-info-section">
-                                <div class="factory-info-title">
-                                    <i class="fa fa-barcode mr-1"></i> Lot Information
-                                </div>
-                                <div class="factory-info-content">
-                                    <div id="top_lot_placeholder" class="text-muted">
-                                        Lot information will be displayed here when a lot is validated.
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- BOM Info Section -->
-                            <div class="factory-info-section">
-                                <div class="factory-info-title">
-                                    <i class="fa fa-sitemap mr-1"></i> BOM Information
-                                </div>
-                                <div class="factory-info-content">
-                                    <div id="top_bom_placeholder" class="text-muted">
-                                        BOM information will be displayed here when a lot is validated.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `);
-            
-            // Insert the card at the top of the page before the workflow tabs
-            $(this.wrapper).find('.workflow-tabs').before(locationCard);
-            
-            // Add custom styles for the new single row layout
-            $(`<style>
-                .factory-info-row {
-                    display: flex;
-                    flex-direction: row;
-                    flex-wrap: nowrap;
-                    width: 100%;
-                    overflow-x: auto;
-                }
-                
-                .factory-info-section {
-                    flex: 1;
-                    min-width: 320px;
-                    padding: 0 15px;
-                    border-right: 1px solid #e1e1e1;
-                }
-                
-                .factory-info-section:last-child {
-                    border-right: none;
-                }
-                
-                .factory-info-title {
-                    font-size: 18px;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    color: #4a90e2;
-                    padding-bottom: 5px;
-                    border-bottom: 1px solid #e1e1e1;
-                }
-                
-                .factory-info-content {
-                    margin-bottom: 10px;
-                }
-                
-                .factory-info-item {
-                    margin-bottom: 5px;
-                    display: flex;
-                    flex-direction: row;
-                    align-items: center;
-                }
-                
-                .factory-info-label {
-                    font-weight: bold;
-                    margin-right: 5px;
-                    color: #555;
-                    white-space: nowrap;
-                }
-                
-                .factory-info-value {
-                    color: #000;
-                }
-                
-                /* Make sure the table fits in the section */
-                .factory-info-section table {
-                    width: 100%;
-                    font-size: 14px;
-                }
-                
-                .factory-info-section th, 
-                .factory-info-section td {
-                    padding: 5px;
-                }
-            </style>`).appendTo(document.head);
-        }
+        // We'll add the information card at the bottom of the page after all workflow steps
     }
 
     // Add factory-friendly styles for better usability in factory environments
@@ -394,6 +256,9 @@ class FinishingProcessCenter {
         this.add_sublot_entry_section();
         this.add_resource_tagging_section();
         this.add_inspection_section();
+        
+        // Add the information section at the bottom of the page
+        this.add_information_section();
         
         // Initially show only the sublot entry section
         this.show_workflow_step('sublot-entry');
@@ -735,6 +600,151 @@ class FinishingProcessCenter {
         this.inspection_section.find('.create-inspection-entry').on('click', () => {
             this.create_inspection_entry();
         });
+    }
+
+    add_information_section() {
+        // Get the location data from the user settings
+        const locationData = this.user_settings || {};
+        
+        // Create the information section at the bottom of the page
+        let infoSection = $(`
+            <div class="location-info-card card mt-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fa fa-info-circle mr-2"></i>Process Information
+                    </h5>
+                </div>
+                <div class="card-body p-3">
+                    <div class="factory-info-row">
+                        <!-- Location Info Section -->
+                        <div class="factory-info-section">
+                            <div class="factory-info-title">
+                                <i class="fa fa-map-marker-alt mr-1"></i> Location Details
+                            </div>
+                            <div class="factory-info-content">
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Location:</span>
+                                    <span class="factory-info-value">${locationData.location || 'Not specified'}</span>
+                                </div>
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Role:</span>
+                                    <span class="factory-info-value">${locationData.role || 'Not specified'}</span>
+                                </div>
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Stage:</span>
+                                    <span class="factory-info-value">${locationData.stage || 'Not specified'}</span>
+                                </div>
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Source Warehouse:</span>
+                                    <span class="factory-info-value">${locationData.source_warehouse || 'Not specified'}</span>
+                                </div>
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Target Warehouse:</span>
+                                    <span class="factory-info-value">${locationData.target_warehouse || 'Not specified'}</span>
+                                </div>
+                                <div class="factory-info-item">
+                                    <span class="factory-info-label">Transaction Type:</span>
+                                    <span class="factory-info-value">${locationData.transaction_type || 'Not specified'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Lot Info Section -->
+                        <div class="factory-info-section">
+                            <div class="factory-info-title">
+                                <i class="fa fa-barcode mr-1"></i> Lot Information
+                            </div>
+                            <div class="factory-info-content">
+                                <div id="top_lot_placeholder" class="text-muted">
+                                    Lot information will be displayed here when a lot is validated.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- BOM Info Section -->
+                        <div class="factory-info-section">
+                            <div class="factory-info-title">
+                                <i class="fa fa-sitemap mr-1"></i> BOM Information
+                            </div>
+                            <div class="factory-info-content">
+                                <div id="top_bom_placeholder" class="text-muted">
+                                    BOM information will be displayed here when a lot is validated.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        // Add custom styles for the info section if not already added
+        if (!$('style.factory-info-styles').length) {
+            $(`<style class="factory-info-styles">
+                .factory-info-row {
+                    display: flex;
+                    flex-direction: row;
+                    flex-wrap: nowrap;
+                    width: 100%;
+                    overflow-x: auto;
+                }
+                
+                .factory-info-section {
+                    flex: 1;
+                    min-width: 320px;
+                    padding: 0 15px;
+                    border-right: 1px solid #e1e1e1;
+                }
+                
+                .factory-info-section:last-child {
+                    border-right: none;
+                }
+                
+                .factory-info-title {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                    color: #4a90e2;
+                    padding-bottom: 5px;
+                    border-bottom: 1px solid #e1e1e1;
+                }
+                
+                .factory-info-content {
+                    margin-bottom: 10px;
+                }
+                
+                .factory-info-item {
+                    margin-bottom: 5px;
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                }
+                
+                .factory-info-label {
+                    font-weight: bold;
+                    margin-right: 5px;
+                    color: #555;
+                    white-space: nowrap;
+                }
+                
+                .factory-info-value {
+                    color: #000;
+                }
+                
+                /* Make sure the table fits in the section */
+                .factory-info-section table {
+                    width: 100%;
+                    font-size: 14px;
+                }
+                
+                .factory-info-section th, 
+                .factory-info-section td {
+                    padding: 5px;
+                }
+            </style>`).appendTo(document.head);
+        }
+        
+        // Append the info section to the wrapper (at the bottom of the page)
+        this.wrapper.append(infoSection);
     }
 
     load_data() {
