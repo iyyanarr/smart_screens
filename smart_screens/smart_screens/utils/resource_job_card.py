@@ -387,22 +387,25 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             if employee:
                 employee_last_end_times[employee] = end_dt
             
-            # Set the status to "Completed"
-            job_card.status = "Completed"
-            job_card.docstatus = 1  # Submit the job card
+            # Set the status to "Work In Progress" instead of immediately completing
+            # This will make the job cards more visible in the standard list view
+            job_card.status = "Work In Progress"
+            
+            # Keep the job card in draft status (docstatus=0) so it's visible in default views
+            # job_card.docstatus = 1  # Comment out the submit action
             
             # Save the updated job card
             job_card.save()
             frappe.db.commit()
             
-            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Completed'")
+            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Work In Progress'")
         except Exception as time_log_error:
             frappe.logger().error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}")
             # Continue execution since we were able to update the job card
             
         return {
             "status": "success",
-            "message": f"Job Card {job_card.name} updated successfully and set to Completed",
+            "message": f"Job Card {job_card.name} updated successfully and set to Work In Progress",
             "job_card": job_card.name
         }
         
