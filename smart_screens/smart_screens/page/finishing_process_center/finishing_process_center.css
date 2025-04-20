@@ -204,3 +204,34 @@
         font-size: 14px;
     }
 }
+
+/* Add factory-friendly styles for better usability in factory environments */
+.factory-workflow-tabs {
+    margin-bottom: 20px;
+}
+
+/* Fix for container shrinking in production */
+.page-container {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+.layout-main-section {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+.layout-main {
+    display: flex;
+    flex-direction: column;
+    width: 100% !important;
+}
+
+/* Larger input fields */
+.factory-input {
+    height: 50px !important;
+    font-size: 18px !important;
+    padding: 10px 15px !important;
+}
+
+/* Larger buttons with better distinction */
