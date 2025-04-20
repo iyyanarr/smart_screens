@@ -8,29 +8,29 @@ from frappe.utils import nowdate, flt
 
 class InspectionEntry(Document):
 	def validate(self):
-		if not self.lot_number:
+		if not self.lot_no:
 			frappe.throw("Lot Number is required")
 		
 		# Validate sublot number format and existence
-		self.validate_sublot_number()
+		# self.validate_sublot_number()
 		
 		# Check if all previous operations are completed
-		self.validate_previous_operations()
+		# self.validate_previous_operations()
 		
 	def validate_sublot_number(self):
 		"""Validate that the lot number exists and is properly formatted"""
-		batch_exists = frappe.db.exists("Batch", self.lot_number)
+		batch_exists = frappe.db.exists("Batch", self.lot_no)
 		if not batch_exists:
-			frappe.throw(f"Invalid Lot Number: {self.lot_number}. Batch does not exist in the system.")
+			frappe.throw(f"Invalid Lot Number: {self.lot_no}. Batch does not exist in the system.")
 		
 		# Additional validations for lot number format can be added here if needed
 	
 	def validate_previous_operations(self):
 		"""Check if all required previous operations from BOM are completed"""
 		# Get the item code associated with the lot
-		item_code = frappe.db.get_value("Batch", self.lot_number, "item")
+		item_code = frappe.db.get_value("Batch", self.lot_no, "item")
 		if not item_code:
-			frappe.throw(f"No item associated with Lot Number: {self.lot_number}")
+			frappe.throw(f"No item associated with Lot Number: {self.lot_no}")
 		
 		self.item_code = item_code
 		
@@ -60,7 +60,7 @@ class InspectionEntry(Document):
 			SELECT DISTINCT operation_type
 			FROM `tabLot Resource Tagging`
 			WHERE scan_lot_no = %s AND docstatus = 1
-		""", self.lot_number, as_dict=1)
+		""", self.lot_no, as_dict=1)
 		
 		completed_op_types = [op.operation_type for op in completed_operations]
 		
@@ -96,11 +96,11 @@ class InspectionEntry(Document):
 		
 		# Get work order if one exists
 		work_order = frappe.db.get_value("Work Order", 
-			{"batch_no": self.lot_number, "production_item": self.item_code, "docstatus": 1}, 
+			{"batch_no": self.lot_no, "production_item": self.item_code, "docstatus": 1}, 
 			"name")
 		
 		if not work_order:
-			frappe.throw(f"No submitted Work Order found for lot {self.lot_number} and item {self.item_code}")
+			frappe.throw(f"No submitted Work Order found for lot {self.lot_no} and item {self.item_code}")
 		
 		# If employees are assigned, prepare employee list
 		employees = None
@@ -113,8 +113,8 @@ class InspectionEntry(Document):
 			operation=self.operation_type,
 			for_quantity=flt(self.inspection_qty),
 			employee=employees,
-			batch_no=self.lot_number,
-			sub_lot_number=self.lot_number,  # Using lot_number as sub_lot_number
+			batch_no=self.lot_no,
+			sub_lot_number=self.lot_no,  # Using lot_no as sub_lot_number
 			posting_date=self.inspection_date or nowdate()
 		)
 		
@@ -162,10 +162,10 @@ def check_uom_bom(item):
 
 
 @frappe.whitelist()
-def inspection_resource_validation(lot_number):
-	"""Returns all Lot Resource Tagging docs where scan_lot_no matches the lot_number"""
+def inspection_resource_validation(lot_no):
+	"""Returns all Lot Resource Tagging docs where scan_lot_no matches the lot_no"""
 	return frappe.get_all(
 		"Lot Resource Tagging",
-		filters={"scan_lot_no": lot_number, "docstatus": 1},
+		filters={"scan_lot_no": lot_no, "docstatus": 1},
 		fields=["name", "scan_lot_no", "product_ref", "batch_no", "operator_id", "operation_type", "posting_date"]
 	)

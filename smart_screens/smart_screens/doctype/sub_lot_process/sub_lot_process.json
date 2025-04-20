@@ -1,0 +1,235 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:SUBLOT PROCESS-{barcode}-{###}",
+ "creation": "2025-04-03 11:04:28.342547",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_wkyd",
+  "spp_batch_number",
+  "column_break_jkcx",
+  "column_break_hrqx",
+  "item_code",
+  "batch_no",
+  "available_quantity",
+  "warehouse",
+  "warehouse_details_section",
+  "target_warehouse",
+  "operation_details_section",
+  "operations",
+  "section_break_tqrx",
+  "inspector_code",
+  "column_break_qqdm",
+  "inspection_quantity",
+  "column_break_jwfk",
+  "column_break_thgj",
+  "inspector_name",
+  "section_break_nssa",
+  "rejection_items",
+  "sublot_details_section",
+  "sub_lot_number",
+  "sublot_qty",
+  "sublot_batch_number",
+  "column_break_wikw",
+  "barcode",
+  "work_order",
+  "section_break_cfgs",
+  "st_reference_docs",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_wkyd",
+   "fieldtype": "Section Break",
+   "label": "Batch Info"
+  },
+  {
+   "fieldname": "spp_batch_number",
+   "fieldtype": "Data",
+   "label": "Spp Batch Number"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Data",
+   "label": "Batch No"
+  },
+  {
+   "fieldname": "sub_lot_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sub Lot Number",
+   "unique": 1
+  },
+  {
+   "fetch_from": "sublot_batch_number.batch_id",
+   "fieldname": "barcode",
+   "fieldtype": "Barcode",
+   "label": "Barcode"
+  },
+  {
+   "fieldname": "column_break_jkcx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Data",
+   "label": "Item Code"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Data",
+   "label": "Warehouse"
+  },
+  {
+   "fieldname": "available_quantity",
+   "fieldtype": "Data",
+   "label": "Available Quantity"
+  },
+  {
+   "fieldname": "operation_details_section",
+   "fieldtype": "Section Break",
+   "label": "Operation Details"
+  },
+  {
+   "fieldname": "operations",
+   "fieldtype": "Table",
+   "label": "Operations",
+   "options": "Sub Lot Process Operations"
+  },
+  {
+   "fieldname": "section_break_tqrx",
+   "fieldtype": "Section Break",
+   "label": "Inspection Info"
+  },
+  {
+   "fieldname": "inspection_quantity",
+   "fieldtype": "Data",
+   "label": "Inspection Quantity"
+  },
+  {
+   "fieldname": "column_break_qqdm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inspector_code",
+   "fieldtype": "Data",
+   "label": "Inspector Code"
+  },
+  {
+   "fieldname": "column_break_jwfk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inspector_name",
+   "fieldtype": "Data",
+   "label": "Inspector Name"
+  },
+  {
+   "fieldname": "section_break_nssa",
+   "fieldtype": "Section Break",
+   "label": "Rejection Details"
+  },
+  {
+   "fieldname": "sublot_details_section",
+   "fieldtype": "Section Break",
+   "label": "Sublot Details"
+  },
+  {
+   "fieldname": "sublot_qty",
+   "fieldtype": "Float",
+   "label": "Sublot Qty"
+  },
+  {
+   "fieldname": "sublot_batch_number",
+   "fieldtype": "Link",
+   "label": "Sublot Batch Number",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "column_break_wikw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejection_items",
+   "fieldtype": "Table",
+   "label": "Rejection Items",
+   "options": "Rejection Details"
+  },
+  {
+   "fieldname": "section_break_cfgs",
+   "fieldtype": "Section Break",
+   "label": "Stock Transction Referance Document's"
+  },
+  {
+   "fieldname": "column_break_hrqx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "st_reference_docs",
+   "fieldtype": "Table",
+   "label": "Stock Reference",
+   "options": "Sub Lot Ref Docs"
+  },
+  {
+   "fieldname": "column_break_thgj",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse_details_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouse Details  "
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Target Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Sub Lot Process",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-04-20 23:30:12.341018",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Sub Lot Process",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

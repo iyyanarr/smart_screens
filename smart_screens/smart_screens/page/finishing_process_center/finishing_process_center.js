@@ -1254,8 +1254,7 @@ class FinishingProcessCenter {
                                 // Enable the resource tagging tab
                                 this.workflow_tabs.find('#resource-tagging-tab').removeClass('disabled');
                                 
-                                // Add BOM information to the resource tagging page
-                                this.fetch_bom_for_resource_tagging(r.message.item_code);
+                                // Removed: No longer adding BOM information to resource tagging section
                                 
                                 // Display sublot generation information
                                 this.show_sublot_generation_info(sublotData, r.message);

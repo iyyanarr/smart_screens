@@ -228,14 +228,14 @@ def lot_validation(mixed_barcode, stage, warehouse):
     # Get Batch Quantity with optimized query
     batch_qty_result = frappe.db.sql("""
         SELECT 
-            SUM(actual_qty) as qty
+            SUM(qty) as qty
         FROM 
-            `tabStock Ledger Entry`
+            `tabItem Batch Stock Balance`
         WHERE 
             batch_no = %s
             AND warehouse = %s
     """, (fg_batch_no, warehouse), as_dict=1)
-
+    
     if not batch_qty_result or not batch_qty_result[0].get("qty"):
         frappe.throw(f"No Batch Quantity found for Batch: {fg_batch_no} in Warehouse: {warehouse}")
 
