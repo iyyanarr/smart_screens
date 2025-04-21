@@ -435,46 +435,50 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                         rejected_qty = get_rejected_qty_for_work_order(work_order)
                         frappe.logger().debug(f"All operations completed for Work Order {work_order}, rejected qty: {rejected_qty}")
                         
-                        # Direct approach to complete work order - call standard ERPNext functions
-                        frappe.logger().debug(f"Calling direct standard ERPNext functions to complete Work Order {work_order}")
-                        
-                        # Call standard ERPNext function to create material transfer
+                        # Direct approach to update Work Order status without using standard ERPNext functions
                         try:
-                            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+                            frappe.logger().debug(f"Manually updating Work Order {work_order} to Completed")
                             
-                            # First create Material Transfer entry
-                            if work_order_doc.status == "Not Started":
-                                transfer_se = frappe.get_doc(make_stock_entry(work_order, "Material Transfer for Manufacture"))
-                                transfer_se.insert()
-                                transfer_se.submit()
-                                frappe.logger().debug(f"Created Material Transfer Entry: {transfer_se.name}")
-                                
-                                # Reload work order to get updated status
-                                work_order_doc.reload()
+                            # Get fresh work order
+                            wo = frappe.get_doc("Work Order", work_order)
                             
-                            # Create Manufacturing entry
-                            mfg_se = frappe.get_doc(make_stock_entry(work_order, "Manufacture"))
-                            mfg_se.insert()
-                            mfg_se.submit()
-                            frappe.logger().debug(f"Created Manufacturing Entry: {mfg_se.name}")
+                            # Create material transfer stock entry if needed
+                            if wo.status == "Not Started" and wo.source_warehouse and wo.wip_warehouse:
+                                # First set status to In Process
+                                wo.db_set("status", "In Process")
+                                wo.update_planned_qty()
+                                frappe.db.commit()
+                                frappe.logger().debug(f"Set Work Order {work_order} status to In Process")
                             
-                            # Force update status to Completed if needed
-                            work_order_doc.reload()
-                            if work_order_doc.status != "Completed":
-                                work_order_doc.status = "Completed"
-                                work_order_doc.save()
-                                frappe.logger().debug(f"Forced Work Order status to Completed")
-                                
+                            # Set status to Completed directly
+                            wo.db_set("status", "Completed") 
+                            wo.db_set("produced_qty", wo.qty)  # Set produced qty to full qty
+                            wo.update_planned_qty()
                             frappe.db.commit()
-                        except Exception as e:
-                            frappe.logger().error(f"Error using standard ERPNext functions: {str(e)}")
+                            frappe.logger().debug(f"Directly set Work Order {work_order} status to Completed")
                             
-                            # Fallback to our custom implementation if standard functions fail
-                            complete_work_order_with_stock_entries(
-                                work_order_id=work_order,
-                                rejected_qty=rejected_qty
-                            )
-                            frappe.logger().debug(f"Used custom implementation as fallback")
+                            # Use a direct SQL approach as a last resort if the above doesn't work
+                            if not frappe.db.get_value("Work Order", work_order, "status") == "Completed":
+                                frappe.logger().debug(f"Using direct SQL update for Work Order {work_order}")
+                                frappe.db.sql("""
+                                    UPDATE `tabWork Order` 
+                                    SET status = 'Completed', produced_qty = qty 
+                                    WHERE name = %s
+                                """, (work_order,))
+                                frappe.db.commit()
+                            
+                        except Exception as e:
+                            frappe.logger().error(f"Error manually updating Work Order status: {str(e)}")
+                            
+                            # As a last resort, try our custom approach
+                            try:
+                                complete_work_order_with_stock_entries(
+                                    work_order_id=work_order,
+                                    rejected_qty=rejected_qty
+                                )
+                                frappe.logger().debug(f"Used custom implementation as fallback")
+                            except Exception as e2:
+                                frappe.logger().error(f"Error in fallback work order completion: {str(e2)}")
                     
                     # Save the work order with updated quantities
                     work_order_doc.save()
