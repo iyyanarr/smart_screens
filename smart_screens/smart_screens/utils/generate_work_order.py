@@ -84,6 +84,7 @@ def create_work_order_after_sublot(sublot_entry=None, sublot_process=None):
         work_order.production_item = first_bom.get("parent_item_code")
         work_order.bom_no = bom_no
         work_order.qty = qty
+        work_order.skip_transfer = 1  # Skip transfer for sublot processing
         
         # Set source and target warehouses
         work_order.source_warehouse = warehouse

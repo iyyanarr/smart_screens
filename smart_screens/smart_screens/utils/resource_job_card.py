@@ -389,14 +389,49 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             
             # Set the status to "Work In Progress" instead of immediately completing
             # This will make the job cards more visible in the standard list view
-            job_card.status = "Work In Progress"
+            job_card.status = "Completed"
             
             # Keep the job card in draft status (docstatus=0) so it's visible in default views
             # job_card.docstatus = 1  # Comment out the submit action
             
             # Save the updated job card
             job_card.save()
+            job_card.submit()
             frappe.db.commit()
+            
+            # After job card is submitted, update the work order operation and status
+            try:
+                # Get the work order document again to ensure we have the latest data
+                work_order_doc = frappe.get_doc("Work Order", work_order)
+                
+                # Find the matching operation in work order and update completed quantity
+                operation_updated = False
+                all_operations_completed = True
+                
+                for wo_operation in work_order_doc.operations:
+                    if wo_operation.operation == operation:
+                        # Update the completed qty from job card
+                        wo_operation.completed_qty = job_card.for_quantity
+                        operation_updated = True
+                    
+                    # Check if any operation is not complete
+                    if wo_operation.completed_qty < wo_operation.planned_qty:
+                        all_operations_completed = False
+                
+                # If we found and updated the operation
+                if operation_updated:
+                    # If all operations are completed, mark work order as Completed
+                    if all_operations_completed:
+                        work_order_doc.status = "Completed"
+                        frappe.logger().info(f"All operations completed for Work Order {work_order}, setting status to Completed")
+                    
+                    # Save the work order with updated quantities and possibly status
+                    work_order_doc.save()
+                    frappe.db.commit()
+                    frappe.logger().info(f"Updated Work Order {work_order} operation quantities")
+            except Exception as wo_update_error:
+                frappe.logger().error(f"Error updating Work Order {work_order}: {str(wo_update_error)}")
+                # Continue execution since the job card was successfully processed
             
             frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Work In Progress'")
         except Exception as time_log_error:
