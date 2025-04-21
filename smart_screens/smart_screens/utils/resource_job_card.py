@@ -401,6 +401,9 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             
             # After job card is submitted, update the work order operation and status
             try:
+                # Log job card submission
+                frappe.logger().debug(f"Job Card {job_card.name} submitted for Work Order {work_order} with operation {operation}")
+                
                 # Get the work order document again to ensure we have the latest data
                 work_order_doc = frappe.get_doc("Work Order", work_order)
                 
@@ -408,15 +411,21 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                 operation_updated = False
                 all_operations_completed = True
                 
+                # Log work order operations status before update
+                frappe.logger().debug(f"Work Order operations before update: {[(o.operation, o.completed_qty, o.planned_qty) for o in work_order_doc.operations]}")
+                
                 for wo_operation in work_order_doc.operations:
                     if wo_operation.operation == operation:
                         # Update the completed qty from job card
                         wo_operation.completed_qty = job_card.for_quantity
                         operation_updated = True
+                        frappe.logger().debug(f"Updated operation {operation} completed_qty to {job_card.for_quantity}")
                     
                     # Check if any operation is not complete
                     if wo_operation.completed_qty < wo_operation.planned_qty:
                         all_operations_completed = False
+                
+                frappe.logger().debug(f"Operation updated: {operation_updated}, All operations completed: {all_operations_completed}")
                 
                 # If we found and updated the operation
                 if operation_updated:
@@ -424,18 +433,53 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                     if all_operations_completed:
                         # Get rejected quantity from job card or related inspection entries
                         rejected_qty = get_rejected_qty_for_work_order(work_order)
+                        frappe.logger().debug(f"All operations completed for Work Order {work_order}, rejected qty: {rejected_qty}")
                         
-                        # Create stock entries and complete the work order
-                        complete_work_order_with_stock_entries(
-                            work_order_id=work_order,
-                            rejected_qty=rejected_qty
-                        )
-                        frappe.logger().info(f"All operations completed for Work Order {work_order}, finishing the work order")
+                        # Direct approach to complete work order - call standard ERPNext functions
+                        frappe.logger().debug(f"Calling direct standard ERPNext functions to complete Work Order {work_order}")
+                        
+                        # Call standard ERPNext function to create material transfer
+                        try:
+                            from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+                            
+                            # First create Material Transfer entry
+                            if work_order_doc.status == "Not Started":
+                                transfer_se = frappe.get_doc(make_stock_entry(work_order, "Material Transfer for Manufacture"))
+                                transfer_se.insert()
+                                transfer_se.submit()
+                                frappe.logger().debug(f"Created Material Transfer Entry: {transfer_se.name}")
+                                
+                                # Reload work order to get updated status
+                                work_order_doc.reload()
+                            
+                            # Create Manufacturing entry
+                            mfg_se = frappe.get_doc(make_stock_entry(work_order, "Manufacture"))
+                            mfg_se.insert()
+                            mfg_se.submit()
+                            frappe.logger().debug(f"Created Manufacturing Entry: {mfg_se.name}")
+                            
+                            # Force update status to Completed if needed
+                            work_order_doc.reload()
+                            if work_order_doc.status != "Completed":
+                                work_order_doc.status = "Completed"
+                                work_order_doc.save()
+                                frappe.logger().debug(f"Forced Work Order status to Completed")
+                                
+                            frappe.db.commit()
+                        except Exception as e:
+                            frappe.logger().error(f"Error using standard ERPNext functions: {str(e)}")
+                            
+                            # Fallback to our custom implementation if standard functions fail
+                            complete_work_order_with_stock_entries(
+                                work_order_id=work_order,
+                                rejected_qty=rejected_qty
+                            )
+                            frappe.logger().debug(f"Used custom implementation as fallback")
                     
                     # Save the work order with updated quantities
                     work_order_doc.save()
                     frappe.db.commit()
-                    frappe.logger().info(f"Updated Work Order {work_order} operation quantities")
+                    frappe.logger().debug(f"Updated Work Order {work_order} operation quantities")
             except Exception as wo_update_error:
                 frappe.logger().error(f"Error updating Work Order {work_order}: {str(wo_update_error)}")
                 # Continue execution since the job card was successfully processed
@@ -494,8 +538,9 @@ def get_rejected_qty_for_work_order(work_order_id):
 def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
     """
     Complete a work order by:
-    1. Creating a single manufacturing stock entry for both good and rejected items
-    2. Setting the work order status to Completed
+    1. Creating a material transfer stock entry to move materials to WIP warehouse
+    2. Creating a manufacturing stock entry for both good and rejected items
+    3. Setting the work order status to Completed
     
     Args:
         work_order_id (str): Work Order ID
@@ -521,7 +566,16 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
         if good_qty < 0:
             frappe.throw(_("Rejected quantity ({0}) cannot exceed total quantity ({1})").format(rejected_qty, total_qty))
         
-        # Create a single manufacturing stock entry
+        # STEP 1: Create Material Transfer for Manufacture stock entry
+        # This is required to change the status from "Not Started" to "In Process"
+        if work_order.status == "Not Started":
+            transfer_entry = create_material_transfer_entry(work_order)
+            if transfer_entry:
+                frappe.logger().info(f"Created material transfer entry {transfer_entry.name}")
+                # Reload work order to get updated status
+                work_order.reload()
+        
+        # STEP 2: Create Manufacturing stock entry for both good and rejected items
         if total_qty > 0:
             stock_entry = create_single_stock_entry_for_manufacture(
                 work_order,
@@ -532,10 +586,14 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
             if stock_entry:
                 frappe.logger().info(f"Created stock entry {stock_entry.name} with good qty: {good_qty}, rejected qty: {rejected_qty}")
         
-        # Update work order status directly
-        work_order.produced_qty = total_qty
-        work_order.status = "Completed"
-        work_order.save()
+        # STEP 3: Force update work order status to Completed
+        work_order.reload()  # Get the latest status after stock entries
+        if work_order.status != "Completed":
+            work_order.status = "Completed"
+            work_order.produced_qty = total_qty
+            work_order.save()
+            frappe.db.commit()
+            frappe.logger().info(f"Force updated Work Order {work_order_id} status to Completed")
         
         frappe.db.commit()
         frappe.logger().info(f"Work Order {work_order_id} completed with good qty: {good_qty}, rejected qty: {rejected_qty}")
@@ -543,6 +601,66 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
     except Exception as e:
         frappe.logger().error(f"Error completing Work Order {work_order_id}: {str(e)}")
         frappe.throw(_("Could not complete Work Order: {0}").format(str(e)))
+
+def create_material_transfer_entry(work_order):
+    """
+    Create and submit a Material Transfer for Manufacture stock entry
+    
+    Args:
+        work_order (object): Work Order document
+        
+    Returns:
+        object: Submitted Stock Entry document
+    """
+    try:
+        from frappe.utils import flt, nowdate, nowtime
+        
+        if not work_order.source_warehouse or not work_order.wip_warehouse:
+            frappe.logger().warning(f"Cannot create material transfer: source_warehouse or wip_warehouse not defined for Work Order {work_order.name}")
+            return None
+            
+        stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.purpose = "Material Transfer for Manufacture"
+        stock_entry.work_order = work_order.name
+        stock_entry.company = work_order.company
+        stock_entry.from_bom = 1
+        stock_entry.bom_no = work_order.bom_no
+        stock_entry.use_multi_level_bom = work_order.use_multi_level_bom
+        stock_entry.fg_completed_qty = work_order.qty
+        stock_entry.posting_date = nowdate()
+        stock_entry.posting_time = nowtime()
+        
+        # Get raw materials from BOM
+        bom_items = get_bom_items(work_order.bom_no, work_order.company, work_order.qty, work_order.source_warehouse)
+        
+        # Add raw materials to stock entry
+        for item in bom_items:
+            stock_entry.append("items", {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "description": item.description,
+                "uom": item.stock_uom,
+                "stock_uom": item.stock_uom,
+                "qty": item.qty,
+                "s_warehouse": work_order.source_warehouse,
+                "t_warehouse": work_order.wip_warehouse,
+                "basic_rate": item.rate,
+                "conversion_factor": 1.0
+            })
+        
+        # Set stock entry type
+        stock_entry.set_stock_entry_type()
+        
+        # Save and submit the stock entry
+        stock_entry.insert()
+        stock_entry.submit()
+        
+        frappe.db.commit()
+        return stock_entry
+        
+    except Exception as e:
+        frappe.logger().error(f"Error creating material transfer entry: {str(e)}")
+        return None
 
 def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty):
     """
