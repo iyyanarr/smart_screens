@@ -306,26 +306,64 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
         wo_doc = frappe.get_doc("Work Order", work_order)
         
         # Find the existing job card for this operation and work order
+        # Look for both draft (docstatus=0) and submitted (docstatus=1) job cards
         existing_job_cards = frappe.get_all("Job Card", 
             filters={
                 "work_order": work_order,
                 "operation": operation,
-                "docstatus": 0  # Draft status
+                "docstatus": ["in", [0, 1]]  # Both draft and submitted
             },
-            fields=["name"],
+            fields=["name", "docstatus"],
             order_by="creation"
         )
         
         if not existing_job_cards:
             frappe.logger().warning(f"No existing job card found for Work Order {work_order} and Operation {operation}")
-            return {
-                "status": "error",
-                "message": f"No existing job card found for this operation. Please ensure the Work Order is submitted."
-            }
+            # Since ERPNext should have auto-created the job cards, if none exist, there's a problem
+            # Let's try to explicitly create it
+            try:
+                from erpnext.manufacturing.doctype.work_order.work_order import create_job_card as erpnext_create_job_card
+                for wo_operation in wo_doc.operations:
+                    if wo_operation.operation == operation:
+                        erpnext_create_job_card(wo_doc, wo_operation)
+                        frappe.db.commit()
+                        # Refresh the list after creation
+                        existing_job_cards = frappe.get_all("Job Card", 
+                            filters={
+                                "work_order": work_order,
+                                "operation": operation,
+                                "docstatus": ["in", [0, 1]]
+                            },
+                            fields=["name", "docstatus"],
+                            order_by="creation"
+                        )
+                        break
+            except Exception as e:
+                frappe.logger().error(f"Error creating job card via ERPNext: {str(e)}")
+                
+            # If we still don't have job cards, return an error
+            if not existing_job_cards:
+                return {
+                    "status": "error",
+                    "message": f"No existing job card found for this operation and none could be created."
+                }
         
         # Get the first available job card
-        job_card_name = existing_job_cards[0].name
+        job_card_info = existing_job_cards[0]
+        job_card_name = job_card_info.name
         job_card = frappe.get_doc("Job Card", job_card_name)
+        
+        # If the job card is already submitted, we can't modify it directly
+        if job_card.docstatus == 1:
+            frappe.logger().info(f"Job Card {job_card_name} is already submitted - creating time logs only")
+            # We'll skip modifying the job card and just update the Work Order operation directly
+            # This is needed because ERPNext might have auto-submitted the job card
+            update_work_order_operation(work_order, operation, job_card.for_quantity)
+            return {
+                "status": "success",
+                "message": f"Job Card {job_card_name} was already submitted, updated Work Order directly",
+                "job_card": job_card_name
+            }
         
         # Add reference to sub lot process
         if sublot_process:
@@ -387,115 +425,25 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             if employee:
                 employee_last_end_times[employee] = end_dt
             
-            # Set the status to "Work In Progress" instead of immediately completing
-            # This will make the job cards more visible in the standard list view
+            # Set the status to "Completed" 
             job_card.status = "Completed"
             
-            # Keep the job card in draft status (docstatus=0) so it's visible in default views
-            # job_card.docstatus = 1  # Comment out the submit action
-            
-            # Save the updated job card
+            # Save and submit the job card
             job_card.save()
             job_card.submit()
             frappe.db.commit()
             
             # After job card is submitted, update the work order operation and status
-            try:
-                # Log job card submission
-                frappe.logger().debug(f"Job Card {job_card.name} submitted for Work Order {work_order} with operation {operation}")
-                
-                # Get the work order document again to ensure we have the latest data
-                work_order_doc = frappe.get_doc("Work Order", work_order)
-                
-                # Find the matching operation in work order and update completed quantity
-                operation_updated = False
-                all_operations_completed = True
-                
-                # Log work order operations status before update
-                frappe.logger().debug(f"Work Order operations before update: {[(o.operation, o.completed_qty, o.planned_qty) for o in work_order_doc.operations]}")
-                
-                for wo_operation in work_order_doc.operations:
-                    if wo_operation.operation == operation:
-                        # Update the completed qty from job card
-                        wo_operation.completed_qty = job_card.for_quantity
-                        operation_updated = True
-                        frappe.logger().debug(f"Updated operation {operation} completed_qty to {job_card.for_quantity}")
-                    
-                    # Check if any operation is not complete
-                    if wo_operation.completed_qty < wo_operation.planned_qty:
-                        all_operations_completed = False
-                
-                frappe.logger().debug(f"Operation updated: {operation_updated}, All operations completed: {all_operations_completed}")
-                
-                # If we found and updated the operation
-                if operation_updated:
-                    # If all operations are completed, finish the work order
-                    if all_operations_completed:
-                        # Get rejected quantity from job card or related inspection entries
-                        rejected_qty = get_rejected_qty_for_work_order(work_order)
-                        frappe.logger().debug(f"All operations completed for Work Order {work_order}, rejected qty: {rejected_qty}")
-                        
-                        # Direct approach to update Work Order status without using standard ERPNext functions
-                        try:
-                            frappe.logger().debug(f"Manually updating Work Order {work_order} to Completed")
-                            
-                            # Get fresh work order
-                            wo = frappe.get_doc("Work Order", work_order)
-                            
-                            # Create material transfer stock entry if needed
-                            if wo.status == "Not Started" and wo.source_warehouse and wo.wip_warehouse:
-                                # First set status to In Process
-                                wo.db_set("status", "In Process")
-                                wo.update_planned_qty()
-                                frappe.db.commit()
-                                frappe.logger().debug(f"Set Work Order {work_order} status to In Process")
-                            
-                            # Set status to Completed directly
-                            wo.db_set("status", "Completed") 
-                            wo.db_set("produced_qty", wo.qty)  # Set produced qty to full qty
-                            wo.update_planned_qty()
-                            frappe.db.commit()
-                            frappe.logger().debug(f"Directly set Work Order {work_order} status to Completed")
-                            
-                            # Use a direct SQL approach as a last resort if the above doesn't work
-                            if not frappe.db.get_value("Work Order", work_order, "status") == "Completed":
-                                frappe.logger().debug(f"Using direct SQL update for Work Order {work_order}")
-                                frappe.db.sql("""
-                                    UPDATE `tabWork Order` 
-                                    SET status = 'Completed', produced_qty = qty 
-                                    WHERE name = %s
-                                """, (work_order,))
-                                frappe.db.commit()
-                            
-                        except Exception as e:
-                            frappe.logger().error(f"Error manually updating Work Order status: {str(e)}")
-                            
-                            # As a last resort, try our custom approach
-                            try:
-                                complete_work_order_with_stock_entries(
-                                    work_order_id=work_order,
-                                    rejected_qty=rejected_qty
-                                )
-                                frappe.logger().debug(f"Used custom implementation as fallback")
-                            except Exception as e2:
-                                frappe.logger().error(f"Error in fallback work order completion: {str(e2)}")
-                    
-                    # Save the work order with updated quantities
-                    work_order_doc.save()
-                    frappe.db.commit()
-                    frappe.logger().debug(f"Updated Work Order {work_order} operation quantities")
-            except Exception as wo_update_error:
-                frappe.logger().error(f"Error updating Work Order {work_order}: {str(wo_update_error)}")
-                # Continue execution since the job card was successfully processed
+            update_work_order_operation(work_order, operation, job_card.for_quantity)
             
-            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Work In Progress'")
+            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Completed'")
         except Exception as time_log_error:
             frappe.logger().error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}")
             # Continue execution since we were able to update the job card
             
         return {
             "status": "success",
-            "message": f"Job Card {job_card.name} updated successfully and set to Work In Progress",
+            "message": f"Job Card {job_card.name} updated successfully and set to Completed",
             "job_card": job_card.name
         }
         
@@ -505,6 +453,97 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             "status": "error",
             "message": f"Failed to update job card: {str(e)}"
         }
+
+def update_work_order_operation(work_order, operation, completed_qty):
+    """
+    Update Work Order operation and status - separated function for clarity and reuse
+    """
+    try:
+        # Log job card submission
+        frappe.logger().debug(f"Updating Work Order {work_order} operation {operation}")
+        
+        # Get the work order document again to ensure we have the latest data
+        work_order_doc = frappe.get_doc("Work Order", work_order)
+        
+        # Find the matching operation in work order and update completed quantity
+        operation_updated = False
+        all_operations_completed = True
+        
+        # Log work order operations status before update
+        frappe.logger().debug(f"Work Order operations before update: {[(o.operation, o.completed_qty, o.planned_qty) for o in work_order_doc.operations]}")
+        
+        for wo_operation in work_order_doc.operations:
+            if wo_operation.operation == operation:
+                # Update the completed qty
+                wo_operation.completed_qty = completed_qty
+                operation_updated = True
+                frappe.logger().debug(f"Updated operation {operation} completed_qty to {completed_qty}")
+            
+            # Check if any operation is not complete
+            if wo_operation.completed_qty < wo_operation.planned_qty:
+                all_operations_completed = False
+        
+        frappe.logger().debug(f"Operation updated: {operation_updated}, All operations completed: {all_operations_completed}")
+        
+        # If we found and updated the operation
+        if operation_updated:
+            # Save the work order with updated quantities
+            work_order_doc.save()
+            frappe.db.commit()
+            
+            # If all operations are completed, finish the work order
+            if all_operations_completed:
+                # Get rejected quantity from inspection entries
+                rejected_qty = get_rejected_qty_for_work_order(work_order)
+                frappe.logger().debug(f"All operations completed for Work Order {work_order}, rejected qty: {rejected_qty}")
+                
+                try:
+                    frappe.logger().debug(f"Completing Work Order {work_order} using standard ERPNext workflow")
+                    # Create manufacturing stock entry and set status to Completed
+                    from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+                    
+                    # First check if we need a material transfer
+                    if work_order_doc.status == "Not Started" and not work_order_doc.skip_transfer:
+                        transfer_se = frappe.get_doc(make_stock_entry(work_order, "Material Transfer for Manufacture"))
+                        transfer_se.insert()
+                        transfer_se.submit()
+                        frappe.db.commit()
+                        work_order_doc.reload()
+                        frappe.logger().debug(f"Created material transfer, Work Order status is now {work_order_doc.status}")
+                    
+                    # Now create the manufacturing entry
+                    mfg_se = frappe.get_doc(make_stock_entry(work_order, "Manufacture"))
+                    # Set fg_completed_qty to the required qty for the work order
+                    mfg_se.fg_completed_qty = work_order_doc.qty
+                    mfg_se.insert()
+                    mfg_se.submit()
+                    frappe.db.commit()
+                    
+                    # Reload the work order to check if status updated
+                    work_order_doc.reload()
+                    frappe.logger().debug(f"Created manufacturing entry, Work Order status is now {work_order_doc.status}")
+                    
+                    # Force update if needed
+                    if work_order_doc.status != "Completed":
+                        work_order_doc.status = "Completed"
+                        work_order_doc.produced_qty = work_order_doc.qty
+                        work_order_doc.save()
+                        frappe.db.commit()
+                        frappe.logger().debug(f"Force updated Work Order status to Completed")
+                        
+                except Exception as e:
+                    frappe.logger().error(f"Error completing Work Order with standard workflow: {str(e)}")
+                    # Fall back to direct SQL update as last resort
+                    frappe.db.sql("""
+                        UPDATE `tabWork Order` 
+                        SET status = 'Completed', produced_qty = qty 
+                        WHERE name = %s
+                    """, (work_order,))
+                    frappe.db.commit()
+                    frappe.logger().debug(f"Used direct SQL update for Work Order {work_order}")
+    
+    except Exception as e:
+        frappe.logger().error(f"Error in update_work_order_operation: {str(e)}")
 
 def get_rejected_qty_for_work_order(work_order_id):
     """Get the rejected quantity for a work order from related inspection entries"""

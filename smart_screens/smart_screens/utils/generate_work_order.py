@@ -140,12 +140,33 @@ def create_work_order_after_sublot(sublot_entry=None, sublot_process=None):
                 work_order.append("operations", {
                     "operation": operation.get("operation"),
                     "workstation": workstation,
-                    "time_in_mins": operation.get("time_in_mins") or 0.01  # Ensure we have a valid time
+                    "time_in_mins": operation.get("time_in_mins") or 0.01,  # Ensure we have a valid time
+                    "status": "Pending"
                 })
         
-        # Save and submit the Work Order
+        # Important: Set transfer_material_against to "Job Card" to ensure proper workflow
+        work_order.transfer_material_against = "Job Card"
+        
+        # Save the Work Order first to ensure all operations are created
         work_order.save()
+        
+        # Optionally add a flag to disable job card creation (if you want to ONLY use your custom job cards)
+        # Uncomment this if you don't want ERPNext to create standard job cards
+        #frappe.db.set_value("Manufacturing Settings", "Manufacturing Settings", "disable_job_card_creation", 1)
+        
+        # Save and submit the Work Order
         work_order.submit()
+        
+        # Explicitly ensure the work order status is updated correctly after submission
+        frappe.db.commit()
+        
+        # Reload the work order to ensure it's properly updated
+        work_order = frappe.get_doc("Work Order", work_order.name)
+        
+        # Double-check status and set it if needed
+        if work_order.status == "Draft":
+            work_order.db_set("status", "Not Started")
+            frappe.db.commit()
         
         # Return success
         return {

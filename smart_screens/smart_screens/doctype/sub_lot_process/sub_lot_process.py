@@ -37,6 +37,10 @@ class SubLotProcess(Document):
                     self.db_update()
                     frappe.db.commit()
                     frappe.msgprint(_("Work Order {0} created successfully").format(work_order_name))
+                    
+                    # Add a short delay to ensure the work order is fully processed
+                    import time
+                    time.sleep(2)
                 elif work_order_result.get("status") == "warning":
                     # Work order already exists, just show a message
                     frappe.msgprint(_(work_order_result.get("message")))
@@ -44,6 +48,7 @@ class SubLotProcess(Document):
                     if "Work Order" in work_order_result.get("message", ""):
                         work_order_name = work_order_result.get("work_order")
                 else:
+
                     # Log the error but don't throw - let the process continue even if work order creation fails
                     frappe.log_error(f"Failed to create Work Order: {work_order_result.get('message')}", "Sub Lot Process")
                     frappe.msgprint(_("Warning: Could not create Work Order. {0}").format(work_order_result.get("message")), indicator="yellow")
