@@ -148,7 +148,7 @@
    "fieldname": "items",
    "fieldtype": "Table",
    "label": "Items",
-   "options": "Inspection Entry Item"
+   "options": "FV Inspection Entry Item"
   },
   {
    "fieldname": "column_break_ufay",
@@ -164,7 +164,7 @@
    "fieldtype": "Link",
    "label": "Amended From",
    "no_copy": 1,
-   "options": "Inspection Entry",
+   "options": "Final Visual Inspection Entry",
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
@@ -191,20 +191,20 @@
    "fieldname": "inspected_qty_nos",
    "fieldtype": "Float",
    "label": "Inspected Qty (Nos)",
-   "precision": 3
+   "precision": "3"
   },
   {
    "fieldname": "total_inspected_qty_nos",
    "fieldtype": "Float",
    "label": "Total Inspected Qty (Nos)",
-   "precision": 3
+   "precision": "3"
   },
   {
    "description": "Note: This field is auto-calculated based on the rejected quantities entered in the items table",
    "fieldname": "total_rejected_qty",
    "fieldtype": "Float",
    "label": "Total Rejected Qty",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
@@ -212,14 +212,14 @@
    "fieldname": "total_rejected_qty_in_percentage",
    "fieldtype": "Float",
    "label": "Total Rejected Qty (%)",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
    "fieldname": "total_rejected_qty_kg",
    "fieldtype": "Float",
    "label": "Total Rejected Qty (Kgs)",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
@@ -227,20 +227,20 @@
    "fieldname": "one_no_qty_equal_kgs",
    "fieldtype": "Float",
    "label": "1 No Qty = X Kgs",
-   "precision": 5
+   "precision": "5"
   },
   {
    "fieldname": "available_qty_nos",
    "fieldtype": "Float",
    "label": "Available Qty (Nos)",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
    "fieldname": "available_qty_kgs",
    "fieldtype": "Float",
    "label": "Available Qty (Kgs)",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
@@ -248,7 +248,7 @@
    "fieldname": "one_kg_equal_nos",
    "fieldtype": "Float",
    "label": "1 Kg = X Nos",
-   "precision": 5
+   "precision": "5"
   },
   {
    "fieldname": "machine_no",
@@ -266,13 +266,13 @@
    "fieldname": "id_minimum",
    "fieldtype": "Float",
    "label": "ID Minimum",
-   "precision": 3
+   "precision": "3"
   },
   {
    "fieldname": "id_maximum",
    "fieldtype": "Float",
    "label": "ID Maximum",
-   "precision": 3
+   "precision": "3"
   },
   {
    "fieldname": "column_break_spec1",
@@ -282,13 +282,13 @@
    "fieldname": "od_minimum",
    "fieldtype": "Float",
    "label": "OD Minimum",
-   "precision": 3
+   "precision": "3"
   },
   {
    "fieldname": "od_maximum",
    "fieldtype": "Float",
    "label": "OD Maximum",
-   "precision": 3
+   "precision": "3"
   },
   {
    "fieldname": "column_break_spec2",
@@ -303,7 +303,7 @@
    "fieldname": "thickness",
    "fieldtype": "Float",
    "label": "Thickness",
-   "precision": 3
+   "precision": "3"
   },
   {
    "collapsible": 1,
@@ -336,7 +336,7 @@
    "fieldname": "vs_pdir_qty",
    "fieldtype": "Float",
    "label": "PDIR Qty",
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   },
   {
@@ -366,7 +366,7 @@
    "fieldtype": "Float",
    "label": "Total Inspected Qty (Kgs)",
    "non_negative": 1,
-   "precision": 3,
+   "precision": "3",
    "read_only": 1
   }
  ],
@@ -374,10 +374,10 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-19 11:33:30.997879",
+ "modified": "2025-04-22 14:56:42.127094",
  "modified_by": "Administrator",
  "module": "Smart Screens",
- "name": "Inspection Entry",
+ "name": "Final Visual Inspection Entry",
  "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
