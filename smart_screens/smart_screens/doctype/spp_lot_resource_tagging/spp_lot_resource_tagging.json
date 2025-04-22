@@ -223,7 +223,7 @@
  "modified": "2025-04-17 11:22:07.331000",
  "modified_by": "Administrator",
  "module": "Smart Screens",
- "name": "Lot Resource Tagging",
+ "name": "SPP Lot Resource Tagging",
  "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [

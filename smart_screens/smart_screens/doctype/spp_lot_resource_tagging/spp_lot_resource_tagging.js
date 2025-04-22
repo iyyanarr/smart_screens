@@ -1,7 +1,7 @@
 // Copyright (c) 2025, alphaworkz and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on("Lot Resource Tagging", {
+frappe.ui.form.on("SPP Lot Resource Tagging", {
     refresh: function(frm) {
         // Fetch location details for the user role and display in lot_location_details field
         fetch_location_details(frm);

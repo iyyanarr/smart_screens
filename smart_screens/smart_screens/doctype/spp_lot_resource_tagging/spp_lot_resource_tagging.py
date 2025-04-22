@@ -4,7 +4,7 @@
 import frappe
 from frappe.model.document import Document
 
-class LotResourceTagging(Document):
+class SPPLotResourceTagging(Document):
     def validate(self):
         pass
 
