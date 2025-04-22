@@ -78,6 +78,24 @@ class SubLotProcess(Document):
                                 created_resources, created_job_cards
                             )
                         )
+                        
+                    # After creating job cards, directly complete the work order
+                    # This ensures the work order is completed regardless of job card status
+                    if work_order_name:
+                        try:
+                            from smart_screens.smart_screens.utils.resource_job_card import complete_work_order_with_stock_entries
+                            # Get any rejected quantity from the sublot process
+                            rejected_qty = 0
+                            if hasattr(self, 'rejected_quantity') and self.rejected_quantity:
+                                rejected_qty = float(self.rejected_quantity)
+                                
+                            # Complete the work order directly
+                            complete_work_order_with_stock_entries(work_order_id=work_order_name, rejected_qty=rejected_qty)
+                            frappe.msgprint(_("Work Order {0} has been completed").format(work_order_name))
+                            frappe.logger().info(f"Directly completed Work Order {work_order_name} from Sub Lot Process submission")
+                        except Exception as wo_complete_error:
+                            frappe.logger().error(f"Error completing Work Order {work_order_name} directly: {str(wo_complete_error)}")
+                            frappe.msgprint(_("Note: Work Order may need to be manually completed"), indicator="yellow")
                 elif resource_result.get("status") == "warning":
                     # Just show the warning message
                     frappe.msgprint(_(resource_result.get("message")), indicator="yellow")
