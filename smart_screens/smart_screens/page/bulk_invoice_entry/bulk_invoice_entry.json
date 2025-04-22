@@ -1,0 +1,19 @@
+{
+ "content": null,
+ "creation": "2025-01-28 22:02:17.697482",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-04-22 15:14:09.914455",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "bulk_invoice_entry",
+ "owner": "Administrator",
+ "page_name": "bulk_invoice_entry",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "bulk_invoice_entry"
+}
