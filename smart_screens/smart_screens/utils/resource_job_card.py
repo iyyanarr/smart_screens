@@ -70,7 +70,7 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
                 continue
                 
             # Create a lot resource tagging entry with the correct DocType name
-            lot_tag = frappe.new_doc("Lot Resource Tagging")
+            lot_tag = frappe.new_doc("SPP Lot Resource Tagging")
             lot_tag.lot_number = sublot_process.sub_lot_number
             lot_tag.item_code = sublot_process.item_code
             lot_tag.batch_no = sublot_process.batch_no
@@ -182,7 +182,7 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
     """Create an inspection entry for Final Visual Inspection"""
     try:
         # Create the inspection entry
-        inspection_entry = frappe.new_doc("Inspection Entry")
+        inspection_entry = frappe.new_doc("SPP Inspection Entry")
         
         # Set basic information
         inspection_entry.posting_date = getdate()
@@ -549,9 +549,9 @@ def get_rejected_qty_for_work_order(work_order_id):
     """Get the rejected quantity for a work order from related inspection entries"""
     rejected_qty = 0
     
-    # First try to find rejection from Inspection Entry
+    # First try to find rejection from SPP Inspection Entry
     inspection_entries = frappe.get_all(
-        "Inspection Entry",
+        "SPP Inspection Entry",
         filters={"work_order": work_order_id, "docstatus": ["!=", 2]},
         fields=["rejected_qty_nos", "rejected_qty", "total_rejected_qty"]
     )

@@ -6,7 +6,7 @@ from frappe.model.document import Document
 from frappe.utils import nowdate, flt
 
 
-class FinalVisualInspectionEntry(Document):
+class SPPInspectionEntry(Document):
 	def validate(self):
 		if not self.lot_no:
 			frappe.throw("Lot Number is required")
@@ -157,7 +157,7 @@ def check_uom_bom(item):
 			return {"status": "failed", "message": f"No BOM found associated with the item <b>{item}</b>"}
 	except Exception as e:
 		frappe.log_error(message=frappe.get_traceback(), 
-						title="smart_screens.smart_screens.doctype.final_visual_inspection_entry.final_visual_inspection_entry.check_uom_bom")
+						title="smart_screens.smart_screens.doctype.spp_inspection_entry.spp_inspection_entry.check_uom_bom")
 		return {"status": "failed", "message": "Something went wrong during BOM validation"}
 
 

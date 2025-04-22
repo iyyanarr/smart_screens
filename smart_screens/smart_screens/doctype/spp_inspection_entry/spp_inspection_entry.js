@@ -1,7 +1,7 @@
 // Copyright (c) 2025, alphaworkz and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on("Final Visual Inspection Entry", {
+frappe.ui.form.on("SPP Inspection Entry", {
 	// Call fetch_location_details when the form loads or refreshes
 	onload: function(frm) {
 		fetch_location_details(frm);
@@ -408,7 +408,7 @@ function bind_rejections(frm) {
 }
 
 // Add handler for inspection entry item
-frappe.ui.form.on('Final Visual Inspection Entry Item', {
+frappe.ui.form.on('SPP Inspection Entry Item', {
 	items_add: function(frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
 		var grid_row = cur_frm.fields_dict['items'].grid.grid_rows_by_docname[row.name],
