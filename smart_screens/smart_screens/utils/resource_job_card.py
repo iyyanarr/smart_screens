@@ -578,7 +578,7 @@ def get_rejected_qty_for_work_order(work_order_id):
     frappe.logger().info(f"Found rejected quantity {rejected_qty} for Work Order {work_order_id}")
     return rejected_qty
 
-def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
+def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0, batch_no=None):
     """
     Complete a work order by:
     1. Creating a material transfer stock entry to move materials to WIP warehouse
@@ -588,6 +588,7 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
     Args:
         work_order_id (str): Work Order ID
         rejected_qty (float): Quantity to be sent to rejection warehouse
+        batch_no (str): Batch number to use for the finished goods
     """
     try:
         from frappe.utils import flt, cint, nowdate
@@ -609,8 +610,66 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
         if good_qty < 0:
             frappe.throw(_("Rejected quantity ({0}) cannot exceed total quantity ({1})").format(rejected_qty, total_qty))
         
+        # If batch_no is directly provided, use it
+        new_batch_number = batch_no
+        if not new_batch_number:
+            frappe.logger().info(f"No batch_no directly provided for Work Order {work_order_id}, trying to find one")
+            # Try to find a batch number if none is provided directly
+            try:
+                # First priority: Get the batch number from the Sub Lot Entry's barcode field
+                # Look for Sub Lot Entry linked to this Work Order
+                sublot_entries = frappe.get_all(
+                    "Sub Lot Entry",
+                    filters=[
+                        ["source_document", "in", ["Sub Lot Process", "Work Order"]],
+                        ["source_document_name", "=", work_order.name],
+                    ],
+                    fields=["name", "barcode", "sublot_batch", "batch"],
+                    limit=1
+                )
+                
+                # If not found directly, try finding via Sub Lot Process
+                if not sublot_entries:
+                    # Approach 2: Try to look up the Work Order in Sub Lot Process table
+                    sub_lot_processes = frappe.get_all(
+                        "Sub Lot Process",
+                        filters={"work_order": work_order.name},
+                        fields=["name", "barcode", "sublot_batch_number", "sub_lot_number", "batch_no"],
+                        limit=1
+                    )
+                    if sub_lot_processes:
+                        # Try to get the barcode directly from Sub Lot Process
+                        if sub_lot_processes[0].get("barcode"):
+                            new_batch_number = sub_lot_processes[0].barcode
+                        else:
+                            # Find the Sub Lot Entry for this Sub Lot Process
+                            sublot_entries = frappe.get_all(
+                                "Sub Lot Entry",
+                                filters={"source_document": "Sub Lot Process", "source_document_name": sub_lot_processes[0].name},
+                                fields=["name", "barcode", "sublot_batch", "batch"],
+                                limit=1
+                            )
+                
+                # Extract the batch number from results
+                if sublot_entries:
+                    # Priority 1: Use barcode field as it's explicitly requested
+                    if sublot_entries[0].get("barcode"):
+                        new_batch_number = sublot_entries[0].barcode
+                    # Try other fields if barcode isn't available
+                    elif sublot_entries[0].get("sublot_batch"):
+                        new_batch_number = sublot_entries[0].sublot_batch
+                    elif sublot_entries[0].get("batch"):
+                        new_batch_number = sublot_entries[0].batch
+                
+                if new_batch_number:
+                    frappe.logger().info(f"Found batch number {new_batch_number} for Work Order {work_order.name}")
+                else:
+                    frappe.logger().info(f"Could not find batch number for Work Order {work_order.name}")
+            except Exception as e:
+                frappe.logger().error(f"Error finding batch number for Work Order {work_order.name}: {str(e)}")
+                # Continue without batch number if there's an error
+        
         # STEP 1: Create Material Transfer for Manufacture stock entry
-        # This is required to change the status from "Not Started" to "In Process"
         if work_order.status == "Not Started":
             transfer_entry = create_material_transfer_entry(work_order)
             if transfer_entry:
@@ -623,11 +682,12 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0):
             stock_entry = create_single_stock_entry_for_manufacture(
                 work_order,
                 good_qty,
-                rejected_qty
+                rejected_qty,
+                new_batch_number
             )
             
             if stock_entry:
-                frappe.logger().info(f"Created stock entry {stock_entry.name} with good qty: {good_qty}, rejected qty: {rejected_qty}")
+                frappe.logger().info(f"Created stock entry {stock_entry.name} with good qty: {good_qty}, rejected qty: {rejected_qty}, batch: {new_batch_number}")
         
         # STEP 3: Force update work order status to Completed
         work_order.reload()  # Get the latest status after stock entries
@@ -688,7 +748,8 @@ def create_material_transfer_entry(work_order):
                 "s_warehouse": work_order.source_warehouse,
                 "t_warehouse": work_order.wip_warehouse,
                 "basic_rate": item.rate,
-                "conversion_factor": 1.0
+                "conversion_factor": 1.0,
+                "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
         # Set stock entry type
@@ -705,7 +766,7 @@ def create_material_transfer_entry(work_order):
         frappe.logger().error(f"Error creating material transfer entry: {str(e)}")
         return None
 
-def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty):
+def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty, batch_no=None):
     """
     Create and submit a single manufacturing stock entry with both good and rejected items
     
@@ -713,6 +774,7 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
         work_order (object): Work Order document
         good_qty (float): Quantity of good items
         rejected_qty (float): Quantity of rejected items
+        batch_no (str): Batch number to be used
         
     Returns:
         object: Submitted Stock Entry document
@@ -756,7 +818,8 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "qty": item.qty,
                 "s_warehouse": source_warehouse,
                 "basic_rate": item.rate,
-                "conversion_factor": 1.0
+                "conversion_factor": 1.0,
+                "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
         # Get item details for the finished good
@@ -774,7 +837,9 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "qty": good_qty,
                 "t_warehouse": work_order.fg_warehouse,
                 "conversion_factor": 1.0,
-                "is_finished_item": 1
+                "is_finished_item": 1,
+                "batch_no": batch_no,  # Set batch number if provided
+                "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
         # Add rejected items going to the rejection warehouse
@@ -788,7 +853,9 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "qty": rejected_qty,
                 "t_warehouse": "U2 Rejection - SPP INDIA",  # Updated rejection warehouse name
                 "conversion_factor": 1.0,
-                "is_finished_item": 1
+                "is_finished_item": 1,
+                "batch_no": batch_no,  # Set batch number if provided
+                "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
         # Set stock entry type

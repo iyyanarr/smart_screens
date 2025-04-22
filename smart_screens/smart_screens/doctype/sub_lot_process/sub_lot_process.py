@@ -84,14 +84,30 @@ class SubLotProcess(Document):
                     if work_order_name:
                         try:
                             from smart_screens.smart_screens.utils.resource_job_card import complete_work_order_with_stock_entries
-                            # Get any rejected quantity from the sublot process
+                            
+                            # Calculate rejected quantity from the rejection_items child table
                             rejected_qty = 0
-                            if hasattr(self, 'rejected_quantity') and self.rejected_quantity:
+                            if hasattr(self, 'rejection_items') and self.rejection_items:
+                                for item in self.rejection_items:
+                                    if hasattr(item, 'quantity') and item.quantity:
+                                        rejected_qty += float(item.quantity)
+                                frappe.logger().info(f"Calculated total rejected quantity {rejected_qty} from rejection_items table")
+                            # Fallback to rejected_quantity field if the child table calculation yields zero
+                            elif hasattr(self, 'rejected_quantity') and self.rejected_quantity:
                                 rejected_qty = float(self.rejected_quantity)
                                 
-                            # Complete the work order directly
-                            complete_work_order_with_stock_entries(work_order_id=work_order_name, rejected_qty=rejected_qty)
-                            frappe.msgprint(_("Work Order {0} has been completed").format(work_order_name))
+                            # Get the batch number from the barcode field of Sub Lot Process
+                            batch_no = self.barcode
+                            frappe.logger().info(f"Using batch number {batch_no} from Sub Lot Process barcode field")
+                                
+                            # Complete the work order directly, passing the batch number and rejected quantity
+                            complete_work_order_with_stock_entries(
+                                work_order_id=work_order_name, 
+                                rejected_qty=rejected_qty,
+                                batch_no=batch_no
+                            )
+                            frappe.msgprint(_("Work Order {0} has been completed with {1} rejected items").format(
+                                work_order_name, rejected_qty))
                             frappe.logger().info(f"Directly completed Work Order {work_order_name} from Sub Lot Process submission")
                         except Exception as wo_complete_error:
                             frappe.logger().error(f"Error completing Work Order {work_order_name} directly: {str(wo_complete_error)}")
