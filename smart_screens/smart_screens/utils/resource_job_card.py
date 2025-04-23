@@ -826,6 +826,111 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
         item_name = frappe.db.get_value("Item", work_order.production_item, "item_name")
         description = frappe.db.get_value("Item", work_order.production_item, "description")
         
+        # CUSTOM BATCH HANDLING: Specifically handle the batch for this item
+        valid_batch = None
+        if batch_no:
+            # First try to convert the raw material batch to a finished good batch
+            try:
+                from smart_screens.smart_screens.utils.generate_batch import convert_raw_to_fg_batch
+                fg_batch = convert_raw_to_fg_batch(batch_no, work_order.production_item)
+                if fg_batch:
+                    frappe.logger().info(f"Converted raw batch {batch_no} to finished good batch {fg_batch}")
+                    # Check if the converted batch exists and is valid for this item
+                    if frappe.db.exists("Batch", fg_batch):
+                        batch_item = frappe.db.get_value("Batch", fg_batch, "item")
+                        if batch_item == work_order.production_item:
+                            valid_batch = fg_batch
+                            frappe.logger().info(f"Using converted batch {valid_batch} for item {work_order.production_item}")
+                    else:
+                        # Create the batch if it doesn't exist
+                        from smart_screens.smart_screens.utils.generate_batch import create_batch
+                        valid_batch = create_batch(work_order.production_item, fg_batch)
+                        frappe.logger().info(f"Created new batch {valid_batch} for item {work_order.production_item}")
+            except Exception as e:
+                frappe.logger().error(f"Error converting/creating batch: {str(e)}")
+                
+            # If the conversion didn't work, fall back to existing handling
+            if not valid_batch:
+                # Check if the batch exists and to which item it belongs
+                if frappe.db.exists("Batch", batch_no):
+                    batch_item = frappe.db.get_value("Batch", batch_no, "item")
+                    if batch_item == work_order.production_item:
+                        valid_batch = batch_no
+                        frappe.logger().info(f"Using existing batch {valid_batch} for item {work_order.production_item}")
+                    else:
+                        frappe.logger().warning(f"Batch {batch_no} exists but belongs to item {batch_item}, not {work_order.production_item}")
+                        
+                        # Try to find an existing batch with the same base pattern but for this item
+                        # For example, if P25D03Z07-3 exists for a different item, look for P25D03Z07 for our item
+                        if "-" in batch_no:
+                            base_batch = batch_no.split("-")[0]
+                            matching_batches = frappe.get_all(
+                                "Batch",
+                                filters={"item": work_order.production_item, "name": ["like", f"{base_batch}%"]},
+                                fields=["name"],
+                                limit=1
+                            )
+                            if matching_batches:
+                                valid_batch = matching_batches[0].name
+                                frappe.logger().info(f"Found matching batch {valid_batch} for item {work_order.production_item}")
+                        
+                        # If still no valid batch, try to create a new unique batch for this item
+                        if not valid_batch:
+                            # Create a unique batch name based on the original with a prefix/suffix for this item
+                            new_batch_name = f"{batch_no}-{work_order.production_item}"
+                            # Check if this new batch name already exists
+                            if not frappe.db.exists("Batch", new_batch_name):
+                                try:
+                                    # Create a new batch specifically for this item
+                                    new_batch = frappe.new_doc("Batch")
+                                    new_batch.batch_id = new_batch_name
+                                    new_batch.item = work_order.production_item
+                                    new_batch.insert()
+                                    frappe.db.commit()
+                                    valid_batch = new_batch_name
+                                    frappe.logger().info(f"Created new batch {valid_batch} for item {work_order.production_item}")
+                                except Exception as e:
+                                    frappe.logger().error(f"Error creating new batch: {str(e)}")
+                else:
+                    # Batch doesn't exist, create it
+                    try:
+                        new_batch = frappe.new_doc("Batch")
+                        new_batch.batch_id = batch_no
+                        new_batch.item = work_order.production_item
+                        new_batch.insert()
+                        frappe.db.commit()
+                        valid_batch = batch_no
+                        frappe.logger().info(f"Created new batch {valid_batch} for item {work_order.production_item}")
+                    except Exception as e:
+                        frappe.logger().error(f"Error creating new batch: {str(e)}")
+        
+        # If we still don't have a valid batch, try to find any existing batch for this item
+        if not valid_batch:
+            existing_batches = frappe.get_all(
+                "Batch",
+                filters={"item": work_order.production_item},
+                fields=["name"],
+                limit=1
+            )
+            if existing_batches:
+                valid_batch = existing_batches[0].name
+                frappe.logger().info(f"Using fallback existing batch {valid_batch} for item {work_order.production_item}")
+            else:
+                # As a last resort, create a completely new batch with a timestamp
+                import time
+                timestamp = int(time.time())
+                new_batch_name = f"{work_order.production_item}-{timestamp}"
+                try:
+                    new_batch = frappe.new_doc("Batch")
+                    new_batch.batch_id = new_batch_name
+                    new_batch.item = work_order.production_item
+                    new_batch.insert()
+                    frappe.db.commit()
+                    valid_batch = new_batch_name
+                    frappe.logger().info(f"Created last-resort batch {valid_batch} for item {work_order.production_item}")
+                except Exception as e:
+                    frappe.logger().error(f"Error creating last-resort batch: {str(e)}")
+        
         # Add good items going to the FG warehouse
         if flt(good_qty) > 0:
             stock_entry.append("items", {
@@ -838,7 +943,7 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "t_warehouse": work_order.fg_warehouse,
                 "conversion_factor": 1.0,
                 "is_finished_item": 1,
-                "batch_no": batch_no,  # Set batch number if provided
+                "batch_no": valid_batch,  # Set the validated batch number
                 "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
@@ -854,7 +959,7 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "t_warehouse": "U2 Rejection - SPP INDIA",  # Updated rejection warehouse name
                 "conversion_factor": 1.0,
                 "is_finished_item": 1,
-                "batch_no": batch_no,  # Set batch number if provided
+                "batch_no": valid_batch,  # Set the validated batch number
                 "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
         
@@ -907,3 +1012,74 @@ def get_bom_items(bom_no, company, qty, warehouse=None):
             })
             
         return items
+
+def get_valid_batch_for_item(batch_no, item_code):
+    """
+    Get a valid batch number for an item.
+    If the batch has a suffix (like -1, -2), try the base batch first.
+    
+    Args:
+        batch_no (str): The original batch number
+        item_code (str): The item code
+        
+    Returns:
+        str: A valid batch number for the item, or None if not found
+    """
+    if not batch_no or not item_code:
+        return None
+        
+    # Check if the batch exists and belongs to the item
+    if frappe.db.exists("Batch", batch_no):
+        batch_item = frappe.db.get_value("Batch", batch_no, "item")
+        if batch_item and batch_item == item_code:
+            frappe.logger().info(f"Batch {batch_no} belongs to item {item_code}, using as is")
+            return batch_no
+        else:
+            frappe.logger().info(f"Batch {batch_no} exists but belongs to item {batch_item}, not {item_code}")
+    else:
+        frappe.logger().info(f"Batch {batch_no} does not exist in the system")
+        
+    # If the batch has a suffix, try removing it
+    if "-" in batch_no:
+        base_batch = batch_no.split("-")[0]
+        frappe.logger().info(f"Trying base batch {base_batch} for item {item_code}")
+        
+        # Check if the base batch exists
+        if frappe.db.exists("Batch", base_batch):
+            batch_item = frappe.db.get_value("Batch", base_batch, "item")
+            if batch_item and batch_item == item_code:
+                frappe.logger().info(f"Base batch {base_batch} belongs to item {item_code}, using it")
+                return base_batch
+            else:
+                frappe.logger().info(f"Base batch {base_batch} exists but belongs to item {batch_item}, not {item_code}")
+        else:
+            frappe.logger().info(f"Base batch {base_batch} does not exist in the system")
+    
+    # Try to create a new batch if it doesn't exist and we have a valid batch number
+    try:
+        if not frappe.db.exists("Batch", batch_no):
+            frappe.logger().info(f"Creating new batch {batch_no} for item {item_code}")
+            new_batch = frappe.new_doc("Batch")
+            new_batch.batch_id = batch_no
+            new_batch.item = item_code
+            new_batch.insert()
+            frappe.db.commit()
+            return batch_no
+    except Exception as e:
+        frappe.logger().error(f"Error creating new batch: {str(e)}")
+            
+    # Try finding any valid batch for this item as a last resort
+    valid_batches = frappe.get_all(
+        "Batch",
+        filters={"item": item_code, "batch_qty": [">", 0]},
+        fields=["name"],
+        limit=1
+    )
+    
+    if valid_batches:
+        valid_batch = valid_batches[0].name
+        frappe.logger().info(f"Found alternative valid batch {valid_batch} for item {item_code}")
+        return valid_batch
+        
+    frappe.logger().warning(f"Could not find a valid batch for item {item_code}")
+    return batch_no  # Return the original batch number as a last resort
