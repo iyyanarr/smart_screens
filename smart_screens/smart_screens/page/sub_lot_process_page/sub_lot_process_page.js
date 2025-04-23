@@ -1418,10 +1418,17 @@ class SubLotProcessPage {
             return;
         }
 
-        // Show processing message
+        // Show processing message with progress bar
         messageElement.html(`
             <div class="alert alert-info">
                 <i class="fa fa-spinner fa-spin"></i> Processing...
+                <div class="progress" style="height: 6px; margin-top: 8px;">
+                    <div class="progress-bar" role="progressbar" style="width: 0%;" 
+                         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="progress-description mt-1" style="font-size: 11px; color: #6c7680;">
+                    Initializing process...
+                </div>
             </div>
         `);
 
@@ -1448,6 +1455,21 @@ class SubLotProcessPage {
             locationInfo: this.location_data || [] // Add location data to form submission
         };
 
+        // Set up progress event listener
+        frappe.realtime.on('progress', (data) => {
+            if (data.title === 'Creating Sub Lot Process') {
+                const $progressBar = messageElement.find('.progress-bar');
+                const $progressDesc = messageElement.find('.progress-description');
+                
+                $progressBar.css('width', `${data.percent}%`);
+                $progressBar.attr('aria-valuenow', data.percent);
+                $progressDesc.text(data.description || 'Processing...');
+            }
+        });
+
+        // Disable the submit button to prevent double submissions
+        this.wrapper.find('#submit_process_btn').prop('disabled', true);
+
         // Submit the process record
         frappe.call({
             method: "smart_screens.smart_screens.api.sub_lot_process.create_sublot_process",
@@ -1455,6 +1477,12 @@ class SubLotProcessPage {
                 form_data: formData
             },
             callback: (response) => {
+                // Clean up the progress event listener
+                frappe.realtime.off('progress');
+                
+                // Re-enable the submit button
+                this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                
                 if (response.message && response.message.status === "success") {
                     messageElement.html(`
                         <div class="alert alert-success">
@@ -1476,6 +1504,12 @@ class SubLotProcessPage {
                 }
             },
             error: (err) => {
+                // Clean up the progress event listener
+                frappe.realtime.off('progress');
+                
+                // Re-enable the submit button
+                this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                
                 console.error("Error saving process:", err);
 
                 messageElement.html(`

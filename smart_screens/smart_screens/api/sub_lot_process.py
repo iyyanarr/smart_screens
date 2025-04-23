@@ -24,7 +24,13 @@ def create_sublot_process(form_data):
         inspection_info = form_data.get("inspectionInfo", {})
         rejection_details = form_data.get("rejectionDetails", [])
         location_info = form_data.get("locationInfo", [])
-        continue_to_iterate = form_data.get("continueToIterate", False)
+        
+        # Publish initial progress
+        frappe.publish_realtime('progress', {
+            'percent': 10,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Validating input data...'
+        })
         
         # Validate required data
         if not batch_info:
@@ -36,6 +42,13 @@ def create_sublot_process(form_data):
         if not inspection_info:
             return {"status": "error", "message": "Inspection information is required"}
         
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 20,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Creating process document...'
+        })
+        
         # Create a new Sub Lot Process document
         process_doc = frappe.new_doc("Sub Lot Process")
         
@@ -46,7 +59,6 @@ def create_sublot_process(form_data):
         process_doc.sub_lot_number = batch_info.get("sppBatchId")
         process_doc.item_code = batch_info.get("item_code")
         process_doc.warehouse = batch_info.get("warehouse")
-        process_doc.continue_to_iterate = 1 if continue_to_iterate else 0  # Set continue_to_iterate flag
         
         # Set quantities - ensure numeric types for quantity fields
         if batch_info.get("quantity"):
@@ -60,6 +72,16 @@ def create_sublot_process(form_data):
                 process_doc.inspection_quantity = float(inspection_info.get("inspectionQuantity"))
             except (ValueError, TypeError):
                 process_doc.inspection_quantity = inspection_info.get("inspectionQuantity")
+        
+        # Set sublot quantity same as inspection quantity
+        process_doc.sublot_qty = process_doc.inspection_quantity
+        
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 30,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Adding operation details...'
+        })
         
         # Set inspector information
         process_doc.inspector_code = inspection_info.get("inspectorCode")
@@ -80,6 +102,13 @@ def create_sublot_process(form_data):
                 "employee_code": employee_code,
                 "employee_name": employee_name
             })
+        
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 50,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Adding rejection details...'
+        })
         
         # Add rejection details
         if rejection_details:
@@ -104,6 +133,13 @@ def create_sublot_process(form_data):
                     "quantity": quantity
                 })
         
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 70,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Adding location information...'
+        })
+        
         # Add stock reference documents if location info is provided
         if location_info:
             for loc in location_info:
@@ -120,11 +156,33 @@ def create_sublot_process(form_data):
                     "location": loc.get("location")
                 })
         
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 80,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Saving document...'
+        })
+        
         # Save the document
         process_doc.insert()
+        
+        # Update progress
+        frappe.publish_realtime('progress', {
+            'percent': 90,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Submitting document...'
+        })
+        
         # submit the document if it's submittable
         if frappe.db.get_value("DocType", "Sub Lot Process", "is_submittable"):
             process_doc.submit()
+        
+        # Final progress update
+        frappe.publish_realtime('progress', {
+            'percent': 100,
+            'title': 'Creating Sub Lot Process',
+            'description': 'Process completed successfully!'
+        })
         
         # Log success message
         frappe.logger().info(f"Created Sub Lot Process: {process_doc.name}")
@@ -133,8 +191,7 @@ def create_sublot_process(form_data):
         return {
             "status": "success",
             "message": "Sub Lot Process created successfully",
-            "process_record": process_doc.name,
-            "continue_to_iterate": continue_to_iterate
+            "process_record": process_doc.name
         }
     
     except Exception as e:
