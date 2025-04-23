@@ -1003,6 +1003,166 @@ class SubLotProcessPage {
                 color: #FFFFFF;
                 font-weight: 600;
             }
+
+            .process-progress-container {
+                background-color: #1E293B;
+                border-radius: 8px;
+                border: 1px solid #334155;
+                padding: 20px;
+                margin-top: 20px;
+            }
+            
+            .process-stages {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 30px;
+                position: relative;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding-bottom: 5px;
+            }
+            
+            .stage-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                position: relative;
+                flex: 1;
+                min-width: 80px;
+                opacity: 0.5;
+                transition: all 0.3s ease;
+            }
+            
+            .stage-item.active {
+                opacity: 1;
+            }
+            
+            .stage-item.current .stage-icon {
+                background-color: #2563EB;
+                border-color: #1D4ED8;
+                color: white;
+                box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+                animation: pulse 1.5s infinite;
+            }
+            
+            .stage-item.completed .stage-icon {
+                background-color: #22C55E;
+                border-color: #16A34A;
+                color: white;
+            }
+            
+            .stage-icon {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background-color: #475569;
+                border: 2px solid #64748B;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin-bottom: 8px;
+                z-index: 2;
+                transition: all 0.3s ease;
+                color: #F8FAFC;
+            }
+            
+            .stage-line {
+                position: absolute;
+                top: 20px;
+                left: 50%;
+                width: 100%;
+                height: 2px;
+                background-color: #475569;
+                z-index: 1;
+            }
+            
+            .stage-item:first-child .stage-line {
+                width: 50%;
+                left: 50%;
+            }
+            
+            .stage-item:last-child .stage-line,
+            .stage-item.final .stage-line {
+                display: none;
+            }
+            
+            .stage-item.active.completed .stage-line {
+                background-color: #22C55E;
+            }
+            
+            .stage-label {
+                font-size: 12px;
+                text-align: center;
+                color: #CBD5E1;
+                margin-top: 5px;
+                white-space: nowrap;
+            }
+            
+            .stage-item.active .stage-label {
+                color: #F8FAFC;
+                font-weight: bold;
+            }
+            
+            .process-details {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            
+            .process-title {
+                font-size: 18px;
+                font-weight: bold;
+                margin-bottom: 10px;
+                color: #F8FAFC;
+            }
+            
+            .process-description {
+                font-size: 14px;
+                color: #CBD5E1;
+                margin-bottom: 15px;
+            }
+            
+            .process-progress {
+                margin: 0 auto;
+                max-width: 80%;
+            }
+            
+            .progress-text {
+                text-align: right;
+                font-size: 12px;
+                color: #CBD5E1;
+                margin-top: 5px;
+            }
+            
+            .process-actions {
+                display: flex;
+                justify-content: center;
+                gap: 15px;
+                margin-top: 20px;
+            }
+            
+            @keyframes pulse {
+                0% {
+                    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+                }
+                70% {
+                    box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+                }
+                100% {
+                    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+                }
+            }
+            
+            .text-success {
+                color: #22C55E !important;
+            }
+            
+            .text-danger {
+                color: #EF4444 !important;
+            }
+            
+            .text-warning {
+                color: #F59E0B !important;
+            }
         `).appendTo(this.wrapper);
     }
 
@@ -1418,16 +1578,79 @@ class SubLotProcessPage {
             return;
         }
 
-        // Show processing message with progress bar
+        // Initialize custom progress tracker with a unique container ID
+        const progressContainerId = `process-tracker-${Date.now()}`;
         messageElement.html(`
-            <div class="alert alert-info">
-                <i class="fa fa-spinner fa-spin"></i> Processing...
-                <div class="progress" style="height: 6px; margin-top: 8px;">
-                    <div class="progress-bar" role="progressbar" style="width: 0%;" 
-                         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div class="process-progress-container">
+                <div class="process-stages" id="${progressContainerId}">
+                    <div class="stage-item active current" data-stage="data-validation">
+                        <div class="stage-icon"><i class="fa fa-check-circle"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Data Validation</div>
+                    </div>
+                    <div class="stage-item" data-stage="document-creation">
+                        <div class="stage-icon"><i class="fa fa-file"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Document Creation</div>
+                    </div>
+                    <div class="stage-item" data-stage="operations-setup">
+                        <div class="stage-icon"><i class="fa fa-cogs"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Operations Setup</div>
+                    </div>
+                    <div class="stage-item" data-stage="rejection-data">
+                        <div class="stage-icon"><i class="fa fa-times-circle"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Rejection Data</div>
+                    </div>
+                    <div class="stage-item" data-stage="location-setup">
+                        <div class="stage-icon"><i class="fa fa-map-marker"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Location Setup</div>
+                    </div>
+                    <div class="stage-item" data-stage="document-saving">
+                        <div class="stage-icon"><i class="fa fa-save"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Saving</div>
+                    </div>
+                    <div class="stage-item" data-stage="document-submission">
+                        <div class="stage-icon"><i class="fa fa-paper-plane"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Submission</div>
+                    </div>
+                    <div class="stage-item" data-stage="sublot-creation">
+                        <div class="stage-icon"><i class="fa fa-cube"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Sub Lot Creation</div>
+                    </div>
+                    <div class="stage-item" data-stage="work-order">
+                        <div class="stage-icon"><i class="fa fa-industry"></i></div>
+                        <div class="stage-line"></div>
+                        <div class="stage-label">Work Order</div>
+                    </div>
+                    <div class="stage-item final" data-stage="complete">
+                        <div class="stage-icon"><i class="fa fa-flag-checkered"></i></div>
+                        <div class="stage-label">Complete</div>
+                    </div>
                 </div>
-                <div class="progress-description mt-1" style="font-size: 11px; color: #6c7680;">
-                    Initializing process...
+                <div class="process-details">
+                    <div class="process-title">Processing Sub Lot</div>
+                    <div class="process-description">Validating input data...</div>
+                    <div class="process-progress">
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar" role="progressbar" style="width: 10%;" 
+                                aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="progress-text">10% Complete</div>
+                    </div>
+                </div>
+                <div class="process-actions" style="display: none;">
+                    <button class="btn btn-primary btn-print-label">
+                        <i class="fa fa-print mr-1"></i> Print Label
+                    </button>
+                    <button class="btn btn-default btn-view-details">
+                        <i class="fa fa-eye mr-1"></i> View Details
+                    </button>
                 </div>
             </div>
         `);
@@ -1455,18 +1678,6 @@ class SubLotProcessPage {
             locationInfo: this.location_data || [] // Add location data to form submission
         };
 
-        // Set up progress event listener
-        frappe.realtime.on('progress', (data) => {
-            if (data.title === 'Creating Sub Lot Process') {
-                const $progressBar = messageElement.find('.progress-bar');
-                const $progressDesc = messageElement.find('.progress-description');
-                
-                $progressBar.css('width', `${data.percent}%`);
-                $progressBar.attr('aria-valuenow', data.percent);
-                $progressDesc.text(data.description || 'Processing...');
-            }
-        });
-
         // Disable the submit button to prevent double submissions
         this.wrapper.find('#submit_process_btn').prop('disabled', true);
 
@@ -1477,23 +1688,22 @@ class SubLotProcessPage {
                 form_data: formData
             },
             callback: (response) => {
-                // Clean up the progress event listener
-                frappe.realtime.off('progress');
-                
-                // Re-enable the submit button
-                this.wrapper.find('#submit_process_btn').prop('disabled', false);
-                
                 if (response.message && response.message.status === "success") {
-                    messageElement.html(`
-                        <div class="alert alert-success">
-                            <i class="fa fa-check-circle"></i> Process saved successfully! 
-                            <br>Process ID: ${response.message.process_record || 'N/A'}
-                        </div>
-                    `);
-
-                    // Reset the form after successful submission
-                    setTimeout(() => this.reset_form(), 3000);
+                    const trackerId = response.message.tracker_id;
+                    const processRecord = response.message.process_record;
+                    
+                    // Store details for later use (e.g., printing label)
+                    this.processDetails = {
+                        record: processRecord,
+                        tracker: trackerId
+                    };
+                    
+                    // Start polling for status updates
+                    this.startStatusPolling(trackerId, progressContainerId);
                 } else {
+                    // Re-enable the submit button
+                    this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                    
                     const errorMsg = response.message ? response.message.message : "Failed to save process";
 
                     messageElement.html(`
@@ -1504,9 +1714,6 @@ class SubLotProcessPage {
                 }
             },
             error: (err) => {
-                // Clean up the progress event listener
-                frappe.realtime.off('progress');
-                
                 // Re-enable the submit button
                 this.wrapper.find('#submit_process_btn').prop('disabled', false);
                 
@@ -1519,6 +1726,451 @@ class SubLotProcessPage {
                 `);
             }
         });
+    }
+
+    startStatusPolling(trackerId, progressContainerId) {
+        // Start polling for status updates every 2 seconds
+        const pollInterval = 2000; // 2 seconds
+        let pollCount = 0;
+        const maxPolls = 60; // Maximum number of polls (2 minutes)
+        
+        const $progressContainer = this.wrapper.find(`#${progressContainerId}`);
+        const $processTitle = this.wrapper.find('.process-title');
+        const $processDescription = this.wrapper.find('.process-description');
+        const $progressBar = this.wrapper.find('.progress-bar');
+        const $progressText = this.wrapper.find('.progress-text');
+        const $processActions = this.wrapper.find('.process-actions');
+        
+        const updateProgressUI = (data) => {
+            // Update progress bar
+            $progressBar.css('width', `${data.progress_percent}%`);
+            $progressBar.attr('aria-valuenow', data.progress_percent);
+            $progressText.text(`${data.progress_percent}% Complete`);
+            
+            // Update description
+            $processDescription.text(data.stage_description);
+            
+            // Update title based on status
+            if (data.process_status === "Completed") {
+                $processTitle.text("Process Completed Successfully");
+                $processTitle.addClass("text-success");
+            } else if (data.process_status === "Failed") {
+                $processTitle.text("Process Failed");
+                $processTitle.addClass("text-danger");
+            } else {
+                $processTitle.text(`Processing: ${data.current_stage}`);
+            }
+            
+            // Update stages
+            const currentStageKey = this.getStageKeyFromName(data.current_stage);
+            if (currentStageKey) {
+                // Mark all previous stages as completed
+                $progressContainer.find('.stage-item').each(function() {
+                    const $stage = $(this);
+                    const stageKey = $stage.data('stage');
+                    
+                    // Remove current class from all stages
+                    $stage.removeClass('current');
+                    
+                    // Convert stage-key to array index for comparison
+                    const stageIndex = this.getStageIndex(stageKey);
+                    const currentIndex = this.getStageIndex(currentStageKey);
+                    
+                    if (stageIndex < currentIndex) {
+                        $stage.addClass('active completed');
+                    } else if (stageIndex === currentIndex) {
+                        $stage.addClass('active current');
+                    } else {
+                        $stage.removeClass('active completed');
+                    }
+                }.bind(this));
+            }
+            
+            // Show actions when process is completed
+            if (data.process_status === "Completed") {
+                $processActions.show();
+                
+                // Bind print label button
+                this.wrapper.find('.btn-print-label').on('click', () => {
+                    this.printSubLotLabel(data.reference_name);
+                });
+                
+                // Bind view details button
+                this.wrapper.find('.btn-view-details').on('click', () => {
+                    frappe.set_route("Form", data.reference_doctype, data.reference_name);
+                });
+                
+                // Re-enable the submit button
+                this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                
+                // Stop polling
+                return false;
+            }
+            
+            // Stop polling if process failed
+            if (data.process_status === "Failed") {
+                $processTitle.html(`<i class="fa fa-exclamation-circle"></i> Process Failed: ${data.stage_description}`);
+                
+                // Re-enable the submit button
+                this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                
+                return false;
+            }
+            
+            // Continue polling
+            return true;
+        };
+        
+        const poll = () => {
+            frappe.call({
+                method: "smart_screens.smart_screens.api.sub_lot_process.get_process_status",
+                args: { tracker_id: trackerId },
+                callback: (response) => {
+                    pollCount++;
+                    
+                    if (response.message && response.message.status === "success") {
+                        const data = response.message.data;
+                        
+                        // Update UI with current progress
+                        const shouldContinue = updateProgressUI(data);
+                        
+                        // Continue polling if process is still running and haven't reached max polls
+                        if (shouldContinue && pollCount < maxPolls) {
+                            setTimeout(poll, pollInterval);
+                        } else if (pollCount >= maxPolls) {
+                            // Max polls reached, show timeout message
+                            $processTitle.text("Process Timeout");
+                            $processDescription.text("The process is taking longer than expected. Please check the system for status.");
+                            
+                            // Re-enable the submit button
+                            this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                        }
+                    } else {
+                        // Error getting status
+                        console.error("Error polling status:", response.message);
+                        
+                        // Show error message
+                        $processTitle.text("Status Check Failed");
+                        $processDescription.text("Failed to check process status. Please refresh the page.");
+                        
+                        // Re-enable the submit button
+                        this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                    }
+                },
+                error: (err) => {
+                    console.error("Error polling status:", err);
+                    
+                    // Show error message
+                    $processTitle.text("Status Check Failed");
+                    $processDescription.text("Failed to check process status. Please refresh the page.");
+                    
+                    // Re-enable the submit button
+                    this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                }
+            });
+        };
+        
+        // Start polling immediately
+        poll();
+    }
+
+    getStageKeyFromName(stageName) {
+        // Map stage names from backend to CSS data-stage keys
+        const stageMap = {
+            "Data Validation": "data-validation",
+            "Document Creation": "document-creation",
+            "Operations Setup": "operations-setup",
+            "Rejection Data": "rejection-data",
+            "Location Setup": "location-setup",
+            "Document Saving": "document-saving",
+            "Document Submission": "document-submission",
+            "Sub Lot Creation": "sublot-creation",
+            "Work Order": "work-order",
+            "Complete": "complete"
+        };
+        
+        return stageMap[stageName] || "data-validation";
+    }
+    
+    getStageIndex(stageKey) {
+        // Map stage keys to indices for comparison
+        const stageIndices = {
+            "data-validation": 0,
+            "document-creation": 1,
+            "operations-setup": 2,
+            "rejection-data": 3,
+            "location-setup": 4,
+            "document-saving": 5,
+            "document-submission": 6,
+            "sublot-creation": 7,
+            "work-order": 8,
+            "complete": 9
+        };
+        
+        return stageIndices[stageKey] || 0;
+    }
+
+    printSubLotLabel(processId) {
+        // Create a new dialog for label printing
+        const dialog = new frappe.ui.Dialog({
+            title: 'Print Sub Lot Label',
+            fields: [
+                {
+                    fieldname: 'html_preview',
+                    fieldtype: 'HTML',
+                    options: '<div class="text-center">Loading label preview...</div>'
+                }
+            ],
+            primary_action_label: 'Print',
+            primary_action: () => {
+                // Print the label
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Sub Lot Label</title>
+                        <style>
+                            @media print {
+                                @page {
+                                    size: 170cm 170cm;
+                                    margin: 0;
+                                }
+                                body {
+                                    margin: 0;
+                                }
+                                .label-container {
+                                    width: 170cm;
+                                    height: 170cm;
+                                    padding: 5mm;
+                                    box-sizing: border-box;
+                                }
+                            }
+                            ${this.getLabelStyles()}
+                        </style>
+                    </head>
+                    <body>
+                        ${dialog.fields_dict.html_preview.$wrapper.html()}
+                        <script>
+                            setTimeout(function() {
+                                window.print();
+                                setTimeout(function() {
+                                    window.close();
+                                }, 500);
+                            }, 500);
+                        </script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+                
+                dialog.hide();
+            }
+        });
+        
+        // Show the dialog
+        dialog.show();
+        
+        // Fetch process details for the label
+        frappe.call({
+            method: "smart_screens.smart_screens.api.sub_lot_process.get_sublot_process_details",
+            args: { process_id: processId },
+            callback: (response) => {
+                if (response.message && response.message.status === "success") {
+                    const data = response.message.data;
+                    
+                    // Generate label HTML with the process data
+                    const labelHtml = this.generateLabelHtml(data);
+                    
+                    // Update dialog with label preview
+                    dialog.fields_dict.html_preview.$wrapper.html(labelHtml);
+                } else {
+                    // Error getting process details
+                    dialog.fields_dict.html_preview.$wrapper.html(`
+                        <div class="alert alert-danger">
+                            <i class="fa fa-exclamation-circle"></i> Failed to get process details for label printing.
+                        </div>
+                    `);
+                }
+            },
+            error: (err) => {
+                console.error("Error getting process details:", err);
+                
+                // Show error message
+                dialog.fields_dict.html_preview.$wrapper.html(`
+                    <div class="alert alert-danger">
+                        <i class="fa fa-exclamation-circle"></i> Failed to get process details for label printing.
+                    </div>
+                `);
+            }
+        });
+    }
+
+    generateLabelHtml(data) {
+        // Generate HTML for the label with the specified dimensions (170cm x 170cm)
+        return `
+            <div class="label-container">
+                <div class="label-header">
+                    <div class="company-logo">
+                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
+                    </div>
+                    <div class="label-title">SUB LOT</div>
+                </div>
+                
+                <div class="label-barcode">
+                    <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.sub_lot_number)}&type=code128&height=50&width=1" alt="Barcode">
+                    <div class="barcode-number">${data.sub_lot_number}</div>
+                </div>
+                
+                <div class="label-details">
+                    <table class="details-table">
+                        <tr>
+                            <td class="label-key">Item Code:</td>
+                            <td class="label-value">${data.item_code || ''}</td>
+                            <td class="label-key">Batch No:</td>
+                            <td class="label-value">${data.batch_no || ''}</td>
+                        </tr>
+                        <tr>
+                            <td class="label-key">Quantity:</td>
+                            <td class="label-value">${data.sublot_qty || ''}</td>
+                            <td class="label-key">Created On:</td>
+                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || ''}</td>
+                        </tr>
+                        <tr>
+                            <td class="label-key">Warehouse:</td>
+                            <td class="label-value">${data.warehouse || ''}</td>
+                            <td class="label-key">Operator:</td>
+                            <td class="label-value">${frappe.session.user_fullname || ''}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="qr-code">
+                    <img src="/api/method/frappe.utils.barcode.get_qr?data=${encodeURIComponent(JSON.stringify({
+                        sub_lot_number: data.sub_lot_number,
+                        item_code: data.item_code,
+                        batch_no: data.batch_no,
+                        quantity: data.sublot_qty,
+                        warehouse: data.warehouse,
+                        creation: data.creation
+                    }))}" alt="QR Code">
+                </div>
+                
+                <div class="label-footer">
+                    <div class="footer-note">Smart Screens Processing System</div>
+                </div>
+            </div>
+        `;
+    }
+
+    getLabelStyles() {
+        // CSS styles for the label
+        return `
+            .label-container {
+                width: 170cm;
+                height: 170cm;
+                padding: 5cm;
+                box-sizing: border-box;
+                border: 1px solid #ccc;
+                font-family: Arial, sans-serif;
+                background-color: white;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+            }
+            
+            .label-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 5cm;
+            }
+            
+            .company-logo img {
+                height: 15cm;
+                max-width: 40cm;
+            }
+            
+            .label-title {
+                font-size: 14cm;
+                font-weight: bold;
+                color: #333;
+                text-align: center;
+                flex-grow: 1;
+            }
+            
+            .label-barcode {
+                text-align: center;
+                margin: 5cm 0;
+            }
+            
+            .label-barcode img {
+                height: 20cm;
+                width: 80%;
+            }
+            
+            .barcode-number {
+                font-size: 8cm;
+                margin-top: 2cm;
+                font-weight: bold;
+            }
+            
+            .label-details {
+                margin: 5cm 0;
+                flex-grow: 1;
+            }
+            
+            .details-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            
+            .details-table tr {
+                height: 12cm;
+            }
+            
+            .label-key {
+                font-weight: bold;
+                font-size: 6cm;
+                width: 30%;
+                text-align: right;
+                padding-right: 2cm;
+                color: #555;
+            }
+            
+            .label-value {
+                font-size: 7cm;
+                width: 70%;
+                padding-left: 2cm;
+            }
+            
+            .qr-code {
+                text-align: center;
+                margin: 5cm 0;
+            }
+            
+            .qr-code img {
+                height: 30cm;
+                width: 30cm;
+            }
+            
+            .label-footer {
+                margin-top: auto;
+                text-align: center;
+                font-size: 4cm;
+                color: #777;
+                border-top: 1px solid #eee;
+                padding-top: 3cm;
+            }
+            
+            .footer-note {
+                margin-bottom: 2cm;
+            }
+            
+            .print-date {
+                font-style: italic;
+            }
+        `;
     }
 
     reset_form() {

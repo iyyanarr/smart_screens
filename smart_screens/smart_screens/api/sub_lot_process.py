@@ -5,7 +5,7 @@ from frappe import _
 @frappe.whitelist()
 def create_sublot_process(form_data):
     """
-    Create a record in the Sub Lot Process doctype to track the entire process.
+    Create a record in the Sub Lot Process doctype with status tracking.
     Returns the success status and process record ID.
     
     Args:
@@ -25,29 +25,45 @@ def create_sublot_process(form_data):
         rejection_details = form_data.get("rejectionDetails", [])
         location_info = form_data.get("locationInfo", [])
         
-        # Publish initial progress
-        frappe.publish_realtime('progress', {
-            'percent': 10,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Validating input data...'
-        })
+        # Create a process tracker document to track progress
+        process_tracker = frappe.new_doc("Process Tracker")
+        process_tracker.process_type = "Sub Lot Process"
+        process_tracker.status = "Validating"
+        process_tracker.current_stage = "Data Validation"
+        process_tracker.progress_percent = 10
+        process_tracker.stage_description = "Validating input data..."
+        process_tracker.reference_doctype = "Sub Lot Process"
+        process_tracker.created_by = frappe.session.user
+        process_tracker.insert()
+        
+        # Get the tracker ID for frontend to poll
+        tracker_id = process_tracker.name
         
         # Validate required data
         if not batch_info:
-            return {"status": "error", "message": "Batch information is required"}
+            process_tracker.status = "Failed"
+            process_tracker.stage_description = "Batch information is required"
+            process_tracker.save()
+            return {"status": "error", "message": "Batch information is required", "tracker_id": tracker_id}
         
         if not operations:
-            return {"status": "error", "message": "At least one operation is required"}
+            process_tracker.status = "Failed"
+            process_tracker.stage_description = "At least one operation is required"
+            process_tracker.save()
+            return {"status": "error", "message": "At least one operation is required", "tracker_id": tracker_id}
         
         if not inspection_info:
-            return {"status": "error", "message": "Inspection information is required"}
+            process_tracker.status = "Failed"
+            process_tracker.stage_description = "Inspection information is required"
+            process_tracker.save()
+            return {"status": "error", "message": "Inspection information is required", "tracker_id": tracker_id}
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 20,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Creating process document...'
-        })
+        # Update progress - Document Creation
+        process_tracker.status = "In Progress"
+        process_tracker.current_stage = "Document Creation"
+        process_tracker.progress_percent = 20
+        process_tracker.stage_description = "Creating process document..."
+        process_tracker.save()
         
         # Create a new Sub Lot Process document
         process_doc = frappe.new_doc("Sub Lot Process")
@@ -76,12 +92,11 @@ def create_sublot_process(form_data):
         # Set sublot quantity same as inspection quantity
         process_doc.sublot_qty = process_doc.inspection_quantity
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 30,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Adding operation details...'
-        })
+        # Update progress - Adding operations
+        process_tracker.current_stage = "Operations Setup"
+        process_tracker.progress_percent = 30
+        process_tracker.stage_description = "Adding operation details..."
+        process_tracker.save()
         
         # Set inspector information
         process_doc.inspector_code = inspection_info.get("inspectorCode")
@@ -103,12 +118,11 @@ def create_sublot_process(form_data):
                 "employee_name": employee_name
             })
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 50,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Adding rejection details...'
-        })
+        # Update progress - Adding rejections
+        process_tracker.current_stage = "Rejection Data"
+        process_tracker.progress_percent = 50
+        process_tracker.stage_description = "Adding rejection details..."
+        process_tracker.save()
         
         # Add rejection details
         if rejection_details:
@@ -133,12 +147,11 @@ def create_sublot_process(form_data):
                     "quantity": quantity
                 })
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 70,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Adding location information...'
-        })
+        # Update progress - Adding location information
+        process_tracker.current_stage = "Location Setup"
+        process_tracker.progress_percent = 70
+        process_tracker.stage_description = "Adding location information..."
+        process_tracker.save()
         
         # Add stock reference documents if location info is provided
         if location_info:
@@ -156,33 +169,34 @@ def create_sublot_process(form_data):
                     "location": loc.get("location")
                 })
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 80,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Saving document...'
-        })
+        # Update progress - Saving document
+        process_tracker.current_stage = "Document Saving"
+        process_tracker.progress_percent = 80
+        process_tracker.stage_description = "Saving document..."
+        process_tracker.save()
         
         # Save the document
         process_doc.insert()
         
-        # Update progress
-        frappe.publish_realtime('progress', {
-            'percent': 90,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Submitting document...'
-        })
+        # Update progress - Document submission
+        process_tracker.current_stage = "Document Submission"
+        process_tracker.progress_percent = 90
+        process_tracker.stage_description = "Submitting document..."
+        process_tracker.save()
         
         # submit the document if it's submittable
         if frappe.db.get_value("DocType", "Sub Lot Process", "is_submittable"):
             process_doc.submit()
         
+        # Link the created document to the process tracker
+        process_tracker.reference_name = process_doc.name
+        
         # Final progress update
-        frappe.publish_realtime('progress', {
-            'percent': 100,
-            'title': 'Creating Sub Lot Process',
-            'description': 'Process completed successfully!'
-        })
+        process_tracker.current_stage = "Complete"
+        process_tracker.progress_percent = 100
+        process_tracker.status = "Completed"
+        process_tracker.stage_description = "Process completed successfully!"
+        process_tracker.save()
         
         # Log success message
         frappe.logger().info(f"Created Sub Lot Process: {process_doc.name}")
@@ -191,15 +205,65 @@ def create_sublot_process(form_data):
         return {
             "status": "success",
             "message": "Sub Lot Process created successfully",
-            "process_record": process_doc.name
+            "process_record": process_doc.name,
+            "tracker_id": tracker_id
         }
     
     except Exception as e:
+        # Update tracker with error information
+        if 'process_tracker' in locals() and process_tracker:
+            process_tracker.status = "Failed"
+            process_tracker.stage_description = f"Error: {str(e)}"
+            process_tracker.save()
+            
         frappe.logger().error(f"Error creating Sub Lot Process: {str(e)}")
         frappe.log_error(message=f"Error creating Sub Lot Process: {str(e)}", title="Sub Lot Process API Error")
         return {
             "status": "error",
-            "message": f"Failed to create Sub Lot Process: {str(e)}"
+            "message": f"Failed to create Sub Lot Process: {str(e)}",
+            "tracker_id": tracker_id if 'tracker_id' in locals() else None
+        }
+
+@frappe.whitelist()
+def get_process_status(tracker_id):
+    """
+    Get the current status of a process using its tracker ID
+    
+    Args:
+        tracker_id (str): ID of the process tracker document
+        
+    Returns:
+        dict: Current status of the process
+    """
+    try:
+        if not tracker_id:
+            return {"status": "error", "message": "Tracker ID is required"}
+        
+        # Check if the tracker document exists
+        if not frappe.db.exists("Process Tracker", tracker_id):
+            return {"status": "error", "message": f"Tracker {tracker_id} not found"}
+        
+        # Get the tracker document
+        tracker = frappe.get_doc("Process Tracker", tracker_id)
+        
+        # Return the status information
+        return {
+            "status": "success",
+            "data": {
+                "process_status": tracker.status,
+                "current_stage": tracker.current_stage,
+                "progress_percent": tracker.progress_percent,
+                "stage_description": tracker.stage_description,
+                "reference_doctype": tracker.reference_doctype,
+                "reference_name": tracker.reference_name
+            }
+        }
+        
+    except Exception as e:
+        frappe.logger().error(f"Error getting process status: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Failed to get process status: {str(e)}"
         }
 
 @frappe.whitelist()
