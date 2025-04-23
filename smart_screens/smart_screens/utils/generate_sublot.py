@@ -101,12 +101,6 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
     start_total = time.time()
     
     # Step 1: Validate inputs
-    frappe.publish_realtime('progress', {
-        'percent': 10,
-        'title': 'Generating Sub Lot',
-        'description': 'Validating inputs...'
-    })
-    
     start_time = time.time()
     if not batch_number:
         frappe.throw("Batch Number is required.")
@@ -128,42 +122,22 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
 
     try:
         # Step 2: Get the next available batch number
-        frappe.publish_realtime('progress', {
-            'percent': 20,
-            'title': 'Generating Sub Lot',
-            'description': 'Getting next available batch number...'
-        })
         start_time = time.time()
         new_batch_number = get_next_available_batch_number(batch_number)
         timing['get_batch_number'] = round((time.time() - start_time) * 1000, 2)
         
         # Step 3: Create sub_lot_number by removing alphabets from the beginning
-        frappe.publish_realtime('progress', {
-            'percent': 30,
-            'title': 'Generating Sub Lot',
-            'description': 'Creating sub lot number...'
-        })
         start_time = time.time()
         sub_lot_number = strip_leading_alphabets(new_batch_number)
         timing['create_sublot_number'] = round((time.time() - start_time) * 1000, 2)
         
         # Step 4: Get item code from the batch
-        frappe.publish_realtime('progress', {
-            'percent': 40,
-            'title': 'Generating Sub Lot',
-            'description': 'Getting item details...'
-        })
         start_time = time.time()
         batch_doc = frappe.get_doc("Batch", batch_number)
         item_code = batch_doc.item
         timing['get_item_code'] = round((time.time() - start_time) * 1000, 2)
         
         # Step 5: Create a new batch with the proposed batch number
-        frappe.publish_realtime('progress', {
-            'percent': 50,
-            'title': 'Generating Sub Lot',
-            'description': 'Creating new batch...'
-        })
         start_time = time.time()
         new_batch = create_batch(
             item_code=item_code,
@@ -172,11 +146,6 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         timing['create_batch'] = round((time.time() - start_time) * 1000, 2)
 
         # Step 6: Generate a barcode for the new batch
-        frappe.publish_realtime('progress', {
-            'percent': 60,
-            'title': 'Generating Sub Lot',
-            'description': 'Generating barcode...'
-        })
         start_time = time.time()
         barcode_image = generate_barcode_image(new_batch_number)
         timing['generate_barcode'] = round((time.time() - start_time) * 1000, 2)
@@ -188,11 +157,6 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         }
 
         # Step 7: Create a stock entry for the new batch
-        frappe.publish_realtime('progress', {
-            'percent': 80,
-            'title': 'Generating Sub Lot',
-            'description': 'Creating stock entry...'
-        })
         start_time = time.time()
         stock_entry_name = create_stock_entry(
             item_code=item_code,
@@ -210,13 +174,6 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         )
         timing['create_stock_entry'] = round((time.time() - start_time) * 1000, 2)
 
-        # Complete
-        frappe.publish_realtime('progress', {
-            'percent': 100,
-            'title': 'Generating Sub Lot',
-            'description': 'Process complete!'
-        })
-        
         timing['total'] = round((time.time() - start_total) * 1000, 2)
         
         # Log timing information for analysis

@@ -354,3 +354,62 @@ def validate_batch_for_process(batch_id):
             "status": "error",
             "message": f"Failed to validate batch: {str(e)}"
         }
+
+@frappe.whitelist()
+def get_location_details():
+    """
+    Get location details for the current user based on their role assignments.
+    This method retrieves all locations that the current user is authorized to access.
+    
+    Returns:
+        dict: Dictionary containing allowed locations for the current user
+    """
+    try:
+        user = frappe.session.user
+        
+        # Get user's role assignments
+        user_roles = frappe.get_roles(user)
+        
+        # Get all locations based on user's roles
+        # Query the Location Assignment doctype if it exists
+        if frappe.db.table_exists("Location Assignment"):
+            allowed_locations = frappe.get_all(
+                "Location Assignment",
+                filters={
+                    "role": ["in", user_roles],
+                    "enabled": 1
+                },
+                fields=["location", "source_warehouse", "target_warehouse", "stage", "role", "transaction_type"]
+            )
+        else:
+            # Fallback if location assignment doctype doesn't exist
+            # You can customize this with your specific table structure
+            allowed_locations = []
+            
+            # Add some default locations for testing if no locations found
+            if not allowed_locations:
+                default_location = {
+                    "location": "Production Floor",
+                    "source_warehouse": frappe.db.get_single_value("Manufacturing Settings", "default_source_warehouse") or "Stores - SPP",
+                    "target_warehouse": frappe.db.get_single_value("Manufacturing Settings", "default_target_warehouse") or "Finished Goods - SPP",
+                    "stage": "Production",
+                    "role": "Manufacturing User",
+                    "transaction_type": "Manufacture"
+                }
+                allowed_locations.append(default_location)
+        
+        # Log the found locations
+        frappe.logger().info(f"Found {len(allowed_locations)} locations for user {user}")
+        
+        return {
+            "status": "success",
+            "allowed_locations": allowed_locations
+        }
+    
+    except Exception as e:
+        frappe.logger().error(f"Error getting location details: {str(e)}")
+        frappe.log_error(message=f"Error getting location details: {str(e)}", title="Sub Lot Process API Error")
+        return {
+            "status": "error",
+            "message": f"Failed to get location details: {str(e)}"
+        }
