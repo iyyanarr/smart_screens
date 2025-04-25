@@ -100,30 +100,24 @@ def validate_employee_designation(employee_code):
                 "message": f"Employee {employee.first_name} does not have a designation assigned",
                 "employee": {
                     "name": employee.name,
-                    "employee_name": employee.first_name
+                    "employee_name": employee.first_name,
+                    "designation": None
                 },
                 "designation": None,
                 "allowed_operations": []
             }
         
-        # Get Smart Screen Settings to check if this designation has allowed operations
-        settings = frappe.get_single("Smart Screen Settings")
-        allowed_operations = []
+        # Query the Lot Resource Role Mapper child table directly to find operations for this designation
+        operations_list = frappe.get_all(
+            "Lot Resource Role Mapper",
+            filters={
+                "designation": designation,
+                "parent": "Smart Screen Settings"
+            },
+            fields=["operation"]
+        )
         
-        # Find designation in the mapping
-        for mapping in settings.designation_and_operation_mapping:
-            if mapping.designation == designation:
-                # Add allowed operations
-                if mapping.post_curing:
-                    allowed_operations.append("Post Curing")
-                if mapping.id_trimming:
-                    allowed_operations.append("ID Trimming")
-                if mapping.od_trimming:
-                    allowed_operations.append("OD Trimming")
-                if mapping.final_visual_inspection:
-                    allowed_operations.append("Final Visual Inspection")
-                # You can add more operations here as needed
-                break
+        allowed_operations = [op.operation for op in operations_list if op.operation]
         
         # Return results
         if allowed_operations:
@@ -132,7 +126,8 @@ def validate_employee_designation(employee_code):
                 "message": f"Employee {employee.first_name} has designation {designation} with {len(allowed_operations)} allowed operations",
                 "employee": {
                     "name": employee.name,
-                    "employee_name": employee.first_name
+                    "employee_name": employee.first_name,
+                    "designation": designation
                 },
                 "designation": designation,
                 "allowed_operations": allowed_operations
@@ -143,7 +138,8 @@ def validate_employee_designation(employee_code):
                 "message": f"Employee designation {designation} does not have any allowed operations",
                 "employee": {
                     "name": employee.name,
-                    "employee_name": employee.first_name
+                    "employee_name": employee.first_name,
+                    "designation": designation
                 },
                 "designation": designation,
                 "allowed_operations": []

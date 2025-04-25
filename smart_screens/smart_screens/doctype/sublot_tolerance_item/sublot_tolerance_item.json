@@ -1,48 +1,43 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2025-04-16 21:20:01.702768",
+ "creation": "2025-04-24 22:14:32.464079",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "column_break_ilni",
-  "designation",
-  "column_break_fqqo",
-  "operation"
+  "uom",
+  "column_break_orgr",
+  "tolerance_value"
  ],
  "fields": [
   {
-   "fieldname": "designation",
-   "fieldtype": "Link",
+   "default": "Nos",
+   "fieldname": "uom",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Designation ",
-   "options": "Designation"
+   "label": "Uom",
+   "options": "Kg\nNos"
   },
   {
-   "fieldname": "column_break_fqqo",
+   "fieldname": "column_break_orgr",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "operation",
-   "fieldtype": "Link",
+   "fieldname": "tolerance_value",
+   "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Operation",
-   "options": "Operation"
-  },
-  {
-   "fieldname": "column_break_ilni",
-   "fieldtype": "Column Break"
+   "label": "Allowed Tolerance value"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-04-25 11:02:02.903816",
+ "modified": "2025-04-24 22:16:56.416004",
  "modified_by": "Administrator",
  "module": "Smart Screens",
- "name": "Lot Resource Role Mapper",
+ "name": "Sublot Tolerance Item",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

@@ -232,29 +232,6 @@ class SubLotProcessPage {
             callback: (response) => {
                 if (response.message && !response.message.error) {
                     const data = response.message;
-                    
-                    // NEW: Check if quantity is zero and show error
-                    if (data.batch_quantity === 0) {
-                        resultElement.html(`
-                            <div class="alert alert-danger">
-                                <i class="fa fa-exclamation-circle"></i> Error: Batch quantity is 0 in warehouse ${data.warehouse}. Cannot proceed with processing.
-                            </div>
-                        `);
-                        
-                        // Reset content areas
-                        batchDetailsContent.html(`<div class="placeholder-text">Batch information will appear here after scanning</div>`);
-                        locationDetailsContent.html(`<div class="placeholder-text">Location information will appear here after scanning</div>`);
-                        bomDetailsContent.html(`<div class="placeholder-text">BOM details will appear here after scanning</div>`);
-                        
-                        // Reset batch info
-                        this.batchInfo = null;
-                        
-                        // Disable the employee section
-                        this.wrapper.find('#scan_employee').prop('disabled', true);
-                        this.wrapper.find('#add_employee_btn').prop('disabled', true);
-                        
-                        return;
-                    }
 
                     // Store batch info
                     this.batchInfo = {
@@ -354,8 +331,7 @@ class SubLotProcessPage {
         frappe.call({
             method: "smart_screens.smart_screens.utils.bom_validation.get_boms_by_component_item",
             args: {
-                item_code: item_code,
-                get_default_only: 1  // Only get default and active BOM
+                item_code: item_code
             },
             callback: (response) => {
                 if (response.message && response.message.success) {
@@ -365,23 +341,22 @@ class SubLotProcessPage {
                         // Store BOM details for later use
                         this.bom_details = bomData.boms;
 
-                        // Use the default BOM (should be the only one returned)
-                        const defaultBom = bomData.boms[0];
-
-                        // Create HTML for the BOM information
+                        // Create HTML for the BOM information in a compact format for the column
                         let bomHtml = '<div class="info-content">';
+
+                        // Show first BOM by default
+                        const firstBom = bomData.boms[0];
+
                         bomHtml += `
-                            <div><strong>BOM No:</strong> ${defaultBom.bom_no}</div>
-                            <div><strong>Parent Item:</strong> ${defaultBom.parent_item_code}</div>
-                            <div><strong>Default:</strong> <span class="text-success">Yes</span></div>
-                            <div><strong>Active:</strong> <span class="text-success">Yes</span></div>
+                            <div><strong>BOM No:</strong> ${firstBom.bom_no}</div>
+                            <div><strong>Parent Item:</strong> ${firstBom.parent_item_code}</div>
                         `;
 
-                        // If there are operations, list them with colored badges
-                        if (defaultBom.operations && defaultBom.operations.length > 0) {
+                        // If there are operations, list the operation names with colored badges
+                        if (firstBom.operations && firstBom.operations.length > 0) {
                             bomHtml += `<div><strong>Operations:</strong></div>`;
                             bomHtml += `<div class="operations-list">`;
-                            defaultBom.operations.forEach(op => {
+                            firstBom.operations.forEach(op => {
                                 if (op.operation) {
                                     const badgeColor = this.getRandomBadgeColor();
                                     bomHtml += `<span class="badge badge-${badgeColor} mr-1 mb-1">${op.operation}</span>`;
@@ -390,15 +365,41 @@ class SubLotProcessPage {
                             bomHtml += `</div>`;
                         }
 
+                        // If there are multiple BOMs, add a selector
+                        if (bomData.boms.length > 1) {
+                            bomHtml += `
+                                <div class="mt-2">
+                                    <select id="bom_selector" class="form-control form-control-sm">
+                            `;
+
+                            bomData.boms.forEach((bom, index) => {
+                                bomHtml += `<option value="${index}" ${index === 0 ? 'selected' : ''}>${bom.bom_no}</option>`;
+                            });
+
+                            bomHtml += `
+                                    </select>
+                                </div>
+                            `;
+                        }
+
                         bomHtml += '</div>';
 
                         // Update the BOM content column
                         bomDetailsContent.html(bomHtml);
+
+                        // Add event handler for BOM selector if it exists
+                        if (bomData.boms.length > 1) {
+                            this.wrapper.find('#bom_selector').on('change', (e) => {
+                                const selectedIndex = parseInt($(e.target).val());
+                                this.display_selected_bom(selectedIndex);
+                            });
+                        }
+
                     } else {
-                        // No default BOMs found
+                        // No BOMs found
                         bomDetailsContent.html(`
                             <div class="alert alert-warning mb-0">
-                                <i class="fa fa-exclamation-triangle mr-2"></i>No default active BOM found for this item
+                                <i class="fa fa-exclamation-triangle mr-2"></i>No BOMs found for this item
                             </div>
                         `);
                     }
@@ -1305,7 +1306,7 @@ class SubLotProcessPage {
         if (!employeeCode) {
             messageElement.html(`
                 <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-triangle"></i> Please scan or enter an employee ID
+                    <i class="fa fa-exclamation-triangle"></i> All required operations have been added
                 </div>
             `);
             return;
@@ -1326,12 +1327,13 @@ class SubLotProcessPage {
                 if (response.message && response.message.success) {
                     const data = response.message;
                     const employeeName = data.employee.employee_name;
-                    const employeeDesignation = data.employee.designation;
-                    const allowedOperations = data.allowed_operations || [];
 
-                    if (allowedOperations && allowedOperations.length > 0) {
-                        // Show operation selection
-                        const operationOptions = allowedOperations.map(op => 
+                    // Filter available operations to only show remaining required operations
+                    const remainingOperations = bomOperations.filter(op => !currentOperations.includes(op));
+
+                    if (remainingOperations.length > 0) {
+                        // Show operation selection with only remaining operations
+                        const operationOptions = remainingOperations.map(op => 
                             `<option value="${op}">${op}</option>`
                         ).join('');
 
@@ -1340,7 +1342,7 @@ class SubLotProcessPage {
                                 <i class="fa fa-check-circle"></i> Employee validated: ${employeeName}<br>
                                 <div class="mt-2">
                                     <div class="form-group">
-                                        <label>Select Operation:</label>
+                                        <label>Select Operation (${remainingOperations.length} remaining):</label>
                                         <select id="operation_select" class="form-control mb-2">
                                             ${operationOptions}
                                         </select>
@@ -1350,27 +1352,29 @@ class SubLotProcessPage {
                             </div>
                         `);
 
-                        // Bind confirm operation button
                         this.wrapper.find('#confirm_operation_btn').on('click', () => {
                             const selectedOperation = this.wrapper.find('#operation_select').val();
-
+                            
                             // Add to operations table
                             this.add_operation_to_table(selectedOperation, employeeCode, employeeName);
 
                             // Clear message and input
                             messageElement.html('');
                             this.wrapper.find('#scan_employee').val('');
+
+                            // Update progress
+                            const progress = ((currentOperations.length + 1) / bomOperations.length) * 100;
+                            this.wrapper.find('.operations-progress-bar').css('width', `${progress}%`);
                         });
                     } else {
                         messageElement.html(`
                             <div class="alert alert-warning">
-                                <i class="fa fa-exclamation-triangle"></i> No allowed operations found for designation: ${employeeDesignation}
+                                <i class="fa fa-exclamation-triangle"></i> All required operations have been added
                             </div>
                         `);
                     }
                 } else {
                     const errorMsg = response.message ? response.message.message : "Failed to validate employee";
-
                     messageElement.html(`
                         <div class="alert alert-danger">
                             <i class="fa fa-exclamation-circle"></i> ${errorMsg}
@@ -1644,20 +1648,6 @@ class SubLotProcessPage {
             }
         }
 
-        // NEW: Add a comparison of inspection quantity vs. batch quantity
-        const lotQty = parseFloat(this.batchInfo.quantity);
-        const inspQty = parseFloat(this.inspectionInfo.inspectionQuantity);
-        let processing_mode = "sublot";
-        
-        // Determine the processing mode based on quantity comparison
-        if (inspQty === lotQty) {
-            processing_mode = "direct";
-        } else if (inspQty > lotQty) {
-            processing_mode = "excess";
-        } else {
-            processing_mode = "sublot";
-        }
-
         // Initialize custom progress tracker with a unique container ID
         const progressContainerId = `process-tracker-${Date.now()}`;
         messageElement.html(`
@@ -1755,8 +1745,7 @@ class SubLotProcessPage {
             operationDetails: this.operationDetails || [],
             inspectionInfo: this.inspectionInfo,
             rejectionDetails: this.rejectionDetails || [],
-            locationInfo: this.location_data || [], // Add location data to form submission
-            processing_mode: processing_mode  // NEW: Add processing mode based on quantity comparison
+            locationInfo: this.location_data || [] // Add location data to form submission
         };
 
         // Disable the submit button to prevent double submissions
@@ -1848,23 +1837,28 @@ class SubLotProcessPage {
             // Update stages
             const currentStageKey = self.getStageKeyFromName(data.current_stage);
             if (currentStageKey) {
-                // Mark all previous stages as completed
+                // Get current stage index
+                const currentIndex = self.getStageIndex(currentStageKey);
+                
+                // Find all stage items and update them
                 $progressContainer.find('.stage-item').each(function() {
                     const $stage = $(this);
                     const stageKey = $stage.data('stage');
                     
-                    // Remove current class from all stages
+                    // Remove current class from all stages first
                     $stage.removeClass('current');
                     
                     // Convert stage-key to array index for comparison
-                    const stageIndex = self.getStageIndex(stageKey);
-                    const currentIndex = self.getStageIndex(currentStageKey);
+                    const itemStageIndex = self.getStageIndex(stageKey);
                     
-                    if (stageIndex < currentIndex) {
+                    if (itemStageIndex < currentIndex) {
+                        // Previous stages are completed
                         $stage.addClass('active completed');
-                    } else if (stageIndex === currentIndex) {
+                    } else if (itemStageIndex === currentIndex) {
+                        // Current stage is active and current
                         $stage.addClass('active current');
                     } else {
+                        // Future stages are inactive
                         $stage.removeClass('active completed');
                     }
                 });
@@ -2119,233 +2113,157 @@ class SubLotProcessPage {
     }
 
     generateLabelHtml(data) {
-        // Generate HTML for the label with the specified dimensions (170cm x 170cm)
+        // Create a map of operation types to employee codes
+        const operationEmployeeMap = {};
+        
+        // If we have operations data, map them
+        if (data.operations && data.operations.length) {
+            data.operations.forEach(op => {
+                operationEmployeeMap[op.operation_type] = op.employee_id;
+            });
+        }
+        
+        // Generate HTML for the label matching the image format
         return `
             <div class="label-container">
-                <div class="label-header">
-                    <div class="company-logo">
-                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
-                    </div>
-                    <div class="label-title">SUB LOT</div>
+                <div class="barcode-section">
+                    <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.batch_no || data.sub_lot_number)}&type=code128&height=40&width=1.5" alt="Batch Barcode">
+                    <div class="batch-number">${data.sub_lot_number || 'N/A'}</div>
                 </div>
                 
-                <!-- Raw Material Batch Information with Barcode -->
-                <div class="label-section">
-                    <div class="section-title">Raw Material</div>
-                    <div class="label-barcode">
-                        <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.batch_no)}&type=code128&height=40&width=1" alt="Raw Material Barcode">
-                        <div class="barcode-number">${data.batch_no || 'N/A'}</div>
-                    </div>
+                <div class="p-number-section">
+                    <div class="p-left">P${data.item_code ? data.item_code.replace(/[^\d]/g, '') : 'N/A'}</div>
+                    <div class="p-right">Qty: ${data.inspection_quantity || 'N/A'} ${data.stock_uom || 'KG'}</div>
                 </div>
                 
-                <!-- Finished Goods Batch Information with Barcode -->
-                <div class="label-section">
-                    <div class="section-title">Finished Good</div>
-                    <div class="label-barcode">
-                        <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.sub_lot_number)}&type=code128&height=40&width=1" alt="Finished Good Barcode">
-                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
-                    </div>
-                </div>
-                
-                <div class="label-details">
-                    <table class="details-table">
+                <div class="operations-table">
+                    <table>
                         <tr>
-                            <td class="label-key">Item Code:</td>
-                            <td class="label-value">${data.item_code || 'N/A'}</td>
-                            <td class="label-key">Item Name:</td>
-                            <td class="label-value">${data.item_name || 'N/A'}</td>
+                            <td class="operation-name">Trimming ID</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${operationEmployeeMap['Trimming ID'] || ''}</td>
                         </tr>
                         <tr>
-                            <td class="label-key">Quantity:</td>
-                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
-                            <td class="label-key">Created On:</td>
-                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
+                            <td class="operation-name">Trimming OD</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${operationEmployeeMap['Trimming OD'] || 'HR-EMP-00449'}</td>
                         </tr>
                         <tr>
-                            <td class="label-key">Warehouse:</td>
-                            <td class="label-value">${data.warehouse || 'N/A'}</td>
-                            <td class="label-key">Stage:</td>
-                            <td class="label-value">${data.stage || 'N/A'}</td>
+                            <td class="operation-name">Post Curing</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${operationEmployeeMap['Post Curing'] || 'HR-EMP-00341'}</td>
                         </tr>
                         <tr>
-                            <td class="label-key">Source WH:</td>
-                            <td class="label-value">${data.source_warehouse || 'N/A'}</td>
-                            <td class="label-key">Target WH:</td>
-                            <td class="label-value">${data.target_warehouse || 'N/A'}</td>
+                            <td class="operation-name">Visual Inspection</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${data.inspector_code || operationEmployeeMap['Visual Inspection'] || 'HR-EMP-00449'}</td>
+                        </tr>
+                        <tr>
+                            <td class="operation-name">Dot Marking</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${operationEmployeeMap['Dot Marking'] || ''}</td>
+                        </tr>
+                        <tr>
+                            <td class="operation-name">PDIR</td>
+                            <td class="operation-value">:</td>
+                            <td class="employee-code">${operationEmployeeMap['PDIR'] || ''}</td>
                         </tr>
                     </table>
-                </div>
-                
-                <!-- Manufacturing Information -->
-                <div class="manufacturing-info">
-                    <div class="section-title">Manufacturing Information</div>
-                    <table class="details-table">
-                        <tr>
-                            <td class="label-key">Work Order:</td>
-                            <td class="label-value">${data.work_order || 'N/A'}</td>
-                            <td class="label-key">Operator:</td>
-                            <td class="label-value">${frappe.session.user_fullname || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Inspector:</td>
-                            <td class="label-value">${data.inspector_name || 'N/A'}</td>
-                            <td class="label-key">Inspection Qty:</td>
-                            <td class="label-value">${data.inspection_quantity || 'N/A'}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <div class="qr-code">
-                    <img src="/api/method/frappe.utils.barcode.get_qr?data=${encodeURIComponent(JSON.stringify({
-                        sub_lot_number: data.sub_lot_number,
-                        batch_no: data.batch_no,
-                        item_code: data.item_code,
-                        quantity: data.sublot_qty,
-                        warehouse: data.warehouse,
-                        work_order: data.work_order,
-                        creation: data.creation
-                    }))}" alt="QR Code">
-                </div>
-                
-                <div class="label-footer">
-                    <div class="footer-note">Smart Screens Processing System</div>
                 </div>
             </div>
         `;
     }
 
     getLabelStyles() {
-        // CSS styles for the label
+        // CSS styles for the label - updated to match the image format
         return `
             .label-container {
-                width: 170cm;
-                height: 170cm;
-                padding: 5cm;
+                width: 10cm;
+                height: 8cm;
+                padding: 0.5cm;
                 box-sizing: border-box;
-                border: 1px solid #ccc;
                 font-family: Arial, sans-serif;
                 background-color: white;
-                display: flex;
-                flex-direction: column;
                 position: relative;
             }
             
-            .label-header {
+            .barcode-section {
+                text-align: center;
+                margin-bottom: 0.5cm;
+            }
+            
+            .barcode-section img {
+                width: 90%;
+                height: 1.5cm;
+            }
+            
+            .batch-number {
+                font-size: 0.9cm;
+                font-weight: bold;
+                margin-top: 0.2cm;
+            }
+            
+            .p-number-section {
                 display: flex;
                 justify-content: space-between;
-                align-items: center;
-                margin-bottom: 3cm;
+                margin-bottom: 0.5cm;
+                font-size: 0.5cm;
             }
             
-            .company-logo img {
-                height: 15cm;
-                max-width: 40cm;
-            }
-            
-            .label-title {
-                font-size: 14cm;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                flex-grow: 1;
-            }
-            
-            .label-section {
-                margin: 2cm 0;
-                border: 1px solid #ddd;
-                border-radius: 1cm;
-                padding: 2cm;
-                background-color: #f9f9f9;
-            }
-            
-            .section-title {
-                font-size: 6cm;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                margin-bottom: 2cm;
-                border-bottom: 1px solid #ddd;
-                padding-bottom: 1cm;
-            }
-            
-            .label-barcode {
-                text-align: center;
-                margin: 2cm 0;
-            }
-            
-            .label-barcode img {
-                height: 15cm;
-                width: 80%;
-            }
-            
-            .barcode-number {
-                font-size: 6cm;
-                margin-top: 1cm;
+            .p-left {
                 font-weight: bold;
             }
             
-            .label-details {
-                margin: 3cm 0;
-                flex-grow: 1;
+            .p-right {
+                text-align: right;
             }
             
-            .manufacturing-info {
-                margin: 3cm 0;
-                border: 1px solid #ddd;
-                border-radius: 1cm;
-                padding: 2cm;
-                background-color: #f9f9f9;
+            .operations-table {
+                margin-top: 0.3cm;
             }
             
-            .details-table {
+            .operations-table table {
                 width: 100%;
                 border-collapse: collapse;
+                table-layout: fixed;
             }
             
-            .details-table tr {
-                height: 10cm;
+            .operations-table tr {
+                height: 0.8cm;
             }
             
-            .label-key {
-                font-weight: bold;
-                font-size: 5cm;
-                width: 25%;
-                text-align: right;
-                padding-right: 2cm;
-                color: #555;
+            .operation-name {
+                width: 40%;
+                font-size: 0.45cm;
+                text-align: left;
+                font-weight: normal;
             }
             
-            .label-value {
-                font-size: 5cm;
-                width: 25%;
-                padding-left: 1cm;
-            }
-            
-            .qr-code {
+            .operation-value {
+                width: 10%;
+                font-size: 0.45cm;
                 text-align: center;
-                margin: 3cm 0;
             }
             
-            .qr-code img {
-                height: 25cm;
-                width: 25cm;
+            .employee-code {
+                width: 50%;
+                font-size: 0.45cm;
+                font-weight: normal;
+                text-align: left;
             }
-            
-            .label-footer {
-                margin-top: auto;
-                text-align: center;
-                font-size: 4cm;
-                color: #777;
-                border-top: 1px solid #eee;
-                padding-top: 3cm;
-            }
-            
-            .footer-note {
-                margin-bottom: 2cm;
-            }
-            
-            .print-date {
-                font-style: italic;
+
+            @media print {
+                @page {
+                    size: 10cm 8cm;
+                    margin: 0;
+                }
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+                .label-container {
+                    page-break-inside: avoid;
+                }
             }
         `;
     }
