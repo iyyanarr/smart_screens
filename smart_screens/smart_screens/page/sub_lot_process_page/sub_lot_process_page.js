@@ -331,7 +331,8 @@ class SubLotProcessPage {
         frappe.call({
             method: "smart_screens.smart_screens.utils.bom_validation.get_boms_by_component_item",
             args: {
-                item_code: item_code
+                item_code: item_code,
+                get_default_only: 1  // Only get default and active BOM
             },
             callback: (response) => {
                 if (response.message && response.message.success) {
@@ -341,22 +342,23 @@ class SubLotProcessPage {
                         // Store BOM details for later use
                         this.bom_details = bomData.boms;
 
-                        // Create HTML for the BOM information in a compact format for the column
+                        // Use the default BOM (should be the only one returned)
+                        const defaultBom = bomData.boms[0];
+
+                        // Create HTML for the BOM information
                         let bomHtml = '<div class="info-content">';
-
-                        // Show first BOM by default
-                        const firstBom = bomData.boms[0];
-
                         bomHtml += `
-                            <div><strong>BOM No:</strong> ${firstBom.bom_no}</div>
-                            <div><strong>Parent Item:</strong> ${firstBom.parent_item_code}</div>
+                            <div><strong>BOM No:</strong> ${defaultBom.bom_no}</div>
+                            <div><strong>Parent Item:</strong> ${defaultBom.parent_item_code}</div>
+                            <div><strong>Default:</strong> <span class="text-success">Yes</span></div>
+                            <div><strong>Active:</strong> <span class="text-success">Yes</span></div>
                         `;
 
-                        // If there are operations, list the operation names with colored badges
-                        if (firstBom.operations && firstBom.operations.length > 0) {
+                        // If there are operations, list them with colored badges
+                        if (defaultBom.operations && defaultBom.operations.length > 0) {
                             bomHtml += `<div><strong>Operations:</strong></div>`;
                             bomHtml += `<div class="operations-list">`;
-                            firstBom.operations.forEach(op => {
+                            defaultBom.operations.forEach(op => {
                                 if (op.operation) {
                                     const badgeColor = this.getRandomBadgeColor();
                                     bomHtml += `<span class="badge badge-${badgeColor} mr-1 mb-1">${op.operation}</span>`;
@@ -365,41 +367,15 @@ class SubLotProcessPage {
                             bomHtml += `</div>`;
                         }
 
-                        // If there are multiple BOMs, add a selector
-                        if (bomData.boms.length > 1) {
-                            bomHtml += `
-                                <div class="mt-2">
-                                    <select id="bom_selector" class="form-control form-control-sm">
-                            `;
-
-                            bomData.boms.forEach((bom, index) => {
-                                bomHtml += `<option value="${index}" ${index === 0 ? 'selected' : ''}>${bom.bom_no}</option>`;
-                            });
-
-                            bomHtml += `
-                                    </select>
-                                </div>
-                            `;
-                        }
-
                         bomHtml += '</div>';
 
                         // Update the BOM content column
                         bomDetailsContent.html(bomHtml);
-
-                        // Add event handler for BOM selector if it exists
-                        if (bomData.boms.length > 1) {
-                            this.wrapper.find('#bom_selector').on('change', (e) => {
-                                const selectedIndex = parseInt($(e.target).val());
-                                this.display_selected_bom(selectedIndex);
-                            });
-                        }
-
                     } else {
-                        // No BOMs found
+                        // No default BOMs found
                         bomDetailsContent.html(`
                             <div class="alert alert-warning mb-0">
-                                <i class="fa fa-exclamation-triangle mr-2"></i>No BOMs found for this item
+                                <i class="fa fa-exclamation-triangle mr-2"></i>No default active BOM found for this item
                             </div>
                         `);
                     }
@@ -1327,10 +1303,12 @@ class SubLotProcessPage {
                 if (response.message && response.message.success) {
                     const data = response.message;
                     const employeeName = data.employee.employee_name;
+                    const employeeDesignation = data.employee.designation;
+                    const allowedOperations = data.allowed_operations || [];
 
-                    if (data.allowed_operations && data.allowed_operations.length > 0) {
+                    if (allowedOperations && allowedOperations.length > 0) {
                         // Show operation selection
-                        const operationOptions = data.allowed_operations.map(op => 
+                        const operationOptions = allowedOperations.map(op => 
                             `<option value="${op}">${op}</option>`
                         ).join('');
 
@@ -1363,7 +1341,7 @@ class SubLotProcessPage {
                     } else {
                         messageElement.html(`
                             <div class="alert alert-warning">
-                                <i class="fa fa-exclamation-triangle"></i> No allowed operations found for this employee
+                                <i class="fa fa-exclamation-triangle"></i> No allowed operations found for designation: ${employeeDesignation}
                             </div>
                         `);
                     }

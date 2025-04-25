@@ -23,12 +23,13 @@ def get_item_bom(item_code):
     return parent_bom_details
     
 @frappe.whitelist()
-def get_boms_by_component_item(item_code):
+def get_boms_by_component_item(item_code, get_default_only=0):
     """
     Find all BOMs that contain a specific item code in their items child table.
     
     Args:
         item_code (str): The component item code to search for in BOMs.
+        get_default_only (int, optional): If 1, only return the default active BOM.
         
     Returns:
         dict: Dictionary containing a list of BOMs that use the component
@@ -47,9 +48,11 @@ def get_boms_by_component_item(item_code):
         return result
     
     # Find all BOMs that contain this item
+    filters = {"item_code": item_code, "docstatus": 1}
+    
     bom_items = frappe.get_all(
         "BOM Item", 
-        filters={"item_code": item_code, "docstatus": 1},
+        filters=filters,
         fields=["parent", "qty", "uom"]
     )
     
@@ -62,6 +65,10 @@ def get_boms_by_component_item(item_code):
     for bom_item in bom_items:
         bom_no = bom_item.parent
         bom = frappe.get_doc("BOM", bom_no)
+        
+        # Skip non-default BOMs if get_default_only is specified
+        if int(get_default_only) == 1 and (not bom.is_default or not bom.is_active):
+            continue
         
         # Add BOM details to the result
         bom_data = {
@@ -85,9 +92,23 @@ def get_boms_by_component_item(item_code):
             )
         
         result["data"]["boms"].append(bom_data)
+        
+        # If we only want default BOMs and we found one, exit the loop
+        if int(get_default_only) == 1 and bom.is_default and bom.is_active:
+            break
     
     result["success"] = True
-    result["message"] = f"Found {len(bom_items)} BOMs containing item {item_code}"
+    
+    if result["data"]["boms"]:
+        if int(get_default_only) == 1:
+            result["message"] = f"Found default BOM containing item {item_code}"
+        else:
+            result["message"] = f"Found {len(result['data']['boms'])} BOMs containing item {item_code}"
+    else:
+        if int(get_default_only) == 1:
+            result["message"] = f"No default active BOM found containing item {item_code}"
+        else:
+            result["message"] = f"No BOMs found containing item {item_code}"
     
     return result
     
