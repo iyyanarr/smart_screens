@@ -24,6 +24,7 @@ def create_sublot_process(form_data):
         inspection_info = form_data.get("inspectionInfo", {})
         rejection_details = form_data.get("rejectionDetails", [])
         location_info = form_data.get("locationInfo", [])
+        processing_mode = form_data.get("processing_mode", "sublot")  # Get processing mode
         
         # Create a process tracker document to track progress
         process_tracker = frappe.new_doc("Process Tracker")
@@ -75,6 +76,7 @@ def create_sublot_process(form_data):
         process_doc.sub_lot_number = batch_info.get("sppBatchId")
         process_doc.item_code = batch_info.get("item_code")
         process_doc.warehouse = batch_info.get("warehouse")
+        process_doc.processing_mode = processing_mode  # Store the processing mode
         
         # Set quantities - ensure numeric types for quantity fields
         if batch_info.get("quantity"):
@@ -191,11 +193,79 @@ def create_sublot_process(form_data):
         # Link the created document to the process tracker
         process_tracker.reference_name = process_doc.name
         
+        # NEW: Handle specific processing modes based on inspection quantity
+        try:
+            # Process based on the processing mode
+            if processing_mode == "direct":
+                # If Inspected Qty = Lot Qty, skip Sublot and directly do Lot tagging and Manufacture SE
+                process_tracker.current_stage = "Work Order"
+                process_tracker.progress_percent = 95
+                process_tracker.stage_description = "Creating direct manufacturing entry..."
+                process_tracker.save()
+                
+                # Create Manufacturing Stock Entry directly without repack
+                create_direct_manufacturing_entry(process_doc.name)
+                
+            elif processing_mode == "excess":
+                # If Inspected Qty > Lot Qty, do Sublot (Repack) but also log for approval
+                process_tracker.current_stage = "Sub Lot Creation"
+                process_tracker.progress_percent = 95
+                process_tracker.stage_description = "Creating sublot with excess quantity..."
+                process_tracker.save()
+                
+                # Create Sublot (Repack) entry
+                create_repack_stock_entry(process_doc.name)
+                
+                # Create Manufacturing Stock Entry
+                create_manufacturing_stock_entry(process_doc.name)
+                
+                # Log excess quantity for approval
+                log_excess_quantity(process_doc.name, process_doc.inspection_quantity, process_doc.available_quantity)
+                
+            else:
+                # Standard flow - Inspected Qty < Lot Qty - Do Sublot (Repack) entry
+                process_tracker.current_stage = "Sub Lot Creation"
+                process_tracker.progress_percent = 95
+                process_tracker.stage_description = "Creating standard sublot..."
+                process_tracker.save()
+                
+                # Create Sublot (Repack) entry
+                create_repack_stock_entry(process_doc.name)
+                
+                # Create Manufacturing Stock Entry
+                create_manufacturing_stock_entry(process_doc.name)
+            
+            # NEW: Submit related SPP Lot Resource Tagging and SPP Inspection Entry documents
+            process_tracker.stage_description = "Submitting related documents..."
+            process_tracker.save()
+            
+            # Find and submit SPP Lot Resource Tagging
+            submit_related_lot_resource_tagging(process_doc.name, process_doc.spp_batch_number)
+            
+            # Find and submit SPP Inspection Entry
+            submit_related_inspection_entry(process_doc.name, process_doc.spp_batch_number, process_doc.item_code)
+                
+        except Exception as e:
+            # If any processing fails, update the tracker with error information
+            process_tracker.status = "Failed"
+            process_tracker.stage_description = f"Processing Error: {str(e)}"
+            process_tracker.save()
+            
+            frappe.logger().error(f"Error in post-processing for Sub Lot Process: {str(e)}")
+            frappe.log_error(message=f"Error in post-processing for Sub Lot Process: {str(e)}", title="Sub Lot Process Post-Processing Error")
+            
+            return {
+                "status": "error",
+                "message": f"Failed in post-processing: {str(e)}",
+                "process_record": process_doc.name,
+                "tracker_id": tracker_id
+            }
+        
         # Final progress update
         process_tracker.current_stage = "Complete"
         process_tracker.progress_percent = 100
         process_tracker.status = "Completed"
-        process_tracker.stage_description = "Process completed successfully!"
+        process_tracker.stage_description = f"Process completed successfully with mode: {processing_mode}"
         process_tracker.save()
         
         # Log success message
@@ -354,3 +424,237 @@ def validate_batch_for_process(batch_id):
             "status": "error",
             "message": f"Failed to validate batch: {str(e)}"
         }
+
+def create_repack_stock_entry(process_id):
+    """
+    Create a Repack Stock Entry for the Sub Lot Process.
+    This is the standard flow for creating a sublot when Inspected Qty < Lot Qty
+    
+    Args:
+        process_id (str): ID of the Sub Lot Process record
+        
+    Returns:
+        str: ID of the created Stock Entry
+    """
+    try:
+        if not process_id:
+            frappe.throw("Process ID is required")
+        
+        # Get the Sub Lot Process document
+        process_doc = frappe.get_doc("Sub Lot Process", process_id)
+        
+        # Create a new Stock Entry document for Repack
+        stock_entry = frappe.new_doc("Stock Entry")
+        stock_entry.stock_entry_type = "Repack"
+        stock_entry.company = frappe.defaults.get_user_default("company")
+        
+        # Get source and target warehouses from the process
+        source_warehouse = None
+        target_warehouse = None
+        
+        if process_doc.st_reference_docs and len(process_doc.st_reference_docs) > 0:
+            # Use proper attribute names for the child table fields
+            # The issue was here - using incorrect attribute names
+            for ref_doc in process_doc.st_reference_docs:
+                if hasattr(ref_doc, 'source_warehouse'):
+                    source_warehouse = ref_doc.source_warehouse
+                    break
+                # Try alternative attribute names based on the actual DocType structure
+                elif hasattr(ref_doc, 'from_warehouse'):
+                    source_warehouse = ref_doc.from_warehouse
+                    break
+            
+            for ref_doc in process_doc.st_reference_docs:
+                if hasattr(ref_doc, 'target_warehouse'):
+                    target_warehouse = ref_doc.target_warehouse
+                    break
+                # Try alternative attribute names
+                elif hasattr(ref_doc, 'to_warehouse'):
+                    target_warehouse = ref_doc.to_warehouse
+                    break
+        
+        if not source_warehouse:
+            source_warehouse = process_doc.warehouse
+        
+        if not target_warehouse:
+            target_warehouse = process_doc.warehouse
+        
+        stock_entry.from_warehouse = source_warehouse
+        stock_entry.to_warehouse = target_warehouse
+        
+        # Add raw material item (from the batch)
+        stock_entry.append("items", {
+            "item_code": process_doc.item_code,
+            "qty": process_doc.inspection_quantity,
+            "batch_no": process_doc.batch_no,
+            "s_warehouse": source_warehouse,
+            "sub_lot_process": process_doc.name,
+            "is_finished_item": 0,
+            "spp_batch_number": process_doc.spp_batch_number
+        })
+        
+        # Add finished good item (create a new batch with sublot number)
+        stock_entry.append("items", {
+            "item_code": process_doc.item_code,
+            "qty": process_doc.inspection_quantity,
+            "t_warehouse": target_warehouse,
+            "sub_lot_process": process_doc.name,
+            "is_finished_item": 1,
+            "spp_batch_number": process_doc.sub_lot_number
+        })
+        
+        # Add reference to Sub Lot Process in custom fields if available
+        if frappe.db.exists("Custom Field", {"dt": "Stock Entry", "fieldname": "sub_lot_process"}):
+            stock_entry.sub_lot_process = process_doc.name
+        
+        # Save and submit the stock entry
+        stock_entry.insert()
+        stock_entry.submit()
+        
+        # Update the Sub Lot Process with the repack entry
+        process_doc.repack_stock_entry = stock_entry.name
+        process_doc.save()
+        
+        frappe.logger().info(f"Created repack stock entry {stock_entry.name} for Sub Lot Process {process_id}")
+        
+        return stock_entry.name
+    
+    except Exception as e:
+        frappe.logger().error(f"Error creating repack stock entry: {str(e)}")
+        frappe.log_error(message=f"Error creating repack stock entry: {str(e)}", title="Sub Lot Process Error")
+        raise
+
+def submit_related_lot_resource_tagging(process_id, spp_batch_number):
+    """
+    Find and submit SPP Lot Resource Tagging documents related to the Sub Lot Process.
+    
+    Args:
+        process_id (str): ID of the Sub Lot Process record
+        spp_batch_number (str): SPP Batch Number to find related documents
+        
+    Returns:
+        list: List of submitted document IDs
+    """
+    try:
+        if not spp_batch_number:
+            frappe.logger().warning(f"SPP Batch Number is required to submit related Lot Resource Tagging for process {process_id}")
+            return []
+            
+        # Find relevant SPP Lot Resource Tagging documents that are in Draft state
+        lot_tagging_docs = frappe.get_all(
+            "SPP Lot Resource Tagging",
+            filters={
+                "spp_batch_id": spp_batch_number,
+                "docstatus": 0  # Draft state
+            },
+            fields=["name"]
+        )
+        
+        if not lot_tagging_docs:
+            frappe.logger().info(f"No draft SPP Lot Resource Tagging documents found for batch {spp_batch_number}")
+            return []
+            
+        submitted_docs = []
+        
+        # Submit each document
+        for doc in lot_tagging_docs:
+            try:
+                tagging_doc = frappe.get_doc("SPP Lot Resource Tagging", doc.name)
+                
+                # Link to Sub Lot Process if field exists
+                if hasattr(tagging_doc, "sub_lot_process"):
+                    tagging_doc.sub_lot_process = process_id
+                
+                tagging_doc.submit()
+                frappe.db.commit()
+                submitted_docs.append(doc.name)
+                frappe.logger().info(f"Successfully submitted SPP Lot Resource Tagging {doc.name}")
+            except Exception as e:
+                frappe.logger().error(f"Error submitting SPP Lot Resource Tagging {doc.name}: {str(e)}")
+                frappe.log_error(message=f"Error submitting SPP Lot Resource Tagging {doc.name}: {str(e)}", 
+                                title="SPP Lot Resource Tagging Submission Error")
+        
+        return submitted_docs
+        
+    except Exception as e:
+        frappe.logger().error(f"Error submitting related SPP Lot Resource Tagging documents: {str(e)}")
+        frappe.log_error(message=f"Error submitting related SPP Lot Resource Tagging documents: {str(e)}", 
+                        title="Sub Lot Process Related Documents Error")
+        return []
+
+def submit_related_inspection_entry(process_id, spp_batch_number, item_code):
+    """
+    Find and submit SPP Inspection Entry documents related to the Sub Lot Process.
+    
+    Args:
+        process_id (str): ID of the Sub Lot Process record
+        spp_batch_number (str): SPP Batch Number to find related documents
+        item_code (str): Item code to further filter inspection entries
+        
+    Returns:
+        list: List of submitted document IDs
+    """
+    try:
+        if not spp_batch_number:
+            frappe.logger().warning(f"SPP Batch Number is required to submit related Inspection Entry for process {process_id}")
+            return []
+            
+        # Build filters to find relevant inspection entries
+        filters = {
+            "docstatus": 0  # Draft state
+        }
+        
+        # Add batch number filter if available - check common field name variations
+        if spp_batch_number:
+            # Check which field exists in the doctype and use it
+            field_options = ["spp_batch_id", "batch_no", "batch_number", "spp_batch_number"]
+            for field in field_options:
+                if frappe.db.exists("DocField", {"parent": "SPP Inspection Entry", "fieldname": field}):
+                    filters[field] = spp_batch_number
+                    break
+        
+        # Add item code filter if available
+        if item_code:
+            if frappe.db.exists("DocField", {"parent": "SPP Inspection Entry", "fieldname": "item_code"}):
+                filters["item_code"] = item_code
+            elif frappe.db.exists("DocField", {"parent": "SPP Inspection Entry", "fieldname": "item"}):
+                filters["item"] = item_code
+                
+        # Find relevant SPP Inspection Entry documents
+        inspection_docs = frappe.get_all(
+            "SPP Inspection Entry",
+            filters=filters,
+            fields=["name"]
+        )
+        
+        if not inspection_docs:
+            frappe.logger().info(f"No draft SPP Inspection Entry documents found for batch {spp_batch_number}")
+            return []
+            
+        submitted_docs = []
+        
+        # Submit each document
+        for doc in inspection_docs:
+            try:
+                inspection_doc = frappe.get_doc("SPP Inspection Entry", doc.name)
+                
+                # Link to Sub Lot Process if field exists
+                if hasattr(inspection_doc, "sub_lot_process"):
+                    inspection_doc.sub_lot_process = process_id
+                
+                inspection_doc.submit()
+                frappe.db.commit()
+                submitted_docs.append(doc.name)
+                frappe.logger().info(f"Successfully submitted SPP Inspection Entry {doc.name}")
+            except Exception as e:
+                frappe.logger().error(f"Error submitting SPP Inspection Entry {doc.name}: {str(e)}")
+                frappe.log_error(message=f"Error submitting SPP Inspection Entry {doc.name}: {str(e)}", 
+                                title="SPP Inspection Entry Submission Error")
+        
+        return submitted_docs
+        
+    except Exception as e:
+        frappe.logger().error(f"Error submitting related SPP Inspection Entry documents: {str(e)}")
+        frappe.log_error(message=f"Error submitting related SPP Inspection Entry documents: {str(e)}", 
+                        title="Sub Lot Process Related Documents Error")
+        return []

@@ -232,6 +232,29 @@ class SubLotProcessPage {
             callback: (response) => {
                 if (response.message && !response.message.error) {
                     const data = response.message;
+                    
+                    // NEW: Check if quantity is zero and show error
+                    if (data.batch_quantity === 0) {
+                        resultElement.html(`
+                            <div class="alert alert-danger">
+                                <i class="fa fa-exclamation-circle"></i> Error: Batch quantity is 0 in warehouse ${data.warehouse}. Cannot proceed with processing.
+                            </div>
+                        `);
+                        
+                        // Reset content areas
+                        batchDetailsContent.html(`<div class="placeholder-text">Batch information will appear here after scanning</div>`);
+                        locationDetailsContent.html(`<div class="placeholder-text">Location information will appear here after scanning</div>`);
+                        bomDetailsContent.html(`<div class="placeholder-text">BOM details will appear here after scanning</div>`);
+                        
+                        // Reset batch info
+                        this.batchInfo = null;
+                        
+                        // Disable the employee section
+                        this.wrapper.find('#scan_employee').prop('disabled', true);
+                        this.wrapper.find('#add_employee_btn').prop('disabled', true);
+                        
+                        return;
+                    }
 
                     // Store batch info
                     this.batchInfo = {
@@ -1621,6 +1644,20 @@ class SubLotProcessPage {
             }
         }
 
+        // NEW: Add a comparison of inspection quantity vs. batch quantity
+        const lotQty = parseFloat(this.batchInfo.quantity);
+        const inspQty = parseFloat(this.inspectionInfo.inspectionQuantity);
+        let processing_mode = "sublot";
+        
+        // Determine the processing mode based on quantity comparison
+        if (inspQty === lotQty) {
+            processing_mode = "direct";
+        } else if (inspQty > lotQty) {
+            processing_mode = "excess";
+        } else {
+            processing_mode = "sublot";
+        }
+
         // Initialize custom progress tracker with a unique container ID
         const progressContainerId = `process-tracker-${Date.now()}`;
         messageElement.html(`
@@ -1718,7 +1755,8 @@ class SubLotProcessPage {
             operationDetails: this.operationDetails || [],
             inspectionInfo: this.inspectionInfo,
             rejectionDetails: this.rejectionDetails || [],
-            locationInfo: this.location_data || [] // Add location data to form submission
+            locationInfo: this.location_data || [], // Add location data to form submission
+            processing_mode: processing_mode  // NEW: Add processing mode based on quantity comparison
         };
 
         // Disable the submit button to prevent double submissions
