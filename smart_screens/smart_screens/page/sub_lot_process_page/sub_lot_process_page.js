@@ -2126,20 +2126,12 @@ class SubLotProcessPage {
                     </table>
                 </div>
                 
-                <!-- Operations and Inspector Information -->
+                <!-- Operations Information -->
                 <div class="operations-section">
                     <div class="section-title">OPERATIONS</div>
                     <div class="operations-list">
                         ${this.generateOperationsList(data)}
                     </div>
-                    
-                    <!-- Inspector Information -->
-                    ${data.inspector_name ? `
-                    <div class="inspector-info">
-                        <div class="inspector-label">Inspector:</div>
-                        <div class="inspector-value">${data.inspector_name || 'N/A'}</div>
-                    </div>
-                    ` : ''}
                 </div>
                 
                 <div class="label-footer">
@@ -2169,6 +2161,202 @@ class SubLotProcessPage {
         
         html += '</table>';
         return html;
+    }
+
+    getLabelStyles() {
+        // CSS styles for the label - resized for single page printing
+        return `
+            @page {
+                size: 100mm 150mm; /* Standard label size */
+                margin: 3mm; /* Minimal margins */
+            }
+            
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                background-color: white;
+            }
+            
+            .label-container {
+                width: 94mm;
+                height: 144mm;
+                padding: 3mm;
+                box-sizing: border-box;
+                border: 0.5mm solid #ccc;
+                background-color: white;
+                display: flex;
+                flex-direction: column;
+                page-break-after: avoid;
+                overflow: hidden;
+            }
+            
+            .label-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 3mm;
+            }
+            
+            .company-logo img {
+                height: 10mm;
+                max-width: 20mm;
+            }
+            
+            .label-title {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #333;
+                text-align: center;
+                flex-grow: 1;
+            }
+            
+            /* Main barcode section */
+            .main-barcode-section {
+                margin: 2mm 0;
+                border: 0.5mm solid #000;
+                border-radius: 1mm;
+                padding: 2mm;
+                background-color: #f9f9f9;
+            }
+            
+            .label-section {
+                margin: 2mm 0;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                padding: 2mm;
+                background-color: #f9f9f9;
+            }
+            
+            .section-title {
+                font-size: 9pt;
+                font-weight: bold;
+                color: #333;
+                text-align: center;
+                margin-bottom: 2mm;
+                border-bottom: 0.3mm solid #ddd;
+                padding-bottom: 1mm;
+            }
+            
+            .label-barcode {
+                text-align: center;
+                margin: 2mm 0;
+            }
+            
+            .barcode-container {
+                margin: 0 auto;
+                width: 80mm;
+                height: 15mm;
+            }
+            
+            .barcode-container svg {
+                width: 100%;
+                height: 100%;
+            }
+            
+            .barcode-number {
+                font-size: 10pt;
+                margin-top: 1mm;
+                font-weight: bold;
+            }
+            
+            .item-info-section {
+                margin: 2mm 0;
+                padding: 2mm;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                background-color: #f9f9f9;
+            }
+            
+            .operations-section {
+                margin: 2mm 0;
+                padding: 2mm;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                background-color: #f9f9f9;
+                flex-grow: 1;
+                overflow-y: auto;
+            }
+            
+            .operations-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+            }
+            
+            .operations-table th {
+                background-color: #eee;
+                padding: 1mm;
+                text-align: left;
+                border-bottom: 0.5mm solid #ddd;
+            }
+            
+            .operations-table td {
+                padding: 1mm;
+                border-bottom: 0.3mm solid #ddd;
+            }
+            
+            .details-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+            }
+            
+            .details-table tr {
+                height: 5mm;
+            }
+            
+            .label-key {
+                font-weight: bold;
+                width: 25%;
+                text-align: right;
+                padding-right: 1mm;
+                color: #555;
+            }
+            
+            .label-value {
+                width: 25%;
+                padding-left: 1mm;
+                font-weight: bold;
+                color: #000;
+            }
+            
+            .label-footer {
+                margin-top: auto;
+                text-align: center;
+                font-size: 7pt;
+                color: #777;
+                border-top: 0.3mm solid #eee;
+                padding-top: 2mm;
+            }
+            
+            .footer-note {
+                margin-bottom: 1mm;
+            }
+            
+            .no-operations {
+                text-align: center;
+                font-style: italic;
+                font-size: 7pt;
+                color: #999;
+                padding: 2mm;
+            }
+            
+            /* For printing */
+            @media print {
+                html, body {
+                    width: 100mm;
+                    height: 150mm;
+                    margin: 0;
+                    padding: 0;
+                }
+                
+                .label-container {
+                    page-break-after: avoid;
+                    page-break-inside: avoid;
+                }
+            }
+        `;
     }
 
     printSubLotLabel(processId) {
