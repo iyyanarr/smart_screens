@@ -2075,6 +2075,102 @@ class SubLotProcessPage {
         return stageIndices[stageKey] || 0;
     }
 
+    generateLabelHtml(data) {
+        // Generate direct data URL for the barcode (more reliable than API)
+        const barcodeContent = `
+            <svg id="barcode"></svg>
+            <script>
+                JsBarcode("#barcode", "${data.sub_lot_number || 'N/A'}", {
+                    format: "CODE128",
+                    width: 2,
+                    height: 70,
+                    displayValue: false
+                });
+            </script>
+        `;
+
+        // Generate HTML for the label with improved barcode visibility and focus on sublot info and operations
+        return `
+            <div class="label-container">
+                <div class="label-header">
+                    <div class="company-logo">
+                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
+                    </div>
+                    <div class="label-title">SUB LOT</div>
+                </div>
+                
+                <!-- SUB LOT NUMBER with BARCODE -->
+                <div class="label-section main-barcode-section">
+                    <div class="section-title">SUB LOT NUMBER</div>
+                    <div class="label-barcode">
+                        <div class="barcode-container">${barcodeContent}</div>
+                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
+                    </div>
+                </div>
+                
+                <!-- Item and Batch Information -->
+                <div class="item-info-section">
+                    <table class="details-table">
+                        <tr>
+                            <td class="label-key">Item Code:</td>
+                            <td class="label-value">${data.item_code || 'N/A'}</td>
+                            <td class="label-key">Batch:</td>
+                            <td class="label-value">${data.batch_no || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td class="label-key">Qty:</td>
+                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
+                            <td class="label-key">Date:</td>
+                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <!-- Operations and Inspector Information -->
+                <div class="operations-section">
+                    <div class="section-title">OPERATIONS</div>
+                    <div class="operations-list">
+                        ${this.generateOperationsList(data)}
+                    </div>
+                    
+                    <!-- Inspector Information -->
+                    ${data.inspector_name ? `
+                    <div class="inspector-info">
+                        <div class="inspector-label">Inspector:</div>
+                        <div class="inspector-value">${data.inspector_name || 'N/A'}</div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div class="label-footer">
+                    <div class="footer-note">Smart Screens Processing System</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Generate operations list
+    generateOperationsList(data) {
+        if (!data.operations || !data.operations.length) {
+            return '<div class="no-operations">No operations data available</div>';
+        }
+        
+        let html = '<table class="operations-table">';
+        html += '<tr><th>Operation</th><th>Employee</th></tr>';
+        
+        data.operations.forEach(op => {
+            html += `
+                <tr>
+                    <td>${op.operation || 'N/A'}</td>
+                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</table>';
+        return html;
+    }
+
     printSubLotLabel(processId) {
         // Create a new dialog for label printing
         const dialog = new frappe.ui.Dialog({
@@ -2083,46 +2179,98 @@ class SubLotProcessPage {
                 {
                     fieldname: 'html_preview',
                     fieldtype: 'HTML',
-                    options: '<div class="text-center">Loading label preview...</div>'
+                    options: '<div class="text-center"><i class="fa fa-spinner fa-spin"></i> Loading label preview...</div>'
                 }
             ],
             primary_action_label: 'Print',
-            primary_action: () => {
-                // Print the label
+            primary_action: (values) => {
+                // Store the data for reference in the print window
+                const labelData = dialog.get_values();
+                const labelHtml = dialog.fields_dict.html_preview.$wrapper.html();
+                
+                // Create the print window with direct embedded barcode data
                 const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    frappe.msgprint(__('Please allow pop-ups to print the label'));
+                    return;
+                }
+                
+                // Get sublot number from the preview
+                let sublotNumber = dialog.sublotNumber || 'N/A';
+                
                 printWindow.document.write(`
                     <!DOCTYPE html>
                     <html>
                     <head>
                         <title>Sub Lot Label</title>
                         <style>
-                            @media print {
-                                @page {
-                                    size: 170cm 170cm;
-                                    margin: 0;
-                                }
-                                body {
-                                    margin: 0;
-                                }
-                                .label-container {
-                                    width: 170cm;
-                                    height: 170cm;
-                                    padding: 5mm;
-                                    box-sizing: border-box;
-                                }
-                            }
                             ${this.getLabelStyles()}
                         </style>
                     </head>
                     <body>
-                        ${dialog.fields_dict.html_preview.$wrapper.html()}
+                        <div class="label-container">
+                            <div class="label-header">
+                                <div class="company-logo">
+                                    <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
+                                </div>
+                                <div class="label-title">SUB LOT</div>
+                            </div>
+                            
+                            <!-- SUB LOT NUMBER with BARCODE (using directly embedded SVG) -->
+                            <div class="label-section main-barcode-section">
+                                <div class="section-title">SUB LOT NUMBER</div>
+                                <div class="label-barcode">
+                                    <div id="barcode-container" style="text-align: center; width: 100%;"></div>
+                                    <div class="barcode-number">${sublotNumber}</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Item and Batch Information -->
+                            ${dialog.itemSection || ''}
+                            
+                            <!-- Operations Information -->
+                            ${dialog.operationsSection || ''}
+                            
+                            <div class="label-footer">
+                                <div class="footer-note">Smart Screens Processing System</div>
+                            </div>
+                        </div>
+
+                        <!-- Include JsBarcode directly from CDN -->
+                        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
                         <script>
-                            setTimeout(function() {
-                                window.print();
-                                setTimeout(function() {
-                                    window.close();
-                                }, 500);
-                            }, 500);
+                            // Create barcode directly in the print window
+                            window.onload = function() {
+                                try {
+                                    console.log("Creating barcode for: ${sublotNumber}");
+                                    
+                                    // Create SVG element
+                                    var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                                    svgElement.id = "barcode";
+                                    document.getElementById("barcode-container").appendChild(svgElement);
+                                    
+                                    // Generate barcode
+                                    JsBarcode("#barcode", "${sublotNumber}", {
+                                        format: "CODE128",
+                                        width: 2, 
+                                        height: 70,
+                                        displayValue: false
+                                    });
+                                    
+                                    // Print after a short delay to ensure rendering
+                                    setTimeout(function() {
+                                        window.print();
+                                        
+                                        // Close window after printing
+                                        setTimeout(function() {
+                                            window.close();
+                                        }, 500);
+                                    }, 500);
+                                } catch(e) {
+                                    console.error("Error generating barcode:", e);
+                                    document.body.innerHTML += '<div style="color: red; text-align: center; margin-top: 20px;">Error generating barcode. Please try again.</div>';
+                                }
+                            };
                         </script>
                     </body>
                     </html>
@@ -2144,11 +2292,116 @@ class SubLotProcessPage {
                 if (response.message && response.message.status === "success") {
                     const data = response.message.data;
                     
-                    // Generate label HTML with the process data
-                    const labelHtml = this.generateLabelHtml(data);
+                    // Store sublot number for reference
+                    dialog.sublotNumber = data.sub_lot_number || 'N/A';
+                    
+                    // Pre-generate HTML sections to pass to print window
+                    dialog.itemSection = `
+                        <div class="item-info-section">
+                            <table class="details-table">
+                                <tr>
+                                    <td class="label-key">Item Code:</td>
+                                    <td class="label-value">${data.item_code || 'N/A'}</td>
+                                    <td class="label-key">Batch:</td>
+                                    <td class="label-value">${data.batch_no || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <td class="label-key">Qty:</td>
+                                    <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
+                                    <td class="label-key">Date:</td>
+                                    <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    `;
+                    
+                    // Generate operations HTML section
+                    let operationsHtml = '<div class="operations-section"><div class="section-title">OPERATIONS</div>';
+                    
+                    if (data.operations && data.operations.length > 0) {
+                        operationsHtml += '<table class="operations-table">';
+                        operationsHtml += '<tr><th>Operation</th><th>Employee</th></tr>';
+                        
+                        data.operations.forEach(op => {
+                            operationsHtml += `
+                                <tr>
+                                    <td>${op.operation || 'N/A'}</td>
+                                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        operationsHtml += '</table>';
+                    } else {
+                        operationsHtml += '<div class="no-operations">No operations data available</div>';
+                    }
+                    
+                    operationsHtml += '</div>';
+                    dialog.operationsSection = operationsHtml;
+                    
+                    // Generate preview HTML
+                    let previewHtml = `
+                        <div class="label-container" style="border: 1px solid #ccc; padding: 10px; max-width: 400px; margin: 0 auto;">
+                            <div class="label-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                <div class="company-logo">
+                                    <img src="/assets/smart_screens/images/logo.png" alt="Company Logo" style="height: 30px;">
+                                </div>
+                                <div class="label-title" style="font-weight: bold; font-size: 16px; text-align: center; flex-grow: 1;">SUB LOT</div>
+                            </div>
+                            
+                            <div class="label-section" style="border: 1px solid #eee; margin: 10px 0; padding: 10px; background-color: #f9f9f9;">
+                                <div class="section-title" style="font-weight: bold; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;">SUB LOT NUMBER</div>
+                                <div class="label-barcode" style="text-align: center;">
+                                    <div id="preview-barcode-container"></div>
+                                    <div style="font-weight: bold; margin-top: 5px;">${data.sub_lot_number || 'N/A'}</div>
+                                </div>
+                            </div>
+                            
+                            ${dialog.itemSection.replace(/<td/g, '<td style="padding: 3px; font-size: 12px;"')}
+                            ${dialog.operationsSection.replace(/<th/g, '<th style="background-color: #eee; padding: 5px; text-align: left; font-size: 12px;"').replace(/<td/g, '<td style="padding: 3px; font-size: 12px; border-bottom: 1px solid #eee;"')}
+                            
+                            <div style="margin-top: 10px; text-align: center; font-size: 11px; color: #777; border-top: 1px solid #eee; padding-top: 5px;">
+                                Smart Screens Processing System
+                            </div>
+                        </div>
+                        
+                        <script>
+                            // Load JsBarcode for the preview
+                            if (typeof JsBarcode === 'undefined') {
+                                var script = document.createElement('script');
+                                script.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js';
+                                script.onload = function() {
+                                    // Create barcode in preview
+                                    var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                                    svgElement.id = "preview-barcode";
+                                    document.getElementById("preview-barcode-container").appendChild(svgElement);
+                                    
+                                    JsBarcode("#preview-barcode", "${data.sub_lot_number || 'N/A'}", {
+                                        format: "CODE128",
+                                        width: 1.5,
+                                        height: 50,
+                                        displayValue: false
+                                    });
+                                };
+                                document.head.appendChild(script);
+                            } else {
+                                // Create barcode directly
+                                var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                                svgElement.id = "preview-barcode";
+                                document.getElementById("preview-barcode-container").appendChild(svgElement);
+                                
+                                JsBarcode("#preview-barcode", "${data.sub_lot_number || 'N/A'}", {
+                                    format: "CODE128",
+                                    width: 1.5,
+                                    height: 50,
+                                    displayValue: false
+                                });
+                            }
+                        </script>
+                    `;
                     
                     // Update dialog with label preview
-                    dialog.fields_dict.html_preview.$wrapper.html(labelHtml);
+                    dialog.fields_dict.html_preview.$wrapper.html(previewHtml);
                 } else {
                     // Error getting process details
                     dialog.fields_dict.html_preview.$wrapper.html(`
@@ -2171,236 +2424,37 @@ class SubLotProcessPage {
         });
     }
 
-    generateLabelHtml(data) {
-        // Generate HTML for the label with the specified dimensions (170cm x 170cm)
-        return `
-            <div class="label-container">
-                <div class="label-header">
-                    <div class="company-logo">
-                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
-                    </div>
-                    <div class="label-title">SUB LOT</div>
-                </div>
+    // Alternate method in case JsBarcode is not available
+    generateBarcodeDataUrl(data, width, height) {
+        // Function to generate a simple barcode using HTML canvas
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // Clear background
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw simple black lines (primitive barcode representation)
+            let x = 10;
+            const chars = data.split('');
+            ctx.fillStyle = '#000000';
+            
+            for (let i = 0; i < chars.length; i++) {
+                const charCode = chars[i].charCodeAt(0);
+                const barWidth = 2 + (charCode % 3);
                 
-                <!-- Raw Material Batch Information with Barcode -->
-                <div class="label-section">
-                    <div class="section-title">Raw Material</div>
-                    <div class="label-barcode">
-                        <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.batch_no)}&type=code128&height=40&width=1" alt="Raw Material Barcode">
-                        <div class="barcode-number">${data.batch_no || 'N/A'}</div>
-                    </div>
-                </div>
-                
-                <!-- Finished Goods Batch Information with Barcode -->
-                <div class="label-section">
-                    <div class="section-title">Finished Good</div>
-                    <div class="label-barcode">
-                        <img src="/api/method/frappe.utils.barcode.get_barcode?data=${encodeURIComponent(data.sub_lot_number)}&type=code128&height=40&width=1" alt="Finished Good Barcode">
-                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
-                    </div>
-                </div>
-                
-                <div class="label-details">
-                    <table class="details-table">
-                        <tr>
-                            <td class="label-key">Item Code:</td>
-                            <td class="label-value">${data.item_code || 'N/A'}</td>
-                            <td class="label-key">Item Name:</td>
-                            <td class="label-value">${data.item_name || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Quantity:</td>
-                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
-                            <td class="label-key">Created On:</td>
-                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Warehouse:</td>
-                            <td class="label-value">${data.warehouse || 'N/A'}</td>
-                            <td class="label-key">Stage:</td>
-                            <td class="label-value">${data.stage || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Source WH:</td>
-                            <td class="label-value">${data.source_warehouse || 'N/A'}</td>
-                            <td class="label-key">Target WH:</td>
-                            <td class="label-value">${data.target_warehouse || 'N/A'}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <!-- Manufacturing Information -->
-                <div class="manufacturing-info">
-                    <div class="section-title">Manufacturing Information</div>
-                    <table class="details-table">
-                        <tr>
-                            <td class="label-key">Work Order:</td>
-                            <td class="label-value">${data.work_order || 'N/A'}</td>
-                            <td class="label-key">Operator:</td>
-                            <td class="label-value">${frappe.session.user_fullname || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Inspector:</td>
-                            <td class="label-value">${data.inspector_name || 'N/A'}</td>
-                            <td class="label-key">Inspection Qty:</td>
-                            <td class="label-value">${data.inspection_quantity || 'N/A'}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <div class="qr-code">
-                    <img src="/api/method/frappe.utils.barcode.get_qr?data=${encodeURIComponent(JSON.stringify({
-                        sub_lot_number: data.sub_lot_number,
-                        batch_no: data.batch_no,
-                        item_code: data.item_code,
-                        quantity: data.sublot_qty,
-                        warehouse: data.warehouse,
-                        work_order: data.work_order,
-                        creation: data.creation
-                    }))}" alt="QR Code">
-                </div>
-                
-                <div class="label-footer">
-                    <div class="footer-note">Smart Screens Processing System</div>
-                </div>
-            </div>
-        `;
-    }
-
-    getLabelStyles() {
-        // CSS styles for the label
-        return `
-            .label-container {
-                width: 170cm;
-                height: 170cm;
-                padding: 5cm;
-                box-sizing: border-box;
-                border: 1px solid #ccc;
-                font-family: Arial, sans-serif;
-                background-color: white;
-                display: flex;
-                flex-direction: column;
-                position: relative;
+                ctx.fillRect(x, 5, barWidth, height - 10);
+                x += barWidth + 2;
             }
             
-            .label-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 3cm;
-            }
-            
-            .company-logo img {
-                height: 15cm;
-                max-width: 40cm;
-            }
-            
-            .label-title {
-                font-size: 14cm;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                flex-grow: 1;
-            }
-            
-            .label-section {
-                margin: 2cm 0;
-                border: 1px solid #ddd;
-                border-radius: 1cm;
-                padding: 2cm;
-                background-color: #f9f9f9;
-            }
-            
-            .section-title {
-                font-size: 6cm;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                margin-bottom: 2cm;
-                border-bottom: 1px solid #ddd;
-                padding-bottom: 1cm;
-            }
-            
-            .label-barcode {
-                text-align: center;
-                margin: 2cm 0;
-            }
-            
-            .label-barcode img {
-                height: 15cm;
-                width: 80%;
-            }
-            
-            .barcode-number {
-                font-size: 6cm;
-                margin-top: 1cm;
-                font-weight: bold;
-            }
-            
-            .label-details {
-                margin: 3cm 0;
-                flex-grow: 1;
-            }
-            
-            .manufacturing-info {
-                margin: 3cm 0;
-                border: 1px solid #ddd;
-                border-radius: 1cm;
-                padding: 2cm;
-                background-color: #f9f9f9;
-            }
-            
-            .details-table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            
-            .details-table tr {
-                height: 10cm;
-            }
-            
-            .label-key {
-                font-weight: bold;
-                font-size: 5cm;
-                width: 25%;
-                text-align: right;
-                padding-right: 2cm;
-                color: #555;
-            }
-            
-            .label-value {
-                font-size: 5cm;
-                width: 25%;
-                padding-left: 1cm;
-            }
-            
-            .qr-code {
-                text-align: center;
-                margin: 3cm 0;
-            }
-            
-            .qr-code img {
-                height: 25cm;
-                width: 25cm;
-            }
-            
-            .label-footer {
-                margin-top: auto;
-                text-align: center;
-                font-size: 4cm;
-                color: #777;
-                border-top: 1px solid #eee;
-                padding-top: 3cm;
-            }
-            
-            .footer-note {
-                margin-bottom: 2cm;
-            }
-            
-            .print-date {
-                font-style: italic;
-            }
-        `;
+            return canvas.toDataURL('image/png');
+        } catch (e) {
+            console.error("Error generating barcode data URL:", e);
+            return null;
+        }
     }
 
     reset_form() {
