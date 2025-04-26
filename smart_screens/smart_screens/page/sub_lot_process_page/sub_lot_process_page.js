@@ -279,14 +279,32 @@ class SubLotProcessPage {
                         locationHtml += '</div>';
                         locationDetailsContent.html(locationHtml);
                     } else {
-                        locationDetailsContent.html(`<div class="text-muted">No location data available</div>`);
+                        locationDetailsContent.html(`
+                            <div class="alert alert-warning mb-0">
+                                <i class="fa fa-exclamation-triangle mr-2"></i>No location information available
+                            </div>
+                        `);
                     }
 
-                    // Enable the employee section
+                    // Enable the employee section and prepare operation dropdown
                     this.wrapper.find('#scan_employee').prop('disabled', false);
                     this.wrapper.find('#add_employee_btn').prop('disabled', false);
+                    
+                    // Check if operation dropdown exists, if not, create it
+                    if (this.wrapper.find('#operation_type').length === 0) {
+                        // Add operation dropdown before the employee scan input
+                        const operationDropdown = `
+                            <div class="form-group">
+                                <label for="operation_type">Select Operation:</label>
+                                <select id="operation_type" class="form-control">
+                                    <option value="">-- Select Operation --</option>
+                                </select>
+                            </div>
+                        `;
+                        this.wrapper.find('#scan_employee').closest('.form-group').before(operationDropdown);
+                    }
 
-                    // Fetch BOM details for the 4th column
+                    // Fetch BOM details for the 4th column and populate operation dropdown
                     this.fetch_bom_details(data.item_code);
                 } else {
                     const errorMsg = response.message && response.message.error 
@@ -371,6 +389,20 @@ class SubLotProcessPage {
 
                         // Update the BOM content column
                         bomDetailsContent.html(bomHtml);
+
+                        // Populate operation dropdown
+                        const operationDropdown = this.wrapper.find('#operation_type');
+                        if (operationDropdown.length > 0) {
+                            operationDropdown.empty();
+                            operationDropdown.append('<option value="">-- Select Operation --</option>');
+                            if (defaultBom.operations && defaultBom.operations.length > 0) {
+                                defaultBom.operations.forEach(op => {
+                                    if (op.operation) {
+                                        operationDropdown.append(`<option value="${op.operation}">${op.operation}</option>`);
+                                    }
+                                });
+                            }
+                        }
                     } else {
                         // No default BOMs found
                         bomDetailsContent.html(`
@@ -1278,11 +1310,32 @@ class SubLotProcessPage {
     validate_employee() {
         const employeeCode = this.wrapper.find('#scan_employee').val();
         const messageElement = this.wrapper.find('#employee_validation_message');
+        const operationSelect = this.wrapper.find('#operation_type');
+        const selectedOperation = operationSelect.val();
 
         if (!employeeCode) {
             messageElement.html(`
                 <div class="alert alert-warning">
                     <i class="fa fa-exclamation-triangle"></i> Please scan or enter an employee ID
+                </div>
+            `);
+            return;
+        }
+
+        if (!selectedOperation) {
+            messageElement.html(`
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i> Please select an operation from the dropdown
+                </div>
+            `);
+            return;
+        }
+
+        // Check if the selected operation is in the BOM operations
+        if (!this.isBomOperation(selectedOperation)) {
+            messageElement.html(`
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle"></i> Selected operation "${selectedOperation}" is not listed in the BOM operations
                 </div>
             `);
             return;
@@ -1307,41 +1360,33 @@ class SubLotProcessPage {
                     const allowedOperations = data.allowed_operations || [];
 
                     if (allowedOperations && allowedOperations.length > 0) {
-                        // Show operation selection
-                        const operationOptions = allowedOperations.map(op => 
-                            `<option value="${op}">${op}</option>`
-                        ).join('');
+                        // Check if the selected operation is allowed for this employee
+                        if (!allowedOperations.includes(selectedOperation)) {
+                            messageElement.html(`
+                                <div class="alert alert-danger">
+                                    <i class="fa fa-exclamation-circle"></i> Employee "${employeeName}" is not authorized to perform operation "${selectedOperation}"
+                                </div>
+                            `);
+                            return;
+                        }
 
+                        // All validation passed, add the operation to the table
+                        this.add_operation_to_table(selectedOperation, employeeCode, employeeName);
+
+                        // Show success message
                         messageElement.html(`
                             <div class="alert alert-success">
-                                <i class="fa fa-check-circle"></i> Employee validated: ${employeeName}<br>
-                                <div class="mt-2">
-                                    <div class="form-group">
-                                        <label>Select Operation:</label>
-                                        <select id="operation_select" class="form-control mb-2">
-                                            ${operationOptions}
-                                        </select>
-                                        <button id="confirm_operation_btn" class="btn btn-primary btn-sm">Add Operation</button>
-                                    </div>
-                                </div>
+                                <i class="fa fa-check-circle"></i> Employee validated: ${employeeName} (${employeeDesignation})
                             </div>
                         `);
 
-                        // Bind confirm operation button
-                        this.wrapper.find('#confirm_operation_btn').on('click', () => {
-                            const selectedOperation = this.wrapper.find('#operation_select').val();
-
-                            // Add to operations table
-                            this.add_operation_to_table(selectedOperation, employeeCode, employeeName);
-
-                            // Clear message and input
-                            messageElement.html('');
-                            this.wrapper.find('#scan_employee').val('');
-                        });
+                        // Clear the employee field and reset operation dropdown for next entry
+                        this.wrapper.find('#scan_employee').val('');
+                        operationSelect.val('');
                     } else {
                         messageElement.html(`
                             <div class="alert alert-warning">
-                                <i class="fa fa-exclamation-triangle"></i> No allowed operations found for designation: ${employeeDesignation}
+                                <i class="fa fa-exclamation-triangle"></i> Employee "${employeeName}" doesn't have any allowed operations
                             </div>
                         `);
                     }
@@ -1358,6 +1403,20 @@ class SubLotProcessPage {
         });
     }
 
+    // Helper method to check if operation is in BOM operations
+    isBomOperation(operation) {
+        // If no BOM details, assume all operations are allowed
+        if (!this.bom_details || !this.bom_details.length) {
+            return true;
+        }
+        
+        const firstBom = this.bom_details[0];
+        const bomOperations = firstBom.operations || [];
+        
+        // Check if the operation exists in the BOM operations
+        return bomOperations.some(op => op.operation === operation);
+    }
+
     add_operation_to_table(operation, employeeCode, employeeName) {
         const operationsTable = this.wrapper.find('#operations_table tbody');
 
@@ -1371,24 +1430,6 @@ class SubLotProcessPage {
             const existingOperation = this.operationDetails.find(op => op.operation === operation);
             if (existingOperation) {
                 frappe.msgprint(`Operation "${operation}" is already added. Duplicate operations are not allowed.`);
-                return;
-            }
-        }
-
-        // Check if the operation is in the BOM operations list
-        if (this.bom_details && this.bom_details.length > 0) {
-            const firstBom = this.bom_details[0];
-            const bomOperations = firstBom.operations || [];
-            
-            // Check if the operation exists in the BOM operations
-            const operationExists = bomOperations.some(op => op.operation === operation);
-            
-            if (!operationExists) {
-                frappe.msgprint({
-                    title: __("Invalid Operation"),
-                    indicator: "red",
-                    message: __(`Operation "${operation}" is not listed in the BOM operations. Only operations defined in the BOM can be added.`)
-                });
                 return;
             }
         }
@@ -1448,10 +1489,42 @@ class SubLotProcessPage {
         const inspectionQty = this.wrapper.find('#inspection_qty').val();
         const messageElement = this.wrapper.find('#inspector_validation_message');
 
-        if (!inspectorCode || !inspectionQty || inspectionQty <= 0) {
+        // Validate inspection quantity against batch quantity
+        if (!this.batchInfo) {
             messageElement.html(`
                 <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-triangle"></i> Please enter both inspector code and valid quantity
+                    <i class="fa fa-exclamation-triangle"></i> Please validate a batch first before entering inspection details
+                </div>
+            `);
+            return;
+        }
+
+        if (!inspectorCode) {
+            messageElement.html(`
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i> Please scan or enter an inspector ID
+                </div>
+            `);
+            return;
+        }
+
+        if (!inspectionQty || inspectionQty <= 0) {
+            messageElement.html(`
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i> Please enter a valid inspection quantity
+                </div>
+            `);
+            return;
+        }
+
+        // Check if inspection quantity exceeds available batch quantity
+        const batchQty = parseFloat(this.batchInfo.quantity);
+        const enteredQty = parseFloat(inspectionQty);
+        
+        if (enteredQty > batchQty) {
+            messageElement.html(`
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-circle"></i> Inspection quantity (${enteredQty}) cannot exceed available batch quantity (${batchQty})
                 </div>
             `);
             return;
