@@ -165,10 +165,20 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
             'description': 'Creating new batch...'
         })
         start_time = time.time()
-        new_batch = create_batch(
-            item_code=item_code,
-            batch_number=new_batch_number
-        )
+        try:
+            new_batch = create_batch(
+                item_code=item_code,
+                batch_number=new_batch_number
+            )
+        except Exception as batch_error:
+            # Log the specific batch creation error with detailed context
+            import traceback
+            batch_error_traceback = traceback.format_exc()
+            frappe.logger().error(f"Batch creation error: {str(batch_error)}")
+            frappe.logger().error(f"Batch creation traceback: {batch_error_traceback}")
+            # Re-raise with more specific message
+            raise Exception(f"Error creating batch: {str(batch_error)}")
+            
         timing['create_batch'] = round((time.time() - start_time) * 1000, 2)
 
         # Step 6: Generate a barcode for the new batch
@@ -235,5 +245,29 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         }
         
     except Exception as e:
+        # Enhanced error logging
+        import traceback
+        error_traceback = traceback.format_exc()
+        error_context = {
+            "batch_number": batch_number,
+            "qty": qty,
+            "source_warehouse": source_warehouse,
+            "target_warehouse": target_warehouse
+        }
+        
         frappe.logger().error(f"Sub Lot Generation Error: {str(e)}")
-        frappe.throw(f"Failed to generate sub-lot: {str(e)}")
+        frappe.logger().error(f"Error context: {error_context}")
+        frappe.logger().error(f"Traceback: {error_traceback}")
+        
+        # Create a detailed error log entry
+        frappe.log_error(
+            title=f"Sub Lot Generation Error - {batch_number}",
+            message=f"Error: {str(e)}\n\nContext: {error_context}\n\nTraceback: {error_traceback}"
+        )
+        
+        # Return a structured error response with the clear error message
+        return {
+            "status": "error",
+            "message": str(e),  # Ensure we get the complete error message
+            "error_context": error_context,
+        }

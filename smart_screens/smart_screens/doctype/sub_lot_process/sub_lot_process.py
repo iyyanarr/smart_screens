@@ -196,6 +196,21 @@ class SubLotProcess(Document):
                 frappe.logger().error("generate_sublot returned None")
                 frappe.throw(_("Failed to generate sub-lot: No response from generation utility"))
                 
+            if isinstance(sublot_data, dict) and sublot_data.get("status") == "error":
+                error_msg = sublot_data.get("message", "Unknown error")
+                error_context = sublot_data.get("error_context", {})
+                
+                frappe.logger().error(f"generate_sublot failed with message: {error_msg}")
+                frappe.logger().error(f"Error context: {error_context}")
+                
+                # Log the error details for debugging
+                frappe.log_error(
+                    title=f"Sub Lot Process Error - {self.name}",
+                    message=f"Error: {error_msg}\n\nContext: {error_context}"
+                )
+                
+                frappe.throw(_("Failed to generate sub-lot: {0}").format(error_msg))
+            
             if isinstance(sublot_data, dict) and sublot_data.get("status") != "success":
                 error_msg = sublot_data.get("message", "Unknown error")
                 frappe.logger().error(f"generate_sublot failed with message: {error_msg}")
