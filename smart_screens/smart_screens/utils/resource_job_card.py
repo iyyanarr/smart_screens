@@ -108,12 +108,27 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             lot_tag.source_document = sublot_process.doctype
             lot_tag.source_document_name = sublot_process.name
             
+            # Set the missing operator fields that were reported in the issue
+            lot_tag.operator_id = op.employee_code  # Set operator_id from employee_code
+            
+            # Get designation from Employee doctype for this employee
+            employee_designation = ""
+            if op.employee_code:
+                try:
+                    employee_designation = frappe.db.get_value("Employee", op.employee_code, "designation")
+                    frappe.logger().info(f"Found designation '{employee_designation}' for employee {op.employee_code}")
+                except Exception as e:
+                    frappe.logger().error(f"Error getting designation for employee {op.employee_code}: {str(e)}")
+            
+            lot_tag.designation = employee_designation
+            lot_tag.operator_name = op.employee_name  # Set operator_name from employee_name
+            
+            # Log the operator information being set
+            frappe.logger().info(f"Setting operator fields for Lot Resource Tag: operator_id={op.employee_code}, designation={employee_designation}, operator_name={op.employee_name}")
+            
             # Save the lot resource tag
             lot_tag.insert()
             frappe.db.commit()
-            lot_tag.submit()
-            frappe.db.commit()
-            frappe.logger().info(f"Created Lot Resource Tagging {lot_tag.name} for operation {op.operation}")
             
             created_resources.append(lot_tag.name)
             
@@ -286,8 +301,6 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         # Save the inspection entry
         inspection_entry.insert()
         frappe.db.commit()
-
-        inspection_entry.submit()
         
         frappe.logger().info(f"Created Inspection Entry {inspection_entry.name} with inspector={inspection_entry.inspector_code}, quantity={inspection_entry.inspected_qty_nos}, rejected={inspection_entry.rejected_qty_nos}")
         
@@ -380,10 +393,22 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             
         # Set employee if provided (clear existing employees first)
         if employee:
-            job_card.employee = []  # Clear existing employees
-            job_card.append("employee", {
-                "employee": employee
-            })
+            # Make sure employee is valid before adding
+            if frappe.db.exists("Employee", employee):
+                # Check if the employee field is a child table or a direct field
+                if hasattr(job_card, 'employee') and isinstance(job_card.employee, list):
+                    # It's a child table - clear and add
+                    job_card.employee = []  # Clear existing employees
+                    job_card.append("employee", {
+                        "employee": employee
+                    })
+                    frappe.logger().info(f"Added employee {employee} to job card {job_card.name} child table")
+                else:
+                    # It might be a direct field
+                    job_card.employee = employee
+                    frappe.logger().info(f"Set employee {employee} directly on job card {job_card.name}")
+            else:
+                frappe.logger().warning(f"Employee {employee} not found, skipping employee assignment")
         
         # Save the updated job card
         job_card.save()
@@ -395,6 +420,8 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             
             # Get the last end time for this employee, or create a default starting time
             start_dt = None
+            employee_id = employee  # Store employee ID for use in time log
+            
             if employee and employee in employee_last_end_times:
                 # Start 2 minutes after the last job ended
                 last_end_time = employee_last_end_times[employee]
@@ -411,24 +438,44 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             end_dt = start_dt + timedelta(minutes=duration_minutes)
             
             # Format times for the job card
-            start_time = start_dt.strftime("%H:%M:%S")
-            end_time = end_dt.strftime("%H:%M:%S")
+            from_time = f"{current_date} {start_dt.strftime('%H:%M:%S')}"
+            to_time = f"{current_date} {end_dt.strftime('%H:%M:%S')}"
+            
+            # Get employee name for logging
+            employee_name = ""
+            if employee_id:
+                employee_name = frappe.db.get_value("Employee", employee_id, "employee_name") or ""
+                frappe.logger().info(f"Using employee {employee_id} ({employee_name}) for time log")
             
             # Clear existing time logs if any
             job_card.time_logs = []
             
-            # Create a time log entry with sequential times
-            job_card.append("time_logs", {
-                "from_time": f"{current_date} {start_time}",
-                "to_time": f"{current_date} {end_time}",
-                "time_in_mins": duration_minutes,
-                "employee": employee if employee else "",
-                "completed_qty": job_card.for_quantity  # Set completed quantity equal to required quantity
-            })
+            # Calculate time difference in hours for the time_in_mins field
+            time_diff = time_diff_in_hours(to_time, from_time) * 60
+            
+            # Verify the job card has a for_quantity field before using it
+            completed_qty = job_card.for_quantity if hasattr(job_card, 'for_quantity') and job_card.for_quantity else 1
+            
+            # Create a time log entry with proper formatting
+            time_log_data = {
+                "from_time": from_time,
+                "to_time": to_time,
+                "time_in_mins": time_diff or duration_minutes,
+                "completed_qty": completed_qty
+            }
+            
+            # Only add the employee field if we have a valid employee
+            if employee_id:
+                time_log_data["employee"] = employee_id
+                
+            frappe.logger().info(f"Adding time log to job card {job_card.name}: {time_log_data}")
+            
+            # Append the time log to the job card
+            job_card.append("time_logs", time_log_data)
             
             # Update the last end time for this employee
-            if employee:
-                employee_last_end_times[employee] = end_dt
+            if employee_id:
+                employee_last_end_times[employee_id] = end_dt
             
             # Set the status to "Completed" 
             job_card.status = "Completed"
@@ -441,9 +488,9 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             # After job card is submitted, update the work order operation and status
             update_work_order_operation(work_order, operation, job_card.for_quantity)
             
-            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee} with times: {start_time} to {end_time}, status is now 'Completed'")
+            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee_name or employee_id or 'unknown'}, status is now 'Completed'")
         except Exception as time_log_error:
-            frappe.logger().error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}")
+            frappe.logger().error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}", exc_info=True)
             # Continue execution since we were able to update the job card
             
         return {
