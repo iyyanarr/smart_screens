@@ -128,6 +128,10 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             
             # Save the lot resource tag
             lot_tag.insert()
+            
+            # Submit the lot resource tag document
+            lot_tag.submit()
+            
             frappe.db.commit()
             
             created_resources.append(lot_tag.name)
@@ -211,8 +215,7 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         inspection_entry.source_document_name = sublot_process.name
         
         # Set product information
-        inspection_entry.item_code = sublot_process.item_code
-        inspection_entry.item_name = frappe.db.get_value("Item", sublot_process.item_code, "item_name")
+        inspection_entry.product_ref_no = sublot_process.item_code
         inspection_entry.batch_no = sublot_process.batch_no
         inspection_entry.lot_no = sublot_process.sub_lot_number
         inspection_entry.scan_inspector = inspector_id  # Set inspector ID if provided
@@ -300,6 +303,10 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         
         # Save the inspection entry
         inspection_entry.insert()
+        frappe.db.commit()
+
+        # Submit the inspection entry
+        inspection_entry.submit()
         frappe.db.commit()
         
         frappe.logger().info(f"Created Inspection Entry {inspection_entry.name} with inspector={inspection_entry.inspector_code}, quantity={inspection_entry.inspected_qty_nos}, rejected={inspection_entry.rejected_qty_nos}")

@@ -7,6 +7,18 @@ from frappe.model.document import Document
 class SPPLotResourceTagging(Document):
     def validate(self):
         pass
+        
+    def on_submit(self):
+        try:
+            # Add your submission logic here
+            # For example, update status, create job cards, etc.
+            frappe.msgprint(f"SPP Lot Resource Tagging {self.name} submitted successfully")
+        except Exception as e:
+            frappe.log_error(
+                message=f"Error submitting SPP Lot Resource Tagging {self.name}: {str(e)}\n{frappe.get_traceback()}",
+                title="SPP Lot Resource Tagging Submission Error"
+            )
+            raise
 
 @frappe.whitelist()
 def get_location_by_role(user=None):

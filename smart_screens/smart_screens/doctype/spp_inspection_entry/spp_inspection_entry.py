@@ -81,14 +81,21 @@ class SPPInspectionEntry(Document):
 	
 	def on_submit(self):
 		"""Create job card for the operation and submit"""
-		# Create job card
-		job_card_name = self.create_job_card()
-		
-		# Update the document with job card reference
-		self.db_set("job_card", job_card_name)
-		frappe.db.commit()
-		
-		frappe.msgprint(f"Job Card {job_card_name} created successfully!")
+		try:
+			# Create job card
+			job_card_name = self.create_job_card()
+			
+			# Update the document with job card reference
+			self.db_set("job_card", job_card_name)
+			frappe.db.commit()
+			
+			frappe.msgprint(f"Job Card {job_card_name} created successfully!")
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error submitting SPP Inspection Entry {self.name}: {str(e)}\n{frappe.get_traceback()}",
+				title="SPP Inspection Submission Error"
+			)
+			raise
 	
 	def create_job_card(self):
 		"""Create a job card for this inspection operation"""
