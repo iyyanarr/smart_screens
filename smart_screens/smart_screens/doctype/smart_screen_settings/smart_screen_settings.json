@@ -11,7 +11,9 @@
   "column_break_wmaz",
   "designation_and_operation_mapping",
   "section_break_xuhi",
-  "sublot_location_mapping"
+  "sublot_location_mapping",
+  "section_break_op_tag",
+  "operation_tagging"
  ],
  "fields": [
   {
@@ -49,6 +51,17 @@
    "fieldtype": "Table",
    "label": "Designation And Operation Mapping  ",
    "options": "Lot Resource Role Mapper"
+  },
+  {
+   "fieldname": "section_break_op_tag",
+   "fieldtype": "Section Break",
+   "label": "Operation Tagging Settings"
+  },
+  {
+   "fieldname": "operation_tagging",
+   "fieldtype": "Table",
+   "label": "Operation Tagging",
+   "options": "Operation Tagging Entry"
   }
  ],
  "grid_page_length": 50,

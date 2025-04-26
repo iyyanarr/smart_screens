@@ -493,7 +493,7 @@ function fetch_location_details(frm) {
     
     // Call the server method to get location mapping data
     frappe.call({
-        method: "smart_screens.smart_screens.doctype.lot_resource_tagging.lot_resource_tagging.get_location_by_role",
+        method: "smart_screens.smart_screens.utils.emp_validation.get_location_by_role",
         args: {
             user: frappe.session.user
         },
