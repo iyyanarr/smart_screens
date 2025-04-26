@@ -181,6 +181,9 @@ class SubLotProcess(Document):
         })
         
         try:
+            # Log the input parameters for debugging
+            frappe.logger().info(f"Calling generate_sublot with: batch={self.batch_no}, qty={process_qty}, warehouse={self.warehouse}")
+            
             sublot_data = frappe.call("smart_screens.smart_screens.utils.generate_sublot.generate_sublot", 
                 batch_number=self.batch_no,
                 qty=process_qty,  # Use sublot_qty if provided, otherwise use inspection_quantity
@@ -189,8 +192,13 @@ class SubLotProcess(Document):
                 uom=frappe.db.get_value("Item", self.item_code, "stock_uom") or "Nos"  # Get the stock UOM for the item
             )
             
-            if not sublot_data or not sublot_data.get("status") == "success":
-                error_msg = sublot_data.get("message") if sublot_data else "Unknown error"
+            if not sublot_data:
+                frappe.logger().error("generate_sublot returned None")
+                frappe.throw(_("Failed to generate sub-lot: No response from generation utility"))
+                
+            if isinstance(sublot_data, dict) and sublot_data.get("status") != "success":
+                error_msg = sublot_data.get("message", "Unknown error")
+                frappe.logger().error(f"generate_sublot failed with message: {error_msg}")
                 frappe.throw(_("Failed to generate sub-lot: {0}").format(error_msg))
             
             # Update the SubLotProcess document with the sublot data
@@ -253,6 +261,33 @@ class SubLotProcess(Document):
             return sublot.name
             
         except Exception as e:
-            frappe.logger().error(f"Error in create_sublot_entry: {str(e)}")
-            frappe.log_error(f"Error in create_sublot_entry: {str(e)}", "Sub Lot Process")
-            frappe.throw(_("Failed to generate sub-lot: {0}").format(str(e)))
+            # Enhanced error logging with full context
+            import traceback
+            error_traceback = traceback.format_exc()
+            error_message = str(e)
+            
+            # Log detailed error context for debugging
+            error_context = {
+                "batch_no": self.batch_no,
+                "item_code": self.item_code,
+                "warehouse": self.warehouse,
+                "process_qty": process_qty,
+                "available_qty": available_qty,
+                "document_name": self.name
+            }
+            
+            frappe.logger().error(f"Error in create_sublot_entry: {error_message}")
+            frappe.logger().error(f"Error context: {error_context}")
+            frappe.logger().error(f"Traceback: {error_traceback}")
+            
+            # Create a detailed error log
+            frappe.log_error(
+                title=f"Sub Lot Generation Error - {self.name}",
+                message=f"Error: {error_message}\n\nContext: {error_context}\n\nTraceback: {error_traceback}"
+            )
+            
+            # Throw with meaningful error message
+            if not error_message or error_message.strip() == "":
+                error_message = "Empty error response from sublot generation utility"
+                
+            frappe.throw(_("Failed to generate sub-lot: {0}").format(error_message))
