@@ -110,20 +110,12 @@ def validate_employee_designation(employee_code):
         settings = frappe.get_single("Smart Screen Settings")
         allowed_operations = []
         
-        # Find designation in the mapping
-        for mapping in settings.designation_and_operation_mapping:
-            if mapping.designation == designation:
-                # Add allowed operations
-                if mapping.post_curing:
-                    allowed_operations.append("Post Curing")
-                if mapping.id_trimming:
-                    allowed_operations.append("ID Trimming")
-                if mapping.od_trimming:
-                    allowed_operations.append("OD Trimming")
-                if mapping.final_visual_inspection:
-                    allowed_operations.append("Final Visual Inspection")
-                # You can add more operations here as needed
-                break
+        # Find designation in the operation_tagging table (new child table)
+        if hasattr(settings, "operation_tagging") and settings.operation_tagging:
+            for mapping in settings.operation_tagging:
+                if mapping.designation == designation:
+                    # Add the operation to allowed operations
+                    allowed_operations.append(mapping.operation)
         
         # Return results
         if allowed_operations:
