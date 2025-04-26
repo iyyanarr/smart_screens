@@ -138,6 +138,32 @@ class SubLotProcess(Document):
         if not self.sub_lot_number or not self.item_code:
             frappe.throw(_("Sub lot number and item code are required to create sublot entry"))
         
+        # Check if a sublot entry already exists for this batch and if the quantity matches the available quantity
+        existing_sublot = frappe.db.exists("Sub Lot Entry", {
+            "batch": self.batch_no,
+            "item_code": self.item_code,
+            "sublot_batch": self.barcode
+        })
+        
+        # Get the actual available quantity from stock balance
+        from frappe.utils import flt
+        available_qty = 0
+        batch_qty_result = frappe.db.sql("""
+            SELECT SUM(qty) as qty
+            FROM `tabItem Batch Stock Balance`
+            WHERE batch_no = %s AND warehouse = %s
+        """, (self.batch_no, self.warehouse), as_dict=1)
+        
+        if batch_qty_result and batch_qty_result[0].get("qty") is not None:
+            available_qty = flt(batch_qty_result[0].get("qty"))
+        
+        # If there's an existing sublot entry for this batch and the full quantity is being used
+        process_qty = flt(self.sublot_qty or self.inspection_quantity)
+        if existing_sublot and abs(process_qty - available_qty) < 0.01:
+            frappe.logger().info(f"Using existing sublot entry {existing_sublot} with full batch quantity {available_qty}")
+            frappe.msgprint(_("Using existing sublot entry as the full batch quantity is being used"))
+            return existing_sublot
+        
         # No try-except here as we want errors to bubble up and prevent document submission
         # Publish initial progress
         frappe.publish_realtime('progress', {
@@ -156,7 +182,7 @@ class SubLotProcess(Document):
         
         sublot_data = frappe.call("smart_screens.smart_screens.utils.generate_sublot.generate_sublot", 
             batch_number=self.batch_no,
-            qty=self.sublot_qty or self.inspection_quantity,  # Use sublot_qty if provided, otherwise use inspection_quantity
+            qty=process_qty,  # Use sublot_qty if provided, otherwise use inspection_quantity
             source_warehouse=self.warehouse,  # Source warehouse is the current warehouse
             target_warehouse=self.warehouse,  # Target warehouse same as source for now
             uom=frappe.db.get_value("Item", self.item_code, "stock_uom") or "Nos"  # Get the stock UOM for the item
