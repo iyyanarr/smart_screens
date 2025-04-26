@@ -1375,6 +1375,24 @@ class SubLotProcessPage {
             }
         }
 
+        // Check if the operation is in the BOM operations list
+        if (this.bom_details && this.bom_details.length > 0) {
+            const firstBom = this.bom_details[0];
+            const bomOperations = firstBom.operations || [];
+            
+            // Check if the operation exists in the BOM operations
+            const operationExists = bomOperations.some(op => op.operation === operation);
+            
+            if (!operationExists) {
+                frappe.msgprint({
+                    title: __("Invalid Operation"),
+                    indicator: "red",
+                    message: __(`Operation "${operation}" is not listed in the BOM operations. Only operations defined in the BOM can be added.`)
+                });
+                return;
+            }
+        }
+
         // Store the operation in our operations array
         if (!this.operationDetails) {
             this.operationDetails = [];
