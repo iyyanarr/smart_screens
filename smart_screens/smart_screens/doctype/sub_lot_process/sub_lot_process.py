@@ -16,8 +16,10 @@ class SubLotProcess(Document):
         Note: All modifications to the document should happen before this point,
         as we can't update a submitted document.
         """
+        # Wrap the entire on_submit method in a transaction that can be rolled back
         try:
-            # Create sublot entry 
+            # Create sublot entry - this is a critical operation, so we don't catch exceptions here
+            # If it fails, the exception will propagate up and prevent document submission
             sublot_entry_name = self.create_sublot_entry()
             
             work_order_name = None
@@ -48,7 +50,6 @@ class SubLotProcess(Document):
                     if "Work Order" in work_order_result.get("message", ""):
                         work_order_name = work_order_result.get("work_order")
                 else:
-
                     # Log the error but don't throw - let the process continue even if work order creation fails
                     frappe.log_error(f"Failed to create Work Order: {work_order_result.get('message')}", "Sub Lot Process")
                     frappe.msgprint(_("Warning: Could not create Work Order. {0}").format(work_order_result.get("message")), indicator="yellow")
@@ -127,103 +128,99 @@ class SubLotProcess(Document):
             
             frappe.msgprint(_("Successfully created Sublot Entry"))
         except Exception as e:
-            frappe.log_error(f"Failed to create Sublot Entry for Sub Lot Process {self.name}: {str(e)}")
-            frappe.throw(_("Error creating Sublot Entry: {0}").format(str(e)))
+            # Critical error - log it and throw to prevent document submission
+            frappe.db.rollback()  # Roll back any database changes
+            frappe.log_error(f"Failed to process Sub Lot Process {self.name}: {str(e)}")
+            frappe.throw(_("Error processing Sub Lot Process: {0}").format(str(e)))
     
     def create_sublot_entry(self):
         """Create a sublot entry from the sub lot process data"""
         if not self.sub_lot_number or not self.item_code:
             frappe.throw(_("Sub lot number and item code are required to create sublot entry"))
         
-        try:
-            # Publish initial progress
-            frappe.publish_realtime('progress', {
-                'percent': 10,
-                'title': 'Generating Sub Lot',
-                'description': 'Preparing sub lot creation...'
-            })
-            
-            # Use the generate_sublot utility to create the sublot
-            # This will create stock entry and update batch information
-            frappe.publish_realtime('progress', {
-                'percent': 20,
-                'title': 'Generating Sub Lot',
-                'description': 'Calling generate_sublot utility...'
-            })
-            
-            sublot_data = frappe.call("smart_screens.smart_screens.utils.generate_sublot.generate_sublot", 
-                batch_number=self.batch_no,
-                qty=self.sublot_qty or self.inspection_quantity,  # Use sublot_qty if provided, otherwise use inspection_quantity
-                source_warehouse=self.warehouse,  # Source warehouse is the current warehouse
-                target_warehouse=self.warehouse,  # Target warehouse same as source for now
-                uom=frappe.db.get_value("Item", self.item_code, "stock_uom") or "Nos"  # Get the stock UOM for the item
-            )
-            
-            if not sublot_data or not sublot_data.get("status") == "success":
-                error_msg = sublot_data.get("message") if sublot_data else "Unknown error"
-                frappe.throw(_("Failed to generate sublot: {0}").format(error_msg))
-            
-            # Update the SubLotProcess document with the sublot data
-            # This allows us to store the generated sublot information in the original document
-            frappe.publish_realtime('progress', {
-                'percent': 70,
-                'title': 'Generating Sub Lot',
-                'description': 'Updating documents...'
-            })
-            
-            self.db_set('sub_lot_number', sublot_data.get("sub_lot_number") or self.sub_lot_number)
-            self.db_set('sublot_qty', sublot_data.get("processed_qty") or self.sublot_qty or self.inspection_quantity)
-            self.db_set('barcode', sublot_data.get("new_batch_number") or self.barcode)
-            
-            # Create a new Sub Lot Entry document
-            frappe.publish_realtime('progress', {
-                'percent': 80,
-                'title': 'Generating Sub Lot',
-                'description': 'Creating Sub Lot Entry document...'
-            })
-            
-            sublot = frappe.new_doc("Sub Lot Entry")
-            sublot.sslnscaned_sub_lot_number = self.spp_batch_number
-            sublot.sub_lot_number = sublot_data.get("sub_lot_number")
-            sublot.item_code = self.item_code
-            sublot.batch = self.batch_no
-            sublot.sublot_batch = sublot_data.get("new_batch_number")
-            sublot.warehouse = self.warehouse
-            sublot.source_warehouse = self.warehouse
-            sublot.target_warehouse = self.warehouse
-            sublot.sublot_qty = self.sublot_qty or self.inspection_quantity
-            sublot.final_sublot_qty = sublot_data.get("processed_qty")
-            sublot.stockentry_ref = sublot_data.get("stock_entry_name")
-            sublot.stage = self.get("stage")  # Get stage if available
-            sublot.barcode = sublot_data.get("new_batch_number")  # Set barcode to the batch number
-            sublot.batch_qty = self.available_quantity
-            
-            # Set source document reference
-            sublot.source_document = self.doctype
-            sublot.source_document_name = self.name
-            
-            # Insert and submit the document
-            frappe.publish_realtime('progress', {
-                'percent': 90,
-                'title': 'Generating Sub Lot',
-                'description': 'Saving Sub Lot Entry...'
-            })
-            
-            sublot.insert()
-            if frappe.db.get_value("DocType", "Sub Lot Entry", "is_submittable"):
-                sublot.submit()
-            
-            frappe.db.commit()
-            
-            # Final progress update
-            frappe.publish_realtime('progress', {
-                'percent': 100,
-                'title': 'Generating Sub Lot',
-                'description': 'Process complete!'
-            })
-            
-            return sublot.name
+        # No try-except here as we want errors to bubble up and prevent document submission
+        # Publish initial progress
+        frappe.publish_realtime('progress', {
+            'percent': 10,
+            'title': 'Generating Sub Lot',
+            'description': 'Preparing sub lot creation...'
+        })
         
-        except Exception as e:
-            frappe.log_error(f"Failed to create Sub Lot Entry: {str(e)}", "Sub Lot Process")
-            frappe.throw(_("Error creating Sub Lot Entry: {0}").format(str(e)))
+        # Use the generate_sublot utility to create the sublot
+        # This will create stock entry and update batch information
+        frappe.publish_realtime('progress', {
+            'percent': 20,
+            'title': 'Generating Sub Lot',
+            'description': 'Calling generate_sublot utility...'
+        })
+        
+        sublot_data = frappe.call("smart_screens.smart_screens.utils.generate_sublot.generate_sublot", 
+            batch_number=self.batch_no,
+            qty=self.sublot_qty or self.inspection_quantity,  # Use sublot_qty if provided, otherwise use inspection_quantity
+            source_warehouse=self.warehouse,  # Source warehouse is the current warehouse
+            target_warehouse=self.warehouse,  # Target warehouse same as source for now
+            uom=frappe.db.get_value("Item", self.item_code, "stock_uom") or "Nos"  # Get the stock UOM for the item
+        )
+        
+        if not sublot_data or not sublot_data.get("status") == "success":
+            error_msg = sublot_data.get("message") if sublot_data else "Unknown error"
+            frappe.throw(_("Failed to generate sublot: {0}").format(error_msg))
+        
+        # Update the SubLotProcess document with the sublot data
+        # This allows us to store the generated sublot information in the original document
+        frappe.publish_realtime('progress', {
+            'percent': 70,
+            'title': 'Generating Sub Lot',
+            'description': 'Updating documents...'
+        })
+        
+        self.db_set('sub_lot_number', sublot_data.get("sub_lot_number") or self.sub_lot_number)
+        self.db_set('sublot_qty', sublot_data.get("processed_qty") or self.sublot_qty or self.inspection_quantity)
+        self.db_set('barcode', sublot_data.get("new_batch_number") or self.barcode)
+        
+        # Create a new Sub Lot Entry document
+        frappe.publish_realtime('progress', {
+            'percent': 80,
+            'title': 'Generating Sub Lot',
+            'description': 'Creating Sub Lot Entry document...'
+        })
+        
+        sublot = frappe.new_doc("Sub Lot Entry")
+        sublot.sslnscaned_sub_lot_number = self.spp_batch_number
+        sublot.sub_lot_number = sublot_data.get("sub_lot_number")
+        sublot.item_code = self.item_code
+        sublot.batch = self.batch_no
+        sublot.sublot_batch = sublot_data.get("new_batch_number")
+        sublot.warehouse = self.warehouse
+        sublot.source_warehouse = self.warehouse
+        sublot.target_warehouse = self.warehouse
+        sublot.sublot_qty = self.sublot_qty or self.inspection_quantity
+        sublot.final_sublot_qty = sublot_data.get("processed_qty")
+        sublot.stockentry_ref = sublot_data.get("stock_entry_name")
+        sublot.stage = self.get("stage")  # Get stage if available
+        sublot.barcode = sublot_data.get("new_batch_number")  # Set barcode to the batch number
+        sublot.batch_qty = self.available_quantity
+        
+        # Set source document reference
+        sublot.source_document = self.doctype
+        sublot.source_document_name = self.name
+        
+        # Insert and submit the document
+        frappe.publish_realtime('progress', {
+            'percent': 90,
+            'title': 'Generating Sub Lot',
+            'description': 'Saving Sub Lot Entry...'
+        })
+        
+        sublot.insert()
+        if frappe.db.get_value("DocType", "Sub Lot Entry", "is_submittable"):
+            sublot.submit()
+        
+        # Final progress update
+        frappe.publish_realtime('progress', {
+            'percent': 100,
+            'title': 'Generating Sub Lot',
+            'description': 'Process complete!'
+        })
+        
+        return sublot.name
