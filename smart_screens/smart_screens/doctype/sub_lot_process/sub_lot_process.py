@@ -11,7 +11,7 @@ class SubLotProcess(Document):
         When the Sub Lot Process is submitted:
         1. Create a sublot entry
         2. Create a work order
-        3. Create lot resource tags and job cards for each operation
+        3. Create SPP lot resource tags and SPP final inspection entry for each operation
         
         Note: All modifications to the document should happen before this point,
         as we can't update a submitted document.
@@ -40,9 +40,7 @@ class SubLotProcess(Document):
                     frappe.db.commit()
                     frappe.msgprint(_("Work Order {0} created successfully").format(work_order_name))
                     
-                    # Add a short delay to ensure the work order is fully processed
-                    import time
-                    time.sleep(2)
+
                 elif work_order_result.get("status") == "warning":
                     # Work order already exists, just show a message
                     frappe.msgprint(_(work_order_result.get("message")))
@@ -58,12 +56,12 @@ class SubLotProcess(Document):
                 frappe.log_error(f"Error in Work Order creation: {str(wo_error)}", "Sub Lot Process")
                 frappe.msgprint(_("Warning: Could not create Work Order. {0}").format(str(wo_error)), indicator="yellow")
             
-            # After work order creation, create lot resource tags and job cards
+            # After work order creation, create SPP lot resource tags and SPP final inspection entry
             try:
-                from smart_screens.smart_screens.utils.resource_job_card import create_lot_resource_tag_and_job_card
+                from smart_screens.smart_screens.utils.resource_job_card import create_lot_resource_tag_and_inspection_entry
                 
-                # Create resource tags and job cards
-                resource_result = create_lot_resource_tag_and_job_card(
+                # Create SPP resource tags and final inspection entry
+                resource_result = create_lot_resource_tag_and_inspection_entry(
                     sublot_process=self,
                     work_order=work_order_name
                 )
@@ -71,60 +69,26 @@ class SubLotProcess(Document):
                 if resource_result.get("status") == "success":
                     # Show success message
                     created_resources = len(resource_result.get("resources", []))
-                    created_job_cards = len(resource_result.get("job_cards", []))
+                    created_inspection_entries = len(resource_result.get("inspection_entries", []))
                     
-                    if created_resources > 0 or created_job_cards > 0:
+                    if created_resources > 0 or created_inspection_entries > 0:
                         frappe.msgprint(
-                            _("Successfully created {0} resource tags and {1} job cards").format(
-                                created_resources, created_job_cards
+                            _("Successfully created {0} SPP resource tags and {1} final inspection entries").format(
+                                created_resources, created_inspection_entries
                             )
                         )
-                        
-                    # After creating job cards, directly complete the work order
-                    # This ensures the work order is completed regardless of job card status
-                    if work_order_name:
-                        try:
-                            from smart_screens.smart_screens.utils.resource_job_card import complete_work_order_with_stock_entries
-                            
-                            # Calculate rejected quantity from the rejection_items child table
-                            rejected_qty = 0
-                            if hasattr(self, 'rejection_items') and self.rejection_items:
-                                for item in self.rejection_items:
-                                    if hasattr(item, 'quantity') and item.quantity:
-                                        rejected_qty += float(item.quantity)
-                                frappe.logger().info(f"Calculated total rejected quantity {rejected_qty} from rejection_items table")
-                            # Fallback to rejected_quantity field if the child table calculation yields zero
-                            elif hasattr(self, 'rejected_quantity') and self.rejected_quantity:
-                                rejected_qty = float(self.rejected_quantity)
-                                
-                            # Get the batch number from the barcode field of Sub Lot Process
-                            batch_no = self.barcode
-                            frappe.logger().info(f"Using batch number {batch_no} from Sub Lot Process barcode field")
-                                
-                            # Complete the work order directly, passing the batch number and rejected quantity
-                            complete_work_order_with_stock_entries(
-                                work_order_id=work_order_name, 
-                                rejected_qty=rejected_qty,
-                                batch_no=batch_no
-                            )
-                            frappe.msgprint(_("Work Order {0} has been completed with {1} rejected items").format(
-                                work_order_name, rejected_qty))
-                            frappe.logger().info(f"Directly completed Work Order {work_order_name} from Sub Lot Process submission")
-                        except Exception as wo_complete_error:
-                            frappe.logger().error(f"Error completing Work Order {work_order_name} directly: {str(wo_complete_error)}")
-                            frappe.msgprint(_("Note: Work Order may need to be manually completed"), indicator="yellow")
                 elif resource_result.get("status") == "warning":
                     # Just show the warning message
                     frappe.msgprint(_(resource_result.get("message")), indicator="yellow")
                 else:
                     # Log the error but don't throw
-                    frappe.log_error(f"Failed to create resources: {resource_result.get('message')}", "Sub Lot Process")
-                    frappe.msgprint(_("Warning: Could not create resource tags and job cards. {0}").format(
+                    frappe.log_error(f"Failed to create SPP resources: {resource_result.get('message')}", "Sub Lot Process")
+                    frappe.msgprint(_("Warning: Could not create SPP resource tags and final inspection entries. {0}").format(
                         resource_result.get("message")), indicator="yellow")
             except Exception as res_error:
                 # Log the error but don't throw
-                frappe.log_error(f"Error in Resource and Job Card creation: {str(res_error)}", "Sub Lot Process")
-                frappe.msgprint(_("Warning: Could not create resource tags and job cards. {0}").format(str(res_error)), indicator="yellow")
+                frappe.log_error(f"Error in SPP Resource and Final Inspection creation: {str(res_error)}", "Sub Lot Process")
+                frappe.msgprint(_("Warning: Could not create SPP resource tags and final inspection entries. {0}").format(str(res_error)), indicator="yellow")
             
             frappe.msgprint(_("Successfully created Sublot Entry"))
         except Exception as e:
