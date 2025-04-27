@@ -159,7 +159,7 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             inspection_entry = create_inspection_entry(
                 sublot_process=sublot_process,
                 lot_resource_tag=first_lot_resource_tag,
-                inspector_id="HR-EMP-00001"  # Default inspector ID as per requirements
+                inspector_id= sublot_process.inspector_code  # Default inspector ID as per requirements
             )
             
             if inspection_entry and inspection_entry.get("status") == "success":
@@ -430,9 +430,9 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             employee_id = employee  # Store employee ID for use in time log
             
             if employee and employee in employee_last_end_times:
-                # Start 2 minutes after the last job ended
+                # Start 2 seconds after the last job ended (reduced from 2 minutes)
                 last_end_time = employee_last_end_times[employee]
-                start_dt = last_end_time + timedelta(minutes=2)
+                start_dt = last_end_time + timedelta(seconds=2)
             else:
                 # Default start time if no previous job
                 start_hour = 9  # Start at 9 AM by default
@@ -440,9 +440,9 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                 start_time_str = f"{start_hour:02d}:{start_minute:02d}:00"
                 start_dt = datetime.strptime(f"{current_date} {start_time_str}", "%Y-%m-%d %H:%M:%S")
             
-            # Duration between 10-30 minutes for each job
-            duration_minutes = random.randint(10, 30)
-            end_dt = start_dt + timedelta(minutes=duration_minutes)
+            # Duration between 3-5 seconds for each job (reduced from 10-30 minutes)
+            duration_seconds = random.randint(3, 5)
+            end_dt = start_dt + timedelta(seconds=duration_seconds)
             
             # Format times for the job card
             from_time = f"{current_date} {start_dt.strftime('%H:%M:%S')}"
@@ -467,7 +467,7 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             time_log_data = {
                 "from_time": from_time,
                 "to_time": to_time,
-                "time_in_mins": time_diff or duration_minutes,
+                "time_in_mins": time_diff or duration_seconds / 60,
                 "completed_qty": completed_qty
             }
             
