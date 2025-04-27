@@ -77,10 +77,17 @@ class SubLotProcess(Document):
                                 created_resources, created_inspection_entries
                             )
                         )
+                    # Get the jobcards for the work_order_name
+                    jobcards = frappe.get_all("Job Card", filters={"work_order": work_order_name}, fields=["name"])
+                    if jobcards:
+                        # If jobcards exist, show a message
+                        jobcard_names = ", ".join([jobcard.name for jobcard in jobcards])
+                        frappe.msgprint(_("Job Cards already exist: {0}").format(jobcard_names), indicator="yellow")
                 elif resource_result.get("status") == "warning":
                     # Just show the warning message
                     frappe.msgprint(_(resource_result.get("message")), indicator="yellow")
                 else:
+
                     # Log the error but don't throw
                     frappe.log_error(f"Failed to create SPP resources: {resource_result.get('message')}", "Sub Lot Process")
                     frappe.msgprint(_("Warning: Could not create SPP resource tags and final inspection entries. {0}").format(
