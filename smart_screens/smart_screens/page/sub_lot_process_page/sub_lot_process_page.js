@@ -587,23 +587,18 @@ class SubLotProcessPage {
                         <div class="section-head">Visual Inspection Information</div>
                         <div class="section-body">
                             <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-8">
                                     <div class="form-group">
                                         <label for="inspection_qty">Inspection Qty: *</label>
                                         <input type="number" id="inspection_qty" class="form-control" placeholder="Inspection Qty">
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="form-group">
-                                        <label for="emp_barcode">Inspector:</label>
-                                        <div class="input-group">
-                                            <input type="text" id="emp_barcode" class="form-control" placeholder="HR-EMP-00001">
-                                            <div class="input-group-append">
-                                                <button id="verify_inspector_btn" class="btn btn-primary">
-                                                    <i class="fa fa-check mr-1"></i> Verify
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <label class="d-block">&nbsp;</label>
+                                        <button id="verify_inspector_btn" class="btn btn-primary">
+                                            <i class="fa fa-check mr-1"></i> Verify Qty
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1331,16 +1326,8 @@ class SubLotProcessPage {
             return;
         }
 
-        // Check if the selected operation is in the BOM operations
-        if (!this.isBomOperation(selectedOperation)) {
-            messageElement.html(`
-                <div class="alert alert-danger">
-                    <i class="fa fa-exclamation-circle"></i> Selected operation "${selectedOperation}" is not listed in the BOM operations
-                </div>
-            `);
-            return;
-        }
-
+        // Check operation validation happens later during add_operation_to_table
+        
         messageElement.html(`
             <div class="alert alert-info">
                 <i class="fa fa-spinner fa-spin"></i> Validating employee...
@@ -1383,6 +1370,9 @@ class SubLotProcessPage {
                         // Clear the employee field and reset operation dropdown for next entry
                         this.wrapper.find('#scan_employee').val('');
                         operationSelect.val('');
+                        
+                        // If this operation was Final Visual Inspection, enable rejection section
+                        this.check_and_enable_inspection_section();
                     } else {
                         messageElement.html(`
                             <div class="alert alert-warning">
@@ -1482,10 +1472,53 @@ class SubLotProcessPage {
                 `);
             }
         });
+
+        // Check if this operation was "Final Visual Inspection" and enable inspection/rejection
+        if (operation === "Final Visual Inspection") {
+            this.enableInspectionSection();
+        }
+    }
+
+    // Method to enable inspection section when Final Visual Inspection is added
+    enableInspectionSection() {
+        console.log("Enabling inspection section for Final Visual Inspection");
+        
+        // Enable inspection quantity field
+        this.wrapper.find('#inspection_qty').prop('disabled', false);
+        
+        // Do not set default value from batch quantity - let user enter the required inspection quantity
+        
+        // Make the inspection section more visible
+        this.wrapper.find('.inspection-section').addClass('highlight-section');
+        
+        // Add a badge to the section head to show it's ready
+        if (!this.wrapper.find('.inspection-section .section-head .badge').length) {
+            this.wrapper.find('.inspection-section .section-head').append(' <span class="badge badge-success">Ready</span>');
+        }
+        
+        // No auto-verification - wait for user input
+    }
+
+    // Helper method to check for Final Visual Inspection operation and enable rejection section
+    check_and_enable_inspection_section() {
+        // Check if Final Visual Inspection exists in the operations table
+        const hasFinalVisualInspection = this.operationDetails && 
+                                         this.operationDetails.some(op => op.operation === "Final Visual Inspection");
+        
+        if (hasFinalVisualInspection) {
+            // Enable inspection fields if Final Visual Inspection is in the operations
+            this.wrapper.find('#inspection_qty').prop('disabled', false);
+            
+            // Automatically validate the inspection quantity to enable rejection fields
+            this.verify_inspector();
+            
+            // Make the inspection section more visible
+            this.wrapper.find('.inspection-section').addClass('highlight-section');
+            this.wrapper.find('.inspection-section .section-head').append(' <span class="badge badge-success">Ready</span>');
+        }
     }
 
     verify_inspector() {
-        const inspectorCode = this.wrapper.find('#emp_barcode').val();
         const inspectionQty = this.wrapper.find('#inspection_qty').val();
         const messageElement = this.wrapper.find('#inspector_validation_message');
 
@@ -1494,15 +1527,6 @@ class SubLotProcessPage {
             messageElement.html(`
                 <div class="alert alert-warning">
                     <i class="fa fa-exclamation-triangle"></i> Please validate a batch first before entering inspection details
-                </div>
-            `);
-            return;
-        }
-
-        if (!inspectorCode) {
-            messageElement.html(`
-                <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-triangle"></i> Please scan or enter an inspector ID
                 </div>
             `);
             return;
@@ -1530,50 +1554,39 @@ class SubLotProcessPage {
             return;
         }
 
+        // Store inspection details without any inspector code
+        this.inspectionInfo = {
+            inspectionQuantity: inspectionQty
+        };
+
+        // Show success message and enable rejection section
         messageElement.html(`
-            <div class="alert alert-info">
-                <i class="fa fa-spinner fa-spin"></i> Verifying inspector...
+            <div class="alert alert-success">
+                <i class="fa fa-check-circle"></i> Inspection quantity verified: ${inspectionQty}
             </div>
         `);
+        
+        // Enable rejection section
+        this.enableRejectionSection();
+    }
 
-        frappe.call({
-            method: "smart_screens.smart_screens.utils.emp_validation.validate_employee_designation",
-            args: {
-                employee_code: inspectorCode
-            },
-            callback: (response) => {
-                if (response.message && response.message.success) {
-                    const data = response.message;
-                    const inspectorName = data.employee.employee_name;
-
-                    // Store inspector details
-                    this.inspectionInfo = {
-                        inspectorCode: inspectorCode,
-                        inspectorName: inspectorName,
-                        inspectionQuantity: inspectionQty
-                    };
-
-                    messageElement.html(`
-                        <div class="alert alert-success">
-                            <i class="fa fa-check-circle"></i> Inspector verified: ${inspectorName}
-                        </div>
-                    `);
-
-                    // Enable rejection section
-                    this.wrapper.find('#rejection_type').prop('disabled', false);
-                    this.wrapper.find('#rejection_qty').prop('disabled', false);
-                    this.wrapper.find('#add_rejection_btn').prop('disabled', false);
-                } else {
-                    const errorMsg = response.message ? response.message.message : "Failed to verify inspector";
-
-                    messageElement.html(`
-                        <div class="alert alert-danger">
-                            <i class="fa fa-exclamation-circle"></i> ${errorMsg}
-                        </div>
-                    `);
-                }
-            }
-        });
+    // Helper method to enable rejection section
+    enableRejectionSection() {
+        // Enable all the rejection input fields
+        this.wrapper.find('#rejection_type').prop('disabled', false);
+        this.wrapper.find('#rejection_qty').prop('disabled', false);
+        this.wrapper.find('#add_rejection_btn').prop('disabled', false);
+        
+        // Make the rejection section more visible
+        this.wrapper.find('.rejection-section').addClass('highlight-section');
+        
+        // Add a badge to the section head to indicate that it's enabled
+        if (!this.wrapper.find('.rejection-section .section-head .badge').length) {
+            this.wrapper.find('.rejection-section .section-head').append(' <span class="badge badge-success">Ready</span>');
+        }
+        
+        // Add a special visual style to highlight that these fields are now active
+        this.wrapper.find('.rejection-section input').addClass('border-highlight');
     }
 
     add_rejection() {
@@ -1666,125 +1679,78 @@ class SubLotProcessPage {
             return;
         }
 
-        if (!this.inspectionInfo) {
-            messageElement.html(`
-                <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-triangle"></i> Please complete inspection information
-                </div>
-            `);
-            return;
-        }
-
-        // Validate that the number of BOM operations matches the employee operation table
-        if (this.bom_details && this.bom_details.length > 0) {
-            const firstBom = this.bom_details[0];
-            const bomOperations = firstBom.operations || [];
+        // Check if all BOM operations have been added to the operations table
+        if (this.bom_details && this.bom_details.length > 0 && this.bom_details[0].operations) {
+            const bomOperations = this.bom_details[0].operations
+                .filter(op => op.operation) // Filter out any undefined operations
+                .map(op => op.operation);
             
-            // Check if "Final Visual Inspection" operation needs special handling
-            const hasFinalVisualInspection = bomOperations.some(op => 
-                op.operation && op.operation.includes("Final Visual Inspection")
-            );
+            const addedOperations = this.operationDetails.map(op => op.operation);
             
-            // Check if inspector is present for Final Visual Inspection
-            if (hasFinalVisualInspection) {
-                if (!this.inspectionInfo.inspectorCode || !this.inspectionInfo.inspectorName) {
-                    messageElement.html(`
-                        <div class="alert alert-warning">
-                            <i class="fa fa-exclamation-triangle"></i> Final Visual Inspection operation requires an inspector. Please verify an inspector.
-                        </div>
-                    `);
-                    return;
-                }
-            }
+            // Check if any BOM operations are missing
+            const missingOperations = bomOperations.filter(op => !addedOperations.includes(op));
             
-            // Check number of operations matches (excluding Final Visual Inspection if present)
-            const requiredOperationsCount = hasFinalVisualInspection ? 
-                bomOperations.length - 1 : bomOperations.length;
-                
-            if (this.operationDetails.length !== requiredOperationsCount) {
+            if (missingOperations.length > 0) {
                 messageElement.html(`
                     <div class="alert alert-warning">
-                        <i class="fa fa-exclamation-triangle"></i> Number of employee operations (${this.operationDetails.length}) 
-                        does not match BOM operations (${requiredOperationsCount}).
+                        <i class="fa fa-exclamation-triangle"></i> Please add all required operations from the BOM. Missing operations: 
+                        <strong>${missingOperations.join(', ')}</strong>
                     </div>
                 `);
                 return;
             }
         }
 
-        // Initialize custom progress tracker with a unique container ID
-        const progressContainerId = `process-tracker-${Date.now()}`;
+        // Inspect inspection info (only if Final Visual Inspection is added)
+        const hasFinalVisualInspection = this.operationDetails.some(op => op.operation === "Final Visual Inspection");
+        if (hasFinalVisualInspection && (!this.inspectionInfo || !this.inspectionInfo.inspectionQuantity)) {
+            messageElement.html(`
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i> Please enter inspection quantity
+                </div>
+            `);
+            return;
+        }
+
+        // Initialize basic progress tracker with a progress bar
         messageElement.html(`
-            <div class="process-progress-container">
-                <div class="process-stages" id="${progressContainerId}">
-                    <div class="stage-item active current" data-stage="data-validation">
-                        <div class="stage-icon"><i class="fa fa-check-circle"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Data Validation</div>
-                    </div>
-                    <div class="stage-item" data-stage="document-creation">
-                        <div class="stage-icon"><i class="fa fa-file"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Document Creation</div>
-                    </div>
-                    <div class="stage-item" data-stage="operations-setup">
-                        <div class="stage-icon"><i class="fa fa-cogs"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Operations Setup</div>
-                    </div>
-                    <div class="stage-item" data-stage="rejection-data">
-                        <div class="stage-icon"><i class="fa fa-times-circle"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Rejection Data</div>
-                    </div>
-                    <div class="stage-item" data-stage="location-setup">
-                        <div class="stage-icon"><i class="fa fa-map-marker"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Location Setup</div>
-                    </div>
-                    <div class="stage-item" data-stage="document-saving">
-                        <div class="stage-icon"><i class="fa fa-save"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Saving</div>
-                    </div>
-                    <div class="stage-item" data-stage="document-submission">
-                        <div class="stage-icon"><i class="fa fa-paper-plane"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Submission</div>
-                    </div>
-                    <div class="stage-item" data-stage="sublot-creation">
-                        <div class="stage-icon"><i class="fa fa-cube"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Sub Lot Creation</div>
-                    </div>
-                    <div class="stage-item" data-stage="work-order">
-                        <div class="stage-icon"><i class="fa fa-industry"></i></div>
-                        <div class="stage-line"></div>
-                        <div class="stage-label">Work Order</div>
-                    </div>
-                    <div class="stage-item final" data-stage="complete">
-                        <div class="stage-icon"><i class="fa fa-flag-checkered"></i></div>
-                        <div class="stage-label">Complete</div>
+            <div class="processing-container p-3">
+                <div class="text-center mb-2">
+                    <div class="h5 mb-2">Processing Request...</div>
+                    <div class="text-muted stage-description">Validating input data...</div>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                        role="progressbar" style="width: 10%;" 
+                        aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                    <div class="text-muted">Starting...</div>
+                    <div class="text-muted progress-percent">10%</div>
+                </div>
+                <div class="process-stages mt-3">
+                    <div class="stage-badges d-flex flex-wrap justify-content-between">
+                        <span class="badge badge-primary active">Validation</span>
+                        <span class="badge badge-secondary">Document</span>
+                        <span class="badge badge-secondary">Operations</span>
+                        <span class="badge badge-secondary">Rejection</span>
+                        <span class="badge badge-secondary">Location</span>
+                        <span class="badge badge-secondary">Saving</span>
+                        <span class="badge badge-secondary">Complete</span>
                     </div>
                 </div>
-                <div class="process-details">
-                    <div class="process-title">Processing Sub Lot</div>
-                    <div class="process-description">Validating input data...</div>
-                    <div class="process-progress">
-                        <div class="progress" style="height: 6px;">
-                            <div class="progress-bar" role="progressbar" style="width: 10%;" 
-                                aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="progress-text">10% Complete</div>
+                <div class="actions mt-3" style="display: none;">
+                    <div class="d-flex justify-content-center">
+                        <button class="btn btn-primary btn-print-label mx-1">
+                            <i class="fa fa-print mr-1"></i> Print Label
+                        </button>
+                        <button class="btn btn-info btn-view-details mx-1">
+                            <i class="fa fa-eye mr-1"></i> View Details
+                        </button>
+                        <button class="btn btn-warning btn-new-process mx-1">
+                            <i class="fa fa-refresh mr-1"></i> New Process
+                        </button>
                     </div>
-                </div>
-                <div class="process-actions" style="display: none;">
-                    <button class="btn btn-primary btn-print-label">
-                        <i class="fa fa-print mr-1"></i> Print Label
-                    </button>
-                    <button class="btn btn-default btn-view-details">
-                        <i class="fa fa-eye mr-1"></i> View Details
-                    </button>
                 </div>
             </div>
         `);
@@ -1833,7 +1799,7 @@ class SubLotProcessPage {
                     };
                     
                     // Start polling for status updates
-                    this.startStatusPolling(trackerId, progressContainerId);
+                    this.startStatusPolling(trackerId);
                 } else {
                     // Re-enable the submit button
                     this.wrapper.find('#submit_process_btn').prop('disabled', false);
@@ -1862,76 +1828,76 @@ class SubLotProcessPage {
         });
     }
 
-    startStatusPolling(trackerId, progressContainerId) {
+    startStatusPolling(trackerId) {
         // Start polling for status updates every 2 seconds
         const pollInterval = 2000; // 2 seconds
         let pollCount = 0;
         const maxPolls = 60; // Maximum number of polls (2 minutes)
         
-        const $progressContainer = this.wrapper.find(`#${progressContainerId}`);
-        const $processTitle = this.wrapper.find('.process-title');
-        const $processDescription = this.wrapper.find('.process-description');
-        const $progressBar = this.wrapper.find('.progress-bar');
-        const $progressText = this.wrapper.find('.progress-text');
-        const $processActions = this.wrapper.find('.process-actions');
-        
         // Store a reference to the SubLotProcessPage instance for use in callbacks
         const self = this;
         
         const updateProgressUI = (data) => {
+            const $container = this.wrapper.find('.processing-container');
+            const $progressBar = $container.find('.progress-bar');
+            const $stageDesc = $container.find('.stage-description');
+            const $progressPercent = $container.find('.progress-percent');
+            const $actions = $container.find('.actions');
+            const $badges = $container.find('.stage-badges .badge');
+            
             // Update progress bar
-            $progressBar.css('width', `${data.progress_percent}%`);
-            $progressBar.attr('aria-valuenow', data.progress_percent);
-            $progressText.text(`${data.progress_percent}% Complete`);
+            const percent = data.progress_percent || 0;
+            $progressBar.css('width', `${percent}%`);
+            $progressBar.attr('aria-valuenow', percent);
+            $progressPercent.text(`${percent}%`);
             
-            // Update description
-            $processDescription.text(data.stage_description);
+            // Update stage description
+            $stageDesc.text(data.stage_description || 'Processing...');
             
-            // Update title based on status
+            // Update badge states
+            const stageToIndex = {
+                'Data Validation': 0,
+                'Document Creation': 1,
+                'Operations Setup': 2,
+                'Rejection Data': 3,
+                'Location Setup': 4,
+                'Document Saving': 5,
+                'Document Submission': 5,
+                'Sub Lot Creation': 5,
+                'Work Order': 5,
+                'Complete': 6
+            };
+            
+            const currentStageIndex = stageToIndex[data.current_stage] || 0;
+            
+            // Update badges based on current stage
+            $badges.removeClass('badge-success badge-primary badge-secondary badge-danger active')
+                  .addClass('badge-secondary');
+            
+            // Mark all completed stages
+            $badges.each((i, el) => {
+                const $badge = $(el);
+                if (i < currentStageIndex) {
+                    $badge.removeClass('badge-secondary').addClass('badge-success');
+                } else if (i === currentStageIndex) {
+                    $badge.removeClass('badge-secondary').addClass('badge-primary active');
+                }
+            });
+            
+            // Handle completion or failure
             if (data.process_status === "Completed") {
-                $processTitle.text("Process Completed Successfully");
-                $processTitle.addClass("text-success");
-            } else if (data.process_status === "Failed") {
-                $processTitle.text("Process Failed");
-                $processTitle.addClass("text-danger");
-            } else {
-                $processTitle.text(`Processing: ${data.current_stage}`);
-            }
-            
-            // Update stages
-            const currentStageKey = self.getStageKeyFromName(data.current_stage);
-            if (currentStageKey) {
-                // Mark all previous stages as completed
-                $progressContainer.find('.stage-item').each(function() {
-                    const $stage = $(this);
-                    const stageKey = $stage.data('stage');
-                    
-                    // Remove current class from all stages
-                    $stage.removeClass('current');
-                    
-                    // Convert stage-key to array index for comparison
-                    const stageIndex = self.getStageIndex(stageKey);
-                    const currentIndex = self.getStageIndex(currentStageKey);
-                    
-                    if (stageIndex < currentIndex) {
-                        $stage.addClass('active completed');
-                    } else if (stageIndex === currentIndex) {
-                        $stage.addClass('active current');
-                    } else {
-                        $stage.removeClass('active completed');
-                    }
-                });
-            }
-            
-            // Show actions when process is completed
-            if (data.process_status === "Completed") {
-                $processActions.show();
+                // Mark all badges as complete
+                $badges.removeClass('badge-secondary badge-primary').addClass('badge-success');
                 
-                // Mark all stages as completed
-                $progressContainer.find('.stage-item').addClass('active completed');
+                // Show success message
+                $container.prepend(`
+                    <div class="alert alert-success mb-3">
+                        <i class="fa fa-check-circle mr-1"></i> Process completed successfully!
+                    </div>
+                `);
                 
-                // Mark the last stage as current
-                $progressContainer.find('.stage-item[data-stage="complete"]').addClass('current');
+                // Show actions
+                $actions.show();
                 
                 // Store the reference name for label printing
                 self.completedProcessId = data.reference_name;
@@ -1945,13 +1911,6 @@ class SubLotProcessPage {
                 self.wrapper.find('.btn-view-details').on('click', () => {
                     frappe.set_route("Form", data.reference_doctype, data.reference_name);
                 });
-                
-                // Add a reset form button to allow starting a new process
-                self.wrapper.find('.process-actions').append(`
-                    <button class="btn btn-warning btn-new-process">
-                        <i class="fa fa-refresh mr-1"></i> New Process
-                    </button>
-                `);
                 
                 // Bind the reset form button
                 self.wrapper.find('.btn-new-process').on('click', () => {
@@ -1972,13 +1931,38 @@ class SubLotProcessPage {
                 return false;
             }
             
-            // Stop polling if process failed
+            // Handle failure
             if (data.process_status === "Failed") {
-                $processTitle.html(`<i class="fa fa-exclamation-circle"></i> Process Failed: ${data.stage_description}`);
+                // Mark the current stage as failed
+                $badges.eq(currentStageIndex).removeClass('badge-secondary badge-primary').addClass('badge-danger active');
+                
+                // Show error message
+                $container.prepend(`
+                    <div class="alert alert-danger mb-3">
+                        <i class="fa fa-exclamation-circle mr-1"></i> Process failed: ${data.stage_description}
+                    </div>
+                `);
                 
                 // Re-enable the submit button
                 self.wrapper.find('#submit_process_btn').prop('disabled', false);
                 
+                // Add a retry button
+                $actions.html(`
+                    <div class="d-flex justify-content-center">
+                        <button class="btn btn-warning btn-retry-process">
+                            <i class="fa fa-refresh mr-1"></i> Try Again
+                        </button>
+                    </div>
+                `).show();
+                
+                // Bind the retry button
+                self.wrapper.find('.btn-retry-process').on('click', () => {
+                    // Just clear the message and re-enable the submit button
+                    self.wrapper.find('#submit_message').empty();
+                    self.wrapper.find('#submit_process_btn').prop('disabled', false);
+                });
+                
+                // Stop polling
                 return false;
             }
             
@@ -2004,33 +1988,42 @@ class SubLotProcessPage {
                             setTimeout(poll, pollInterval);
                         } else if (pollCount >= maxPolls) {
                             // Max polls reached, show timeout message
-                            $processTitle.text("Process Timeout");
-                            $processDescription.text("The process is taking longer than expected. Please check the system for status.");
+                            this.wrapper.find('.processing-container').prepend(`
+                                <div class="alert alert-warning mb-3">
+                                    <i class="fa fa-clock-o mr-1"></i> Process is taking longer than expected. Please check the system for status.
+                                </div>
+                            `);
                             
                             // Re-enable the submit button
-                            self.wrapper.find('#submit_process_btn').prop('disabled', false);
+                            this.wrapper.find('#submit_process_btn').prop('disabled', false);
                         }
                     } else {
                         // Error getting status
                         console.error("Error polling status:", response.message);
                         
                         // Show error message
-                        $processTitle.text("Status Check Failed");
-                        $processDescription.text("Failed to check process status. Please refresh the page.");
+                        this.wrapper.find('.processing-container').prepend(`
+                            <div class="alert alert-danger mb-3">
+                                <i class="fa fa-exclamation-circle mr-1"></i> Failed to check process status. Please refresh the page.
+                            </div>
+                        `);
                         
                         // Re-enable the submit button
-                        self.wrapper.find('#submit_process_btn').prop('disabled', false);
+                        this.wrapper.find('#submit_process_btn').prop('disabled', false);
                     }
                 },
                 error: (err) => {
                     console.error("Error polling status:", err);
                     
                     // Show error message
-                    $processTitle.text("Status Check Failed");
-                    $processDescription.text("Failed to check process status. Please refresh the page.");
+                    this.wrapper.find('.processing-container').prepend(`
+                        <div class="alert alert-danger mb-3">
+                            <i class="fa fa-exclamation-circle mr-1"></i> Failed to check process status. Please refresh the page.
+                        </div>
+                    `);
                     
                     // Re-enable the submit button
-                    self.wrapper.find('#submit_process_btn').prop('disabled', false);
+                    this.wrapper.find('#submit_process_btn').prop('disabled', false);
                 }
             });
         };
@@ -2039,324 +2032,44 @@ class SubLotProcessPage {
         poll();
     }
 
-    getStageKeyFromName(stageName) {
-        // Map stage names from backend to CSS data-stage keys
-        const stageMap = {
-            "Data Validation": "data-validation",
-            "Document Creation": "document-creation",
-            "Operations Setup": "operations-setup",
-            "Rejection Data": "rejection-data",
-            "Location Setup": "location-setup",
-            "Document Saving": "document-saving",
-            "Document Submission": "document-submission",
-            "Sub Lot Creation": "sublot-creation",
-            "Work Order": "work-order",
-            "Complete": "complete"
-        };
-        
-        return stageMap[stageName] || "data-validation";
-    }
-    
-    getStageIndex(stageKey) {
-        // Map stage keys to indices for comparison
-        const stageIndices = {
-            "data-validation": 0,
-            "document-creation": 1,
-            "operations-setup": 2,
-            "rejection-data": 3,
-            "location-setup": 4,
-            "document-saving": 5,
-            "document-submission": 6,
-            "sublot-creation": 7,
-            "work-order": 8,
-            "complete": 9
-        };
-        
-        return stageIndices[stageKey] || 0;
-    }
+    reset_form() {
+        // Clear all inputs
+        this.wrapper.find('input').val('');
 
-    generateLabelHtml(data) {
-        // Generate direct data URL for the barcode (more reliable than API)
-        const barcodeContent = `
-            <svg id="barcode"></svg>
-            <script>
-                JsBarcode("#barcode", "${data.sub_lot_number || 'N/A'}", {
-                    format: "CODE128",
-                    width: 2,
-                    height: 70,
-                    displayValue: false
-                });
-            </script>
-        `;
+        // Reset tables
+        this.wrapper.find('#operations_table tbody').html(`
+            <tr>
+                <td colspan="4" class="text-center text-muted">No operations added yet</td>
+            </tr>
+        `);
 
-        // Generate HTML for the label with improved barcode visibility and focus on sublot info and operations
-        return `
-            <div class="label-container">
-                <div class="label-header">
-                    <div class="company-logo">
-                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
-                    </div>
-                    <div class="label-title">SUB LOT</div>
-                </div>
-                
-                <!-- SUB LOT NUMBER with BARCODE -->
-                <div class="label-section main-barcode-section">
-                    <div class="section-title">SUB LOT NUMBER</div>
-                    <div class="label-barcode">
-                        <div class="barcode-container">${barcodeContent}</div>
-                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
-                    </div>
-                </div>
-                
-                <!-- Item and Batch Information -->
-                <div class="item-info-section">
-                    <table class="details-table">
-                        <tr>
-                            <td class="label-key">Item Code:</td>
-                            <td class="label-value">${data.item_code || 'N/A'}</td>
-                            <td class="label-key">Batch:</td>
-                            <td class="label-value">${data.batch_no || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Qty:</td>
-                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
-                            <td class="label-key">Date:</td>
-                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <!-- Operations Information -->
-                <div class="operations-section">
-                    <div class="section-title">OPERATIONS</div>
-                    <div class="operations-list">
-                        ${this.generateOperationsList(data)}
-                    </div>
-                </div>
-                
-                <div class="label-footer">
-                    <div class="footer-note">Smart Screens Processing System</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Generate operations list
-    generateOperationsList(data) {
-        if (!data.operations || !data.operations.length) {
-            return '<div class="no-operations">No operations data available</div>';
-        }
-        
-        let html = '<table class="operations-table">';
-        html += '<tr><th>Operation</th><th>Employee</th></tr>';
-        
-        data.operations.forEach(op => {
-            html += `
-                <tr>
-                    <td>${op.operation || 'N/A'}</td>
-                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</table>';
-        return html;
-    }
+        this.wrapper.find('#rejections_table tbody').html(`
+            <tr>
+                <td colspan="3" class="text-center text-muted">No rejections added</td>
+            </tr>
+        `);
 
-    getLabelStyles() {
-        // CSS styles for the label - resized for single page printing
-        return `
-            @page {
-                size: 100mm 150mm; /* Standard label size */
-                margin: 3mm; /* Minimal margins */
-            }
-            
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                background-color: white;
-            }
-            
-            .label-container {
-                width: 94mm;
-                height: 144mm;
-                padding: 3mm;
-                box-sizing: border-box;
-                border: 0.5mm solid #ccc;
-                background-color: white;
-                display: flex;
-                flex-direction: column;
-                page-break-after: avoid;
-                overflow: hidden;
-            }
-            
-            .label-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 3mm;
-            }
-            
-            .company-logo img {
-                height: 10mm;
-                max-width: 20mm;
-            }
-            
-            .label-title {
-                font-size: 10pt;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                flex-grow: 1;
-            }
-            
-            /* Main barcode section */
-            .main-barcode-section {
-                margin: 2mm 0;
-                border: 0.5mm solid #000;
-                border-radius: 1mm;
-                padding: 2mm;
-                background-color: #f9f9f9;
-            }
-            
-            .label-section {
-                margin: 2mm 0;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                padding: 2mm;
-                background-color: #f9f9f9;
-            }
-            
-            .section-title {
-                font-size: 9pt;
-                font-weight: bold;
-                color: #333;
-                text-align: center;
-                margin-bottom: 2mm;
-                border-bottom: 0.3mm solid #ddd;
-                padding-bottom: 1mm;
-            }
-            
-            .label-barcode {
-                text-align: center;
-                margin: 2mm 0;
-            }
-            
-            .barcode-container {
-                margin: 0 auto;
-                width: 80mm;
-                height: 15mm;
-            }
-            
-            .barcode-container svg {
-                width: 100%;
-                height: 100%;
-            }
-            
-            .barcode-number {
-                font-size: 10pt;
-                margin-top: 1mm;
-                font-weight: bold;
-            }
-            
-            .item-info-section {
-                margin: 2mm 0;
-                padding: 2mm;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                background-color: #f9f9f9;
-            }
-            
-            .operations-section {
-                margin: 2mm 0;
-                padding: 2mm;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                background-color: #f9f9f9;
-                flex-grow: 1;
-                overflow-y: auto;
-            }
-            
-            .operations-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-            }
-            
-            .operations-table th {
-                background-color: #eee;
-                padding: 1mm;
-                text-align: left;
-                border-bottom: 0.5mm solid #ddd;
-            }
-            
-            .operations-table td {
-                padding: 1mm;
-                border-bottom: 0.3mm solid #ddd;
-            }
-            
-            .details-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-            }
-            
-            .details-table tr {
-                height: 5mm;
-            }
-            
-            .label-key {
-                font-weight: bold;
-                width: 25%;
-                text-align: right;
-                padding-right: 1mm;
-                color: #555;
-            }
-            
-            .label-value {
-                width: 25%;
-                padding-left: 1mm;
-                font-weight: bold;
-                color: #000;
-            }
-            
-            .label-footer {
-                margin-top: auto;
-                text-align: center;
-                font-size: 7pt;
-                color: #777;
-                border-top: 0.3mm solid #eee;
-                padding-top: 2mm;
-            }
-            
-            .footer-note {
-                margin-bottom: 1mm;
-            }
-            
-            .no-operations {
-                text-align: center;
-                font-style: italic;
-                font-size: 7pt;
-                color: #999;
-                padding: 2mm;
-            }
-            
-            /* For printing */
-            @media print {
-                html, body {
-                    width: 100mm;
-                    height: 150mm;
-                    margin: 0;
-                    padding: 0;
-                }
-                
-                .label-container {
-                    page-break-after: avoid;
-                    page-break-inside: avoid;
-                }
-            }
-        `;
+        // Hide batch details
+        this.wrapper.find('#batch_details').hide();
+        this.wrapper.find('#batch_validation_result').empty();
+
+        // Clear validation messages
+        this.wrapper.find('#employee_validation_message').empty();
+        this.wrapper.find('#inspector_validation_message').empty();
+        this.wrapper.find('#submit_message').empty();
+
+        // Disable controls
+        this.wrapper.find('#scan_employee').prop('disabled', true);
+        this.wrapper.find('#add_employee_btn').prop('disabled', true);
+        this.wrapper.find('#rejection_type').prop('disabled', true);
+        this.wrapper.find('#rejection_qty').prop('disabled', true);
+        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
+
+        // Reset stored data
+        this.batchInfo = null;
+        this.operationDetails = null;
+        this.inspectionInfo = null;
+        this.rejectionDetails = null;
     }
 
     printSubLotLabel(processId) {
@@ -2612,6 +2325,290 @@ class SubLotProcessPage {
         });
     }
 
+    getLabelStyles() {
+        // CSS styles for the label - resized for single page printing
+        return `
+            @page {
+                size: 100mm 150mm; /* Standard label size */
+                margin: 3mm; /* Minimal margins */
+            }
+            
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                background-color: white;
+            }
+            
+            .label-container {
+                width: 94mm;
+                height: 144mm;
+                padding: 3mm;
+                box-sizing: border-box;
+                border: 0.5mm solid #ccc;
+                background-color: white;
+                display: flex;
+                flex-direction: column;
+                page-break-after: avoid;
+                overflow: hidden;
+            }
+            
+            .label-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 3mm;
+            }
+            
+            .company-logo img {
+                height: 10mm;
+                max-width: 20mm;
+            }
+            
+            .label-title {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #333;
+                text-align: center;
+                flex-grow: 1;
+            }
+            
+            /* Main barcode section */
+            .main-barcode-section {
+                margin: 2mm 0;
+                border: 0.5mm solid #000;
+                border-radius: 1mm;
+                padding: 2mm;
+                background-color: #f9f9f9;
+            }
+            
+            .label-section {
+                margin: 2mm 0;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                padding: 2mm;
+                background-color: #f9f9f9;
+            }
+            
+            .section-title {
+                font-size: 9pt;
+                font-weight: bold;
+                color: #333;
+                text-align: center;
+                margin-bottom: 2mm;
+                border-bottom: 0.3mm solid #ddd;
+                padding-bottom: 1mm;
+            }
+            
+            .label-barcode {
+                text-align: center;
+                margin: 2mm 0;
+            }
+            
+            .barcode-container {
+                margin: 0 auto;
+                width: 80mm;
+                height: 15mm;
+            }
+            
+            .barcode-container svg {
+                width: 100%;
+                height: 100%;
+            }
+            
+            .barcode-number {
+                font-size: 10pt;
+                margin-top: 1mm;
+                font-weight: bold;
+            }
+            
+            .item-info-section {
+                margin: 2mm 0;
+                padding: 2mm;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                background-color: #f9f9f9;
+            }
+            
+            .operations-section {
+                margin: 2mm 0;
+                padding: 2mm;
+                border: 0.3mm solid #ddd;
+                border-radius: 1mm;
+                background-color: #f9f9f9;
+                flex-grow: 1;
+                overflow-y: auto;
+            }
+            
+            .operations-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+            }
+            
+            .operations-table th {
+                background-color: #eee;
+                padding: 1mm;
+                text-align: left;
+                border-bottom: 0.5mm solid #ddd;
+            }
+            
+            .operations-table td {
+                padding: 1mm;
+                border-bottom: 0.3mm solid #ddd;
+            }
+            
+            .details-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+            }
+            
+            .details-table tr {
+                height: 5mm;
+            }
+            
+            .label-key {
+                font-weight: bold;
+                width: 25%;
+                text-align: right;
+                padding-right: 1mm;
+                color: #555;
+            }
+            
+            .label-value {
+                width: 25%;
+                padding-left: 1mm;
+                font-weight: bold;
+                color: #000;
+            }
+            
+            .label-footer {
+                margin-top: auto;
+                text-align: center;
+                font-size: 7pt;
+                color: #777;
+                border-top: 0.3mm solid #eee;
+                padding-top: 2mm;
+            }
+            
+            .footer-note {
+                margin-bottom: 1mm;
+            }
+            
+            .no-operations {
+                text-align: center;
+                font-style: italic;
+                font-size: 7pt;
+                color: #999;
+                padding: 2mm;
+            }
+            
+            /* For printing */
+            @media print {
+                html, body {
+                    width: 100mm;
+                    height: 150mm;
+                    margin: 0;
+                    padding: 0;
+                }
+                
+                .label-container {
+                    page-break-after: avoid;
+                    page-break-inside: avoid;
+                }
+            }
+        `;
+    }
+
+    generateLabelHtml(data) {
+        // Generate direct data URL for the barcode (more reliable than API)
+        const barcodeContent = `
+            <svg id="barcode"></svg>
+            <script>
+                JsBarcode("#barcode", "${data.sub_lot_number || 'N/A'}", {
+                    format: "CODE128",
+                    width: 2,
+                    height: 70,
+                    displayValue: false
+                });
+            </script>
+        `;
+
+        // Generate HTML for the label with improved barcode visibility and focus on sublot info and operations
+        return `
+            <div class="label-container">
+                <div class="label-header">
+                    <div class="company-logo">
+                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
+                    </div>
+                    <div class="label-title">SUB LOT</div>
+                </div>
+                
+                <!-- SUB LOT NUMBER with BARCODE -->
+                <div class="label-section main-barcode-section">
+                    <div class="section-title">SUB LOT NUMBER</div>
+                    <div class="label-barcode">
+                        <div class="barcode-container">${barcodeContent}</div>
+                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
+                    </div>
+                </div>
+                
+                <!-- Item and Batch Information -->
+                <div class="item-info-section">
+                    <table class="details-table">
+                        <tr>
+                            <td class="label-key">Item Code:</td>
+                            <td class="label-value">${data.item_code || 'N/A'}</td>
+                            <td class="label-key">Batch:</td>
+                            <td class="label-value">${data.batch_no || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td class="label-key">Qty:</td>
+                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
+                            <td class="label-key">Date:</td>
+                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <!-- Operations Information -->
+                <div class="operations-section">
+                    <div class="section-title">OPERATIONS</div>
+                    <div class="operations-list">
+                        ${this.generateOperationsList(data)}
+                    </div>
+                </div>
+                
+                <div class="label-footer">
+                    <div class="footer-note">Smart Screens Processing System</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Generate operations list
+    generateOperationsList(data) {
+        if (!data.operations || !data.operations.length) {
+            return '<div class="no-operations">No operations data available</div>';
+        }
+        
+        let html = '<table class="operations-table">';
+        html += '<tr><th>Operation</th><th>Employee</th></tr>';
+        
+        data.operations.forEach(op => {
+            html += `
+                <tr>
+                    <td>${op.operation || 'N/A'}</td>
+                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</table>';
+        return html;
+    }
+
     // Alternate method in case JsBarcode is not available
     generateBarcodeDataUrl(data, width, height) {
         // Function to generate a simple barcode using HTML canvas
@@ -2643,45 +2640,5 @@ class SubLotProcessPage {
             console.error("Error generating barcode data URL:", e);
             return null;
         }
-    }
-
-    reset_form() {
-        // Clear all inputs
-        this.wrapper.find('input').val('');
-
-        // Reset tables
-        this.wrapper.find('#operations_table tbody').html(`
-            <tr>
-                <td colspan="4" class="text-center text-muted">No operations added yet</td>
-            </tr>
-        `);
-
-        this.wrapper.find('#rejections_table tbody').html(`
-            <tr>
-                <td colspan="3" class="text-center text-muted">No rejections added</td>
-            </tr>
-        `);
-
-        // Hide batch details
-        this.wrapper.find('#batch_details').hide();
-        this.wrapper.find('#batch_validation_result').empty();
-
-        // Clear validation messages
-        this.wrapper.find('#employee_validation_message').empty();
-        this.wrapper.find('#inspector_validation_message').empty();
-        this.wrapper.find('#submit_message').empty();
-
-        // Disable controls
-        this.wrapper.find('#scan_employee').prop('disabled', true);
-        this.wrapper.find('#add_employee_btn').prop('disabled', true);
-        this.wrapper.find('#rejection_type').prop('disabled', true);
-        this.wrapper.find('#rejection_qty').prop('disabled', true);
-        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
-
-        // Reset stored data
-        this.batchInfo = null;
-        this.operationDetails = null;
-        this.inspectionInfo = null;
-        this.rejectionDetails = null;
     }
 }
