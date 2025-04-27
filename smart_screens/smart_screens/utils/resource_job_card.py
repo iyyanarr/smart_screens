@@ -159,7 +159,7 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             inspection_entry = create_inspection_entry(
                 sublot_process=sublot_process,
                 lot_resource_tag=first_lot_resource_tag,
-                inspector_id= sublot_process.inspector_code  # Default inspector ID as per requirements
+                inspector_id= sublot_process.inspector_code
             )
             
             if inspection_entry and inspection_entry.get("status") == "success":
@@ -175,7 +175,7 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
                 inspection_job_card = create_job_card(
                     work_order=work_order,
                     operation="Final Visual Inspection",
-                    employee=inspector_code if inspector_code else "HR-EMP-00001",
+                    employee=inspector_code,
                     lot_resource_tag=first_lot_resource_tag,
                     sublot_process=sublot_process.name
                 )
