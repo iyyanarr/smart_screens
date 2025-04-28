@@ -59,9 +59,10 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             if hasattr(sublot_process, field) and getattr(sublot_process, field):
                 has_rejection_items = True
                 break
-        
-        # Store the first lot resource tag for later use with inspection entry
-        first_lot_resource_tag = None
+                
+        # Variable to store lot resource tag for operations other than Final Visual Inspection
+        # This will be used for reference in job cards
+        latest_lot_resource_tag = None
         
         # Process each operation
         for op in sublot_process.operations:
@@ -69,7 +70,37 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             if not op.operation or not op.employee_code:
                 continue
                 
-            # Create a lot resource tagging entry with the correct DocType name
+            # Skip creating lot resource tag for Final Visual Inspection
+            # We'll handle it separately with an inspection entry
+            if op.operation == "Final Visual Inspection":
+                # Create an inspection entry for Final Visual Inspection
+                inspection_entry = create_inspection_entry(
+                    sublot_process=sublot_process,
+                    lot_resource_tag=latest_lot_resource_tag,
+                    inspector_id=op.employee_code  # Use the employee from operation as inspector
+                )
+                
+                if inspection_entry and inspection_entry.get("status") == "success":
+                    created_inspection_entries.append(inspection_entry.get("inspection_entry"))
+                    frappe.logger().info(f"Created Inspection Entry for Final Visual Inspection: {inspection_entry.get('inspection_entry')}")
+                
+                # Create job card for Final Visual Inspection
+                if work_order and (not work_order_operations or op.operation in work_order_operations):
+                    job_card = create_job_card(
+                        work_order=work_order,
+                        operation=op.operation,
+                        employee=op.employee_code,
+                        lot_resource_tag=latest_lot_resource_tag,  # Use the latest lot resource tag
+                        sublot_process=sublot_process.name
+                    )
+                    
+                    if job_card and job_card.get("status") == "success":
+                        created_job_cards.append(job_card.get("job_card"))
+                
+                # Skip to the next operation since we've already handled Final Visual Inspection
+                continue
+            
+            # For all other operations, create a lot resource tagging entry
             lot_tag = frappe.new_doc("SPP Lot Resource Tagging")
             lot_tag.lot_number = sublot_process.sub_lot_number
             lot_tag.item_code = sublot_process.item_code
@@ -132,13 +163,10 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             # Submit the lot resource tag document
             lot_tag.submit()
             
-            frappe.db.commit()
-            
             created_resources.append(lot_tag.name)
             
-            # Store the first lot resource tag for the inspection entry
-            if first_lot_resource_tag is None:
-                first_lot_resource_tag = lot_tag.name
+            # Update the latest lot resource tag
+            latest_lot_resource_tag = lot_tag.name
             
             # Create a job card if work order is available and operation is in work order
             if work_order and (not work_order_operations or op.operation in work_order_operations):
@@ -153,36 +181,37 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
                 if job_card and job_card.get("status") == "success":
                     created_job_cards.append(job_card.get("job_card"))
         
-        # Create an Inspection Entry document for Final Visual Inspection
-        # Only create one inspection entry if the sublot process has rejection items
-        if has_rejection_items:
+        # Create inspection entry for rejection items if needed
+        # This is separate from the Final Visual Inspection operation
+        # and ensures that rejection data is recorded even if no Final Visual Inspection operation exists
+        if has_rejection_items and not any(op.operation == "Final Visual Inspection" for op in sublot_process.operations):
+            # Only create inspection entry if a Final Visual Inspection operation wasn't already processed
+            inspector_id = None
+            if hasattr(sublot_process, 'inspector_code') and sublot_process.inspector_code:
+                inspector_id = sublot_process.inspector_code
+            
             inspection_entry = create_inspection_entry(
                 sublot_process=sublot_process,
-                lot_resource_tag=first_lot_resource_tag,
-                inspector_id= sublot_process.inspector_code
+                lot_resource_tag=latest_lot_resource_tag,
+                inspector_id=inspector_id
             )
             
             if inspection_entry and inspection_entry.get("status") == "success":
                 created_inspection_entries.append(inspection_entry.get("inspection_entry"))
                 
-                # Create a job card specifically for Final Visual Inspection
-                # Use the inspector from the sublot process if available
-                inspector_code = None
-                if hasattr(sublot_process, 'inspector_code') and sublot_process.inspector_code:
-                    inspector_code = sublot_process.inspector_code
-                
-                # Create job card for Final Visual Inspection
-                inspection_job_card = create_job_card(
-                    work_order=work_order,
-                    operation="Final Visual Inspection",
-                    employee=inspector_code,
-                    lot_resource_tag=first_lot_resource_tag,
-                    sublot_process=sublot_process.name
-                )
-                
-                if inspection_job_card and inspection_job_card.get("status") == "success":
-                    created_job_cards.append(inspection_job_card.get("job_card"))
-                    frappe.logger().info(f"Created Job Card for Final Visual Inspection: {inspection_job_card.get('job_card')}")
+                # Create a job card specifically for Final Visual Inspection if it doesn't exist yet
+                if work_order and not any(op.operation == "Final Visual Inspection" for op in sublot_process.operations):
+                    inspection_job_card = create_job_card(
+                        work_order=work_order,
+                        operation="Final Visual Inspection",
+                        employee=inspector_id,
+                        lot_resource_tag=latest_lot_resource_tag,
+                        sublot_process=sublot_process.name
+                    )
+                    
+                    if inspection_job_card and inspection_job_card.get("status") == "success":
+                        created_job_cards.append(inspection_job_card.get("job_card"))
+                        frappe.logger().info(f"Created Job Card for Final Visual Inspection: {inspection_job_card.get('job_card')}")
             
         # Return the results
         return {
@@ -303,11 +332,9 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         
         # Save the inspection entry
         inspection_entry.insert()
-        frappe.db.commit()
 
         # Submit the inspection entry
         inspection_entry.submit()
-        frappe.db.commit()
         
         frappe.logger().info(f"Created Inspection Entry {inspection_entry.name} with inspector={inspection_entry.inspector_code}, quantity={inspection_entry.inspected_qty_nos}, rejected={inspection_entry.rejected_qty_nos}")
         
@@ -351,7 +378,7 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                 for wo_operation in wo_doc.operations:
                     if wo_operation.operation == operation:
                         erpnext_create_job_card(wo_doc, wo_operation)
-                        frappe.db.commit()
+                        # Removed frappe.db.commit()
                         # Refresh the list after creation
                         existing_job_cards = frappe.get_all("Job Card", 
                             filters={
@@ -373,10 +400,21 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                     "message": f"No existing job card found for this operation and none could be created."
                 }
         
-        # Get the first available job card
+        # Get the first available job card with complete document
         job_card_info = existing_job_cards[0]
         job_card_name = job_card_info.name
-        job_card = frappe.get_doc("Job Card", job_card_name)
+        
+        # Fetch the complete job card document with all fields
+        try:
+            # Get full doc with all fields
+            job_card = frappe.get_doc("Job Card", job_card_name)
+            frappe.logger().info(f"Successfully loaded Job Card {job_card_name} with all fields")
+        except Exception as e:
+            frappe.log_error(f"Error loading complete job card document: {str(e)}", "Job Card Load Error")
+            return {
+                "status": "error",
+                "message": f"Could not load complete job card data: {str(e)}"
+            }
         
         # If the job card is already submitted, we can't modify it directly
         if job_card.docstatus == 1:
@@ -390,36 +428,70 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                 "job_card": job_card_name
             }
         
-        # Add reference to sub lot process
-        if sublot_process:
-            job_card.sub_lot_process = sublot_process
+        # Log the current state of the job card before changes
+        frappe.logger().info(f"Job Card {job_card_name} current state - status: {job_card.status}, docstatus: {job_card.docstatus}")
+        frappe.logger().info(f"Job Card fields before update: operation={job_card.operation}, work_order={job_card.work_order}, for_quantity={job_card.for_quantity}")
         
-        # Add reference to lot resource tag
-        if lot_resource_tag:
+        # Keep a backup of the original for_quantity value (important for production)
+        original_for_quantity = job_card.for_quantity if hasattr(job_card, 'for_quantity') else None
+        
+        # Add reference to sub lot process - only if field doesn't already have a value
+        if sublot_process and (not hasattr(job_card, 'sub_lot_process') or not job_card.sub_lot_process):
+            job_card.sub_lot_process = sublot_process
+            frappe.logger().info(f"Set sub_lot_process={sublot_process} on job card {job_card_name}")
+        
+        # Add reference to lot resource tag - only if field doesn't already have a value
+        if lot_resource_tag and (not hasattr(job_card, 'lot_resource_tag') or not job_card.lot_resource_tag):
             job_card.lot_resource_tag = lot_resource_tag
+            frappe.logger().info(f"Set lot_resource_tag={lot_resource_tag} on job card {job_card_name}")
             
-        # Set employee if provided (clear existing employees first)
+        # Set employee if provided and if field exists
         if employee:
             # Make sure employee is valid before adding
             if frappe.db.exists("Employee", employee):
                 # Check if the employee field is a child table or a direct field
                 if hasattr(job_card, 'employee') and isinstance(job_card.employee, list):
-                    # It's a child table - clear and add
-                    job_card.employee = []  # Clear existing employees
-                    job_card.append("employee", {
-                        "employee": employee
-                    })
-                    frappe.logger().info(f"Added employee {employee} to job card {job_card.name} child table")
-                else:
-                    # It might be a direct field
+                    # It's a child table - check if the employee is already in the list
+                    existing_employees = [e.employee for e in job_card.employee]
+                    if employee not in existing_employees:
+                        # Only add the employee if they're not already in the list
+                        job_card.append("employee", {
+                            "employee": employee
+                        })
+                        frappe.logger().info(f"Added employee {employee} to job card {job_card.name} child table")
+                elif hasattr(job_card, 'employee'):
+                    # It's a direct field
                     job_card.employee = employee
                     frappe.logger().info(f"Set employee {employee} directly on job card {job_card.name}")
             else:
                 frappe.logger().warning(f"Employee {employee} not found, skipping employee assignment")
         
-        # Save the updated job card
-        job_card.save()
-        frappe.db.commit()
+        # Preserve the operation and work_order fields to make sure they don't get overwritten
+        job_card.operation = operation
+        job_card.work_order = work_order
+        
+        # Make sure mandatory fields have values to avoid validation errors
+        if hasattr(job_card, 'for_quantity') and not job_card.for_quantity:
+            qty_from_wo = get_operation_qty_from_work_order(work_order, operation)
+            job_card.for_quantity = qty_from_wo or 1
+            frappe.logger().info(f"Set for_quantity={job_card.for_quantity} on job card {job_card_name}")
+        
+        if hasattr(job_card, 'wip_warehouse') and not job_card.wip_warehouse:
+            if wo_doc.wip_warehouse:
+                job_card.wip_warehouse = wo_doc.wip_warehouse
+                frappe.logger().info(f"Set wip_warehouse={job_card.wip_warehouse} from work order")
+        
+        # Save the job card with a clear try/except block for better error tracing
+        try:
+            job_card.save()
+            # Removed frappe.db.commit()
+            frappe.logger().info(f"Successfully saved job card {job_card_name}")
+        except Exception as save_error:
+            frappe.log_error(f"Error saving job card {job_card_name}: {str(save_error)}", "Job Card Save Error")
+            return {
+                "status": "error",
+                "message": f"Failed to save job card: {str(save_error)}"
+            }
         
         # Now add a time log to make the job card "Completed" with sequential times
         try:
@@ -454,14 +526,18 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
                 employee_name = frappe.db.get_value("Employee", employee_id, "employee_name") or ""
                 frappe.logger().info(f"Using employee {employee_id} ({employee_name}) for time log")
             
+            # Reload job card before adding time logs to ensure we have latest data
+            job_card.reload()
+            
             # Clear existing time logs if any
             job_card.time_logs = []
             
             # Calculate time difference in hours for the time_in_mins field
             time_diff = time_diff_in_hours(to_time, from_time) * 60
             
-            # Verify the job card has a for_quantity field before using it
-            completed_qty = job_card.for_quantity if hasattr(job_card, 'for_quantity') and job_card.for_quantity else 1
+            # Use the original for_quantity or current for_quantity value for completed_qty
+            # This helps maintain data integrity for production
+            completed_qty = original_for_quantity or job_card.for_quantity or 1
             
             # Create a time log entry with proper formatting
             time_log_data = {
@@ -488,17 +564,35 @@ def create_job_card(work_order, operation, employee=None, lot_resource_tag=None,
             job_card.status = "Completed"
             
             # Save and submit the job card
-            job_card.save()
-            job_card.submit()
-            frappe.db.commit()
-            
-            # After job card is submitted, update the work order operation and status
-            update_work_order_operation(work_order, operation, job_card.for_quantity)
-            
-            frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee_name or employee_id or 'unknown'}, status is now 'Completed'")
+            try:
+                job_card.save()
+                # Removed frappe.db.commit()
+                frappe.logger().info(f"Saved job card with new time logs")
+                
+                job_card.submit()
+                # Removed frappe.db.commit()
+                frappe.logger().info(f"Successfully submitted job card {job_card_name}")
+                
+                # After job card is submitted, update the work order operation and status
+                update_work_order_operation(work_order, operation, completed_qty)
+                
+                frappe.logger().info(f"Updated Job Card {job_card.name} for employee {employee_name or employee_id or 'unknown'}, status is now 'Completed'")
+            except Exception as submit_error:
+                frappe.log_error(f"Error submitting job card {job_card_name}: {str(submit_error)}", "Job Card Submit Error")
+                # Return a partial success since we at least saved the job card
+                return {
+                    "status": "partial_success",
+                    "message": f"Job Card {job_card.name} was saved but could not be submitted: {str(submit_error)}",
+                    "job_card": job_card.name
+                }
         except Exception as time_log_error:
-            frappe.logger().error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}", exc_info=True)
+            frappe.log_error(f"Error adding time log to Job Card {job_card.name}: {str(time_log_error)}", "Time Log Error")
             # Continue execution since we were able to update the job card
+            return {
+                "status": "partial_success",
+                "message": f"Job Card {job_card.name} was updated but time logs could not be added: {str(time_log_error)}",
+                "job_card": job_card.name
+            }
             
         return {
             "status": "success",
@@ -873,7 +967,6 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "item_name": item.item_name,
                 "description": item.description,
                 "uom": item.stock_uom,
-                "stock_uom": item.stock_uom,
                 "qty": item.qty,
                 "s_warehouse": source_warehouse,
                 "basic_rate": item.rate,
@@ -1125,3 +1218,15 @@ def get_valid_batch_for_item(batch_no, item_code):
         return valid_batches[0].name
     
     return batch_no  # Return the original batch number as a last resort
+
+def get_operation_qty_from_work_order(work_order, operation):
+    """Get the planned quantity for a specific operation from a work order"""
+    try:
+        wo_doc = frappe.get_doc("Work Order", work_order)
+        for op in wo_doc.operations:
+            if op.operation == operation:
+                return op.planned_qty or wo_doc.qty
+        return wo_doc.qty  # Default to work order quantity if operation not found
+    except Exception as e:
+        frappe.logger().error(f"Error getting operation quantity: {str(e)}")
+        return 1  # Default to 1 as a safe value

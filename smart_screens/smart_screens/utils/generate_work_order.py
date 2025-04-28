@@ -51,8 +51,25 @@ def create_work_order_after_sublot(sublot_entry=None, sublot_process=None):
                 "message": f"No valid BOM found for item {item_code}"
             }
         
-        # Get the first BOM (we can enhance this to select based on certain criteria if needed)
-        first_bom = bom_data.get("data").get("boms")[0]
+        # Filter BOMs to get active and default ones
+        active_boms = [bom for bom in bom_data.get("data").get("boms") if bom.get("is_active") and bom.get("is_default")]
+        
+        # If no active and default BOMs found, try to get just active ones
+        if not active_boms:
+            active_boms = [bom for bom in bom_data.get("data").get("boms") if bom.get("is_active")]
+        
+        # If still no active BOMs found, use all available BOMs
+        if not active_boms:
+            active_boms = bom_data.get("data").get("boms")
+        
+        # Get the first filtered BOM
+        if not active_boms:
+            return {
+                "status": "error",
+                "message": f"No valid BOM found for item {item_code}"
+            }
+            
+        first_bom = active_boms[0]
         bom_no = first_bom.get("bom_no")
         
         if not bom_no:
