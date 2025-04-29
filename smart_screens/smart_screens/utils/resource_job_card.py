@@ -104,7 +104,7 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
             lot_tag = frappe.new_doc("SPP Lot Resource Tagging")
             lot_tag.lot_number = sublot_process.sub_lot_number
             lot_tag.item_code = sublot_process.item_code
-            lot_tag.batch_no = sublot_process.batch_no
+            lot_tag.batch_no = sublot_process.barcode
             lot_tag.warehouse = sublot_process.warehouse
             lot_tag.operation_type = op.operation
             lot_tag.operation = op.operation
@@ -245,7 +245,7 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         
         # Set product information
         inspection_entry.product_ref_no = sublot_process.item_code
-        inspection_entry.batch_no = sublot_process.batch_no
+        inspection_entry.batch_no = sublot_process.barcode
         inspection_entry.lot_no = sublot_process.sub_lot_number
         inspection_entry.scan_inspector = inspector_id  # Set inspector ID if provided
         inspection_entry.scan_production_lot = sublot_process.sub_lot_number
