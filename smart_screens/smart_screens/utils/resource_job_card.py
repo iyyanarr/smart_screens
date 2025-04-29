@@ -650,42 +650,105 @@ def update_work_order_operation(work_order, operation, completed_qty):
                 rejected_qty = get_rejected_qty_for_work_order(work_order)
                 frappe.logger().debug(f"All operations completed for Work Order {work_order}, rejected qty: {rejected_qty}")
                 
+                # Use the custom implementation to complete the work order
                 try:
-                    frappe.logger().debug(f"Completing Work Order {work_order} using standard ERPNext workflow")
-                    # Create manufacturing stock entry and set status to Completed
-                    from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+                    frappe.logger().debug(f"Completing Work Order {work_order} using custom implementation")
                     
-                    # First check if we need a material transfer
-                    if work_order_doc.status == "Not Started" and not work_order_doc.skip_transfer:
-                        transfer_se = frappe.get_doc(make_stock_entry(work_order, "Material Transfer for Manufacture"))
-                        transfer_se.insert()
-                        transfer_se.submit()
-                        frappe.db.commit()
-                        work_order_doc.reload()
-                        frappe.logger().debug(f"Created material transfer, Work Order status is now {work_order_doc.status}")
+                    # IMPROVED BATCH FINDING: Look for batch number in all possible sources with clear priority
+                    batch_no = None
+                    sublot_batch_no = None
                     
-                    # Now create the manufacturing entry
-                    mfg_se = frappe.get_doc(make_stock_entry(work_order, "Manufacture"))
-                    # Set fg_completed_qty to the required qty for the work order
-                    mfg_se.fg_completed_qty = work_order_doc.qty
-                    mfg_se.insert()
-                    mfg_se.submit()
-                    frappe.db.commit()
+                    # PRIORITY 1: First check Sub Lot Entry linked directly to this Work Order
+                    sublot_entries = frappe.get_all(
+                        "Sub Lot Entry",
+                        filters={
+                            "source_document": "Work Order",
+                            "source_document_name": work_order
+                        },
+                        fields=["name", "barcode", "sublot_batch", "batch"],
+                        limit=1
+                    )
                     
-                    # Reload the work order to check if status updated
-                    work_order_doc.reload()
-                    frappe.logger().debug(f"Created manufacturing entry, Work Order status is now {work_order_doc.status}")
+                    if sublot_entries:
+                        entry = sublot_entries[0]
+                        # Check each field in order of priority
+                        if entry.get("barcode"):  # Changed priority to check barcode first
+                            sublot_batch_no = entry.get("barcode")
+                            print(f"Found barcode {sublot_batch_no} from Sub Lot Entry directly linked to Work Order")
+                        elif entry.get("sublot_batch"):
+                            sublot_batch_no = entry.get("sublot_batch")
+                            print(f"Found sublot_batch {sublot_batch_no} from Sub Lot Entry directly linked to Work Order")
+                        elif entry.get("batch"):
+                            sublot_batch_no = entry.get("batch")
+                            print(f"Found batch {sublot_batch_no} from Sub Lot Entry directly linked to Work Order")
                     
-                    # Force update if needed
-                    if work_order_doc.status != "Completed":
-                        work_order_doc.status = "Completed"
-                        work_order_doc.produced_qty = work_order_doc.qty
-                        work_order_doc.save()
-                        frappe.db.commit()
-                        frappe.logger().debug(f"Force updated Work Order status to Completed")
+                    # PRIORITY 2: Check Sub Lot Process linked to this Work Order
+                    if not sublot_batch_no:
+                        sub_lot_processes = frappe.get_all(
+                            "Sub Lot Process",
+                            filters={"work_order": work_order},
+                            fields=["name", "barcode", "sub_lot_number", "sublot_batch_number"], # Removed batch_no, focusing on barcode
+                            limit=1
+                        )
                         
+                        if sub_lot_processes:
+                            process = sub_lot_processes[0]
+                            # Check each field in order of priority - prioritizing barcode first
+                            if process.get("barcode"):
+                                sublot_batch_no = process.get("barcode")
+                                print(f"Found barcode {sublot_batch_no} from Sub Lot Process")
+                            elif process.get("sublot_batch_number"):
+                                sublot_batch_no = process.get("sublot_batch_number")
+                                print(f"Found sublot_batch_number {sublot_batch_no} from Sub Lot Process")
+                            elif process.get("sub_lot_number"):
+                                sublot_batch_no = process.get("sub_lot_number")
+                                print(f"Found sub_lot_number {sublot_batch_no} from Sub Lot Process")
+                            
+                            # PRIORITY 3: If we have a Sub Lot Process but no batch yet, check for a Sub Lot Entry linked to it
+                            if not sublot_batch_no and process.get("name"):
+                                process_entries = frappe.get_all(
+                                    "Sub Lot Entry",
+                                    filters={
+                                        "source_document": "Sub Lot Process",
+                                        "source_document_name": process.get("name")
+                                    },
+                                    fields=["name", "barcode", "sublot_batch", "batch"],
+                                    limit=1
+                                )
+                                
+                                if process_entries:
+                                    entry = process_entries[0]
+                                    if entry.get("barcode"):  # Changed priority to check barcode first
+                                        sublot_batch_no = entry.get("barcode")
+                                        print(f"Found barcode {sublot_batch_no} from Sub Lot Entry linked to Sub Lot Process")
+                                    elif entry.get("sublot_batch"):
+                                        sublot_batch_no = entry.get("sublot_batch")
+                                        print(f"Found sublot_batch {sublot_batch_no} from Sub Lot Entry linked to Sub Lot Process")
+                                    elif entry.get("batch"):
+                                        sublot_batch_no = entry.get("batch")
+                                        print(f"Found batch {sublot_batch_no} from Sub Lot Entry linked to Sub Lot Process")
+                    
+                    # Set the batch_no to use for finished goods - being explicit about using the EXACT batch number
+                    batch_no = sublot_batch_no
+                    print(f"Using exact batch number from sublot entry: {batch_no}")
+                    
+                    # IMPORTANT: Force use of the full batch number (don't strip suffixes)
+                    # This ensures batch numbers like P24F12Y03-3 are used as-is instead of just P24F12Y03
+                    if batch_no:
+                        print(f"Forcing use of exact batch number with any suffixes: {batch_no}")
+                    
+                    # Use our custom function to complete the work order with proper batch handling
+                    # and proper handling of rejected quantities
+                    complete_work_order_with_stock_entries(
+                        work_order_id=work_order,
+                        rejected_qty=rejected_qty,
+                        batch_no=batch_no
+                    )
+                    
+                    frappe.logger().debug(f"Successfully completed Work Order {work_order}")
+                    
                 except Exception as e:
-                    frappe.logger().error(f"Error completing Work Order with standard workflow: {str(e)}")
+                    frappe.logger().error(f"Error completing Work Order with custom implementation: {str(e)}")
                     # Fall back to direct SQL update as last resort
                     frappe.db.sql("""
                         UPDATE `tabWork Order` 
@@ -750,7 +813,7 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0, batch_
         work_order = frappe.get_doc("Work Order", work_order_id)
         
         if work_order.status == "Completed":
-            frappe.logger().info(f"Work Order {work_order_id} is already completed")
+            print(f"Work Order {work_order_id} is already completed")
             return
         
         if work_order.docstatus != 1:
@@ -766,67 +829,66 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0, batch_
         # If batch_no is directly provided, use it
         new_batch_number = batch_no
         if not new_batch_number:
-            frappe.logger().info(f"No batch_no directly provided for Work Order {work_order_id}, trying to find one")
-            # Try to find a batch number if none is provided directly
+            print(f"No batch_no directly provided for Work Order {work_order_id}, trying to find barcode from sublot entry")
+            # Try to find a batch number if none is provided directly - ONLY LOOK FOR BARCODE FIELD
             try:
-                # First priority: Get the batch number from the Sub Lot Entry's barcode field
-                # Look for Sub Lot Entry linked to this Work Order
+                # First priority: Get the barcode field from the Sub Lot Entry
                 sublot_entries = frappe.get_all(
                     "Sub Lot Entry",
-                    filters=[
-                        ["source_document", "in", ["Sub Lot Process", "Work Order"]],
-                        ["source_document_name", "=", work_order.name],
-                    ],
-                    fields=["name", "barcode", "sublot_batch", "batch"],
+                    filters={
+                        "source_document": "Work Order",
+                        "source_document_name": work_order.name
+                    },
+                    fields=["barcode"],
                     limit=1
                 )
                 
-                # If not found directly, try finding via Sub Lot Process
-                if not sublot_entries:
-                    # Approach 2: Try to look up the Work Order in Sub Lot Process table
+                # Extract the barcode value - ONLY field we're interested in
+                if sublot_entries and sublot_entries[0].get("barcode"):
+                    new_batch_number = sublot_entries[0].barcode
+                    print(f"Found barcode {new_batch_number} from Sub Lot Entry directly linked to Work Order")
+                else:
+                    # If not found, check Sub Lot Process for barcode
                     sub_lot_processes = frappe.get_all(
                         "Sub Lot Process",
                         filters={"work_order": work_order.name},
-                        fields=["name", "barcode", "sublot_batch_number", "sub_lot_number", "batch_no"],
+                        fields=["name", "barcode"],
                         limit=1
                     )
-                    if sub_lot_processes:
-                        # Try to get the barcode directly from Sub Lot Process
-                        if sub_lot_processes[0].get("barcode"):
-                            new_batch_number = sub_lot_processes[0].barcode
-                        else:
-                            # Find the Sub Lot Entry for this Sub Lot Process
-                            sublot_entries = frappe.get_all(
-                                "Sub Lot Entry",
-                                filters={"source_document": "Sub Lot Process", "source_document_name": sub_lot_processes[0].name},
-                                fields=["name", "barcode", "sublot_batch", "batch"],
-                                limit=1
-                            )
-                
-                # Extract the batch number from results
-                if sublot_entries:
-                    # Priority 1: Use barcode field as it's explicitly requested
-                    if sublot_entries[0].get("barcode"):
-                        new_batch_number = sublot_entries[0].barcode
-                    # Try other fields if barcode isn't available
-                    elif sublot_entries[0].get("sublot_batch"):
-                        new_batch_number = sublot_entries[0].sublot_batch
-                    elif sublot_entries[0].get("batch"):
-                        new_batch_number = sublot_entries[0].batch
+                    
+                    if sub_lot_processes and sub_lot_processes[0].get("barcode"):
+                        new_batch_number = sub_lot_processes[0].barcode
+                        print(f"Found barcode {new_batch_number} from Sub Lot Process")
+                    elif sub_lot_processes:
+                        # If Sub Lot Process exists but no barcode, check linked Sub Lot Entry
+                        process_entries = frappe.get_all(
+                            "Sub Lot Entry",
+                            filters={
+                                "source_document": "Sub Lot Process", 
+                                "source_document_name": sub_lot_processes[0].name
+                            },
+                            fields=["barcode"],
+                            limit=1
+                        )
+                        
+                        if process_entries and process_entries[0].get("barcode"):
+                            new_batch_number = process_entries[0].barcode
+                            print(f"Found barcode {new_batch_number} from Sub Lot Entry linked to Sub Lot Process")
                 
                 if new_batch_number:
-                    frappe.logger().info(f"Found batch number {new_batch_number} for Work Order {work_order.name}")
+                    print(f"Will use barcode value as batch: {new_batch_number}")
                 else:
-                    frappe.logger().info(f"Could not find batch number for Work Order {work_order.name}")
+                    print(f"No barcode found in any related sublot entry")
             except Exception as e:
-                frappe.logger().error(f"Error finding batch number for Work Order {work_order.name}: {str(e)}")
-                # Continue without batch number if there's an error
+                print(f"Error finding barcode: {str(e)}")
+        else:
+            print(f"Using provided batch number: {new_batch_number}")
         
         # STEP 1: Create Material Transfer for Manufacture stock entry
         if work_order.status == "Not Started":
             transfer_entry = create_material_transfer_entry(work_order)
             if transfer_entry:
-                frappe.logger().info(f"Created material transfer entry {transfer_entry.name}")
+                print(f"Created material transfer entry {transfer_entry.name}")
                 # Reload work order to get updated status
                 work_order.reload()
         
@@ -840,7 +902,7 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0, batch_
             )
             
             if stock_entry:
-                frappe.logger().info(f"Created stock entry {stock_entry.name} with good qty: {good_qty}, rejected qty: {rejected_qty}, batch: {new_batch_number}")
+                print(f"Created stock entry {stock_entry.name} with good qty: {good_qty}, rejected qty: {rejected_qty}, batch: {new_batch_number}")
         
         # STEP 3: Force update work order status to Completed
         work_order.reload()  # Get the latest status after stock entries
@@ -849,13 +911,13 @@ def complete_work_order_with_stock_entries(work_order_id, rejected_qty=0, batch_
             work_order.produced_qty = total_qty
             work_order.save()
             frappe.db.commit()
-            frappe.logger().info(f"Force updated Work Order {work_order_id} status to Completed")
+            print(f"Force updated Work Order {work_order_id} status to Completed")
         
         frappe.db.commit()
-        frappe.logger().info(f"Work Order {work_order_id} completed with good qty: {good_qty}, rejected qty: {rejected_qty}")
+        print(f"Work Order {work_order_id} completed with good qty: {good_qty}, rejected qty: {rejected_qty}")
         
     except Exception as e:
-        frappe.logger().error(f"Error completing Work Order {work_order_id}: {str(e)}")
+        print(f"Error completing Work Order {work_order_id}: {str(e)}")
         frappe.throw(_("Could not complete Work Order: {0}").format(str(e)))
 
 def create_material_transfer_entry(work_order):
@@ -920,6 +982,7 @@ def create_material_transfer_entry(work_order):
         return None
 
 def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty, batch_no=None):
+    print(f"Creating single stock entry for manufacture with good qty: {good_qty}, rejected qty: {rejected_qty}, batch: {batch_no}")
     """
     Create and submit a single manufacturing stock entry with both good and rejected items
     
@@ -970,6 +1033,7 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 "qty": item.qty,
                 "s_warehouse": source_warehouse,
                 "basic_rate": item.rate,
+                "batch_no": batch_no,
                 "conversion_factor": 1.0,
                 "use_serial_batch_fields": 1  # Add this field for batch tracking
             })
@@ -1068,7 +1132,7 @@ def create_single_stock_entry_for_manufacture(work_order, good_qty, rejected_qty
                 valid_batch = existing_batches[0].name
                 frappe.logger().info(f"Using fallback existing batch {valid_batch} for item {work_order.production_item}")
             else:
-                # As a last resort, create a completely new batch with a timestamp
+                # As a last resort, create a batch with a timestamp
                 import time
                 timestamp = int(time.time())
                 new_batch_name = f"{work_order.production_item}-{timestamp}"
@@ -1164,60 +1228,6 @@ def get_bom_items(bom_no, company, qty, warehouse=None):
             })
             
         return items
-
-def get_valid_batch_for_item(batch_no, item_code):
-    """
-    Get a valid batch number for an item.
-    If the batch has a suffix (like -1, -2), try the base batch first.
-    
-    Args:
-        batch_no (str): The original batch number
-        item_code (str): The item code
-        
-    Returns:
-        str: A valid batch number for the item, or the original batch if not found
-    """
-    if not batch_no or not item_code:
-        return None
-    
-    # Check if the batch exists and belongs to the item
-    if frappe.db.exists("Batch", batch_no):
-        batch_item = frappe.db.get_value("Batch", batch_no, "item")
-        if batch_item and batch_item == item_code:
-            return batch_no
-    
-    # If the batch has a suffix, try removing it
-    if "-" in batch_no:
-        base_batch = batch_no.split("-")[0]
-        if frappe.db.exists("Batch", base_batch):
-            batch_item = frappe.db.get_value("Batch", base_batch, "item")
-            if batch_item and batch_item == item_code:
-                return base_batch
-    
-    # Try to create a new batch if it doesn't exist
-    try:
-        if not frappe.db.exists("Batch", batch_no):
-            new_batch = frappe.new_doc("Batch")
-            new_batch.batch_id = batch_no
-            new_batch.item = item_code
-            new_batch.insert()
-            frappe.db.commit()
-            return batch_no
-    except Exception as e:
-        frappe.logger().error(f"Error creating new batch: {str(e)}")
-    
-    # Find any valid batch for this item as a last resort
-    valid_batches = frappe.get_all(
-        "Batch",
-        filters={"item": item_code, "batch_qty": [">", 0]},
-        fields=["name"],
-        limit=1
-    )
-    
-    if valid_batches:
-        return valid_batches[0].name
-    
-    return batch_no  # Return the original batch number as a last resort
 
 def get_operation_qty_from_work_order(work_order, operation):
     """Get the planned quantity for a specific operation from a work order"""
