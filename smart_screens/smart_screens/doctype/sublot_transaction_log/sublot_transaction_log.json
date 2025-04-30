@@ -1,0 +1,187 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:SLTL-{####}",
+ "creation": "2025-04-29 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "transaction_type",
+  "sublot_process",
+  "sublot_entry",
+  "batch_number",
+  "column_break_5",
+  "item_code",
+  "warehouse",
+  "quantity",
+  "section_break_9",
+  "reference_document_type",
+  "reference_document",
+  "status",
+  "column_break_13",
+  "timestamp",
+  "user",
+  "section_break_16",
+  "details"
+ ],
+ "fields": [
+  {
+   "fieldname": "transaction_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Transaction Type",
+   "options": "Stock Reconciliation\nMaterial Receipt\nRepack",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sublot_process",
+   "fieldtype": "Link",
+   "label": "SubLot Process",
+   "options": "Sub Lot Process"
+  },
+  {
+   "fieldname": "sublot_entry",
+   "fieldtype": "Link",
+   "label": "SubLot Entry",
+   "options": "Sub Lot Entry"
+  },
+  {
+   "fieldname": "batch_number",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Batch Number",
+   "options": "Batch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_9",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "reference_document_type",
+   "fieldtype": "Select",
+   "label": "Reference Document Type",
+   "options": "Stock Reconciliation\nStock Entry\nSub Lot Process\nSub Lot Entry"
+  },
+  {
+   "fieldname": "reference_document",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Document",
+   "options": "reference_document_type"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Success\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_13",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Now",
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "default": "__user",
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_16",
+   "fieldtype": "Section Break",
+   "label": "Additional Details"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Long Text",
+   "label": "Details"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2025-04-29 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "SubLot Transaction Log",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Manufacturing User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -80,6 +80,55 @@ def get_next_available_batch_number(batch_number):
         frappe.throw(f"Failed to generate next available batch number: {str(e)}")
 
 
+def check_stock_availability(item_code, batch_number, qty, source_warehouse):
+    """
+    Check if sufficient stock is available in the source warehouse for the specified batch.
+    
+    Args:
+        item_code (str): The item code to check.
+        batch_number (str): The batch number to check.
+        qty (float): The quantity required.
+        source_warehouse (str): The source warehouse to check.
+        
+    Returns:
+        tuple: Contains:
+            bool: True if stock is available, False otherwise.
+            float: Actual available quantity
+    """
+    try:
+        # Using frappe.qb approach like ERPNext's stock ledger report
+        from frappe.utils import get_datetime, nowdate
+        from_date = get_datetime("2020-01-01 00:00:00")  # Using same starting date as original
+        to_date = get_datetime(nowdate() + " 23:59:59")  # Current date end
+
+        sle = frappe.qb.DocType("Stock Ledger Entry")
+        query = (
+            frappe.qb.from_(sle)
+            .select(
+                frappe.qb.functions.Sum(sle.actual_qty).as_("total_qty")
+            )
+            .where(
+                (sle.docstatus < 2) & 
+                (sle.is_cancelled == 0) & 
+                (sle.posting_datetime[from_date:to_date]) &
+                (sle.item_code == item_code) &
+                (sle.batch_no == batch_number) &
+                (sle.warehouse == source_warehouse)
+            )
+        )
+        
+        result = query.run(as_dict=True)
+        available_qty = flt(result[0].total_qty) if result and result[0].total_qty else 0
+        
+        # Return whether there's enough stock and the available quantity
+        return available_qty >= flt(qty), available_qty
+        
+    except Exception as e:
+        frappe.logger().error(f"Error checking stock availability: {str(e)}")
+        # Return False to be safe in case of errors
+        return False, 0
+
+
 @frappe.whitelist()
 def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=None, process_status=None):
     """
@@ -158,6 +207,51 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         item_code = batch_doc.item
         timing['get_item_code'] = round((time.time() - start_time) * 1000, 2)
         
+        # Step 4.5: Check stock availability
+        frappe.publish_realtime('progress', {
+            'percent': 45,
+            'title': 'Generating Sub Lot',
+            'description': 'Checking stock availability...'
+        })
+        start_time = time.time()
+        stock_available, available_qty = check_stock_availability(
+            item_code=item_code,
+            batch_number=batch_number,
+            qty=qty,
+            source_warehouse=source_warehouse
+        )
+        
+        # If stock is not available, create a stock reconciliation to adjust the stock
+        stock_reconciliation_doc = None
+        if not stock_available:
+            frappe.publish_realtime('progress', {
+                'percent': 47,
+                'title': 'Generating Sub Lot',
+                'description': f'Stock insufficient (Available: {available_qty}, Required: {qty}). Creating stock reconciliation...'
+            })
+            
+            # Create stock reconciliation to adjust the stock to required level
+            stock_reconciliation_doc = create_stock_reconciliation(
+                item_code=item_code,
+                batch_number=batch_number,
+                warehouse=source_warehouse,
+                qty_required=qty  # Set stock to exactly what we need
+            )
+            
+            if not stock_reconciliation_doc:
+                frappe.throw(f"Failed to create stock reconciliation for {item_code} in batch {batch_number}")
+                
+            frappe.msgprint(
+                f"Stock reconciliation {stock_reconciliation_doc} created to adjust stock from {available_qty} to {qty}",
+                indicator="blue",
+                alert=True
+            )
+            
+            # After reconciliation, we should have enough stock
+            stock_available = True
+        
+        timing['check_stock'] = round((time.time() - start_time) * 1000, 2)
+        
         # Step 5: Create a new batch with the proposed batch number
         frappe.publish_realtime('progress', {
             'percent': 50,
@@ -196,7 +290,7 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
             "barcode": barcode_image,
             "barcode_text": new_batch_number
         }
-
+        
         # Step 7: Create a stock entry for the new batch
         frappe.publish_realtime('progress', {
             'percent': 80,
@@ -233,7 +327,7 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
         frappe.logger().info(f"Sub Lot Generation Timing: {timing}")
 
         # Return the results
-        return {
+        response = {
             "status": "success",
             "new_batch_number": new_batch,
             "sub_lot_number": sub_lot_number,
@@ -243,6 +337,13 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
             "processed_qty": qty,  # Return the qty for frontend to use in final_sublot_qty
             "current_stage": "complete"  # Indicate the current stage in the process
         }
+        
+        # If stock reconciliation was performed, include it in the response
+        if stock_reconciliation_doc:
+            response["stock_reconciliation_doc"] = stock_reconciliation_doc
+            response["original_available_qty"] = available_qty
+            
+        return response
         
     except Exception as e:
         # Enhanced error logging
@@ -271,3 +372,153 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
             "message": str(e),  # Ensure we get the complete error message
             "error_context": error_context,
         }
+
+
+def create_stock_reconciliation(item_code, batch_number, warehouse, qty_required):
+    """
+    Create a stock reconciliation to adjust the stock level to the required quantity.
+    
+    Args:
+        item_code (str): Item code to reconcile
+        batch_number (str): Batch number to reconcile
+        warehouse (str): Warehouse to reconcile
+        qty_required (float): Required quantity to set in the system
+        
+    Returns:
+        str: Name of the created stock reconciliation document
+    """
+    try:
+        from frappe.utils import nowdate, nowtime, flt
+        
+        # Get the item's valuation rate
+        valuation_rate = frappe.db.get_value("Stock Ledger Entry", 
+            {"item_code": item_code, "batch_no": batch_number, "warehouse": warehouse, "is_cancelled": 0},
+            "valuation_rate", 
+            order_by="posting_date DESC, posting_time DESC, creation DESC"
+        ) or 0
+        
+        # If valuation rate is 0, try getting it from Item or other sources
+        if not valuation_rate or valuation_rate == 0:
+            valuation_rate = frappe.db.get_value("Item", item_code, "valuation_rate") or 0
+            
+            # If still 0, set a default value
+            if not valuation_rate or valuation_rate == 0:
+                valuation_rate = 1  # Default value to avoid 0 valuation
+        
+        # Get the current quantity for logging
+        stock_available, available_qty = check_stock_availability(
+            item_code=item_code,
+            batch_number=batch_number,
+            qty=qty_required,
+            source_warehouse=warehouse
+        )
+        
+        # Create a new Stock Reconciliation
+        stock_recon = frappe.new_doc("Stock Reconciliation")
+        stock_recon.purpose = "Stock Reconciliation"
+        stock_recon.posting_date = nowdate()
+        stock_recon.posting_time = nowtime()
+        stock_recon.set_posting_time = 1
+        stock_recon.company = frappe.defaults.get_user_default("Company")
+        stock_recon.expense_account = frappe.db.get_value("Company", stock_recon.company, "stock_adjustment_account") or ""
+        stock_recon.cost_center = frappe.db.get_value("Company", stock_recon.company, "cost_center") or ""
+        
+        # Add the item to the reconciliation
+        stock_recon.append("items", {
+            "item_code": item_code,
+            "warehouse": warehouse,
+            "batch_no": batch_number,
+            "use_serial_batch_fields": 1,
+            "qty": flt(qty_required),  # Set the quantity to the required amount
+            "valuation_rate": flt(valuation_rate)
+        })
+        
+        # Save and submit the stock reconciliation
+        stock_recon.insert()
+        stock_recon.submit()
+        
+        frappe.logger().info(f"Stock reconciliation {stock_recon.name} created for {item_code} in batch {batch_number}")
+        
+        # Log the reconciliation information in Stock Reconciliation Log
+        create_stock_reconciliation_log(
+            item_code=item_code,
+            batch_no=batch_number,
+            warehouse=warehouse,
+            actual_qty=available_qty,
+            expected_qty=qty_required,
+            stock_reconciliation=stock_recon.name,
+            reason="Sublot Generation",
+            comments=f"Stock reconciliation performed during sublot generation. System found {available_qty} but {qty_required} was needed."
+        )
+        
+        return stock_recon.name
+    
+    except Exception as e:
+        frappe.logger().error(f"Error creating stock reconciliation: {str(e)}")
+        import traceback
+        frappe.logger().error(f"Traceback: {traceback.format_exc()}")
+        frappe.msgprint(f"Error creating stock reconciliation: {str(e)}", indicator="red", alert=True)
+        return None
+
+
+def create_stock_reconciliation_log(item_code, batch_no, warehouse, actual_qty, expected_qty, 
+                                   stock_reconciliation=None, creation_document=None, 
+                                   creation_doctype=None, reason=None, comments=None):
+    """
+    Create a log entry for stock reconciliation for supervisor review.
+    
+    Args:
+        item_code (str): Item code that was reconciled
+        batch_no (str): Batch number that was reconciled
+        warehouse (str): Warehouse that was reconciled
+        actual_qty (float): Actual quantity found in the system
+        expected_qty (float): Expected quantity that should be in the system
+        stock_reconciliation (str, optional): Reference to the Stock Reconciliation document
+        creation_document (str, optional): Reference to the document that triggered this reconciliation
+        creation_doctype (str, optional): DocType of the document that triggered this reconciliation
+        reason (str, optional): Reason for the reconciliation
+        comments (str, optional): Additional comments about the reconciliation
+        
+    Returns:
+        str: Name of the created log entry
+    """
+    try:
+        from frappe.utils import nowdate, nowtime, flt
+        
+        # Create a new Stock Reconciliation Log
+        log_entry = frappe.new_doc("Stock Reconciliation Log")
+        log_entry.item_code = item_code
+        log_entry.batch_no = batch_no
+        log_entry.warehouse = warehouse
+        log_entry.transaction_date = nowdate()
+        log_entry.posting_time = nowtime()
+        log_entry.company = frappe.defaults.get_user_default("Company")
+        log_entry.actual_qty = flt(actual_qty)
+        log_entry.expected_qty = flt(expected_qty)
+        # Difference will be calculated automatically in before_save
+        
+        if stock_reconciliation:
+            log_entry.stock_reconciliation = stock_reconciliation
+            
+        if creation_document and creation_doctype:
+            log_entry.creation_document = creation_document
+            log_entry.creation_doctype = creation_doctype
+            
+        if reason:
+            log_entry.reason = reason
+            
+        if comments:
+            log_entry.comments = comments
+            
+        log_entry.insert()
+        
+        frappe.logger().info(f"Stock Reconciliation Log {log_entry.name} created for {item_code} in batch {batch_no}")
+        
+        return log_entry.name
+        
+    except Exception as e:
+        frappe.logger().error(f"Error creating stock reconciliation log: {str(e)}")
+        import traceback
+        frappe.logger().error(f"Traceback: {traceback.format_exc()}")
+        # Don't throw an error, just log it since this is a logging function
+        return None
