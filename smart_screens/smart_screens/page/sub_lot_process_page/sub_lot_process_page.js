@@ -233,6 +233,29 @@ class SubLotProcessPage {
                 if (response.message && !response.message.error) {
                     const data = response.message;
 
+                    // Check if batch quantity is 0 - NEW CHECK
+                    const batchQty = parseFloat(data.batch_quantity || 0);
+                    if (batchQty <= 0) {
+                        resultElement.html(`
+                            <div class="alert alert-danger">
+                                <i class="fa fa-exclamation-circle"></i> Cannot process batch with zero quantity. Please check stock availability.
+                            </div>
+                        `);
+                        
+                        // Still show the batch details but don't enable further processing
+                        batchDetailsContent.html(`
+                            <div class="info-content">
+                                <div><strong>Item:</strong> ${data.item_code}</div>
+                                <div><strong>Batch:</strong> ${data.batch_no}</div>
+                                <div><strong>Quantity:</strong> <span class="text-danger">${data.batch_quantity} ${data.uom || 'Nos'}</span></div>
+                                <div><strong>Warehouse:</strong> ${data.warehouse}</div>
+                                <div><strong>SPP Batch:</strong> ${batchNumber}</div>
+                            </div>
+                        `);
+                        
+                        return;
+                    }
+
                     // Store batch info
                     this.batchInfo = {
                         sppBatchId: batchNumber,
@@ -1659,6 +1682,47 @@ class SubLotProcessPage {
         this.wrapper.find('#rejection_qty').val('');
     }
 
+    lockAllFields() {
+        // Disable all form elements except the submit button (which will be handled separately)
+        this.wrapper.find('input, select, button:not(#submit_process_btn)').prop('disabled', true);
+        
+        // Add a visual indicator that the form is locked
+        this.wrapper.find('input, select').addClass('form-disabled');
+        
+        // Store the original form state so we can restore it if needed
+        this.formState = {
+            wasBatchDisabled: this.wrapper.find('#scan_batch').prop('disabled'),
+            wasEmployeeDisabled: this.wrapper.find('#scan_employee').prop('disabled'),
+            wasOperationDisabled: this.wrapper.find('#operation_type').prop('disabled'),
+            wasInspectionDisabled: this.wrapper.find('#inspection_qty').prop('disabled'),
+            wasRejectionTypeDisabled: this.wrapper.find('#rejection_type').prop('disabled'),
+            wasRejectionQtyDisabled: this.wrapper.find('#rejection_qty').prop('disabled')
+        };
+    }
+
+    unlockAllFields() {
+        // Only restore the fields that were previously enabled, keep others disabled
+        if (this.formState) {
+            this.wrapper.find('#scan_batch').prop('disabled', this.formState.wasBatchDisabled);
+            this.wrapper.find('#scan_employee').prop('disabled', this.formState.wasEmployeeDisabled);
+            if (this.wrapper.find('#operation_type').length) {
+                this.wrapper.find('#operation_type').prop('disabled', this.formState.wasOperationDisabled);
+            }
+            this.wrapper.find('#inspection_qty').prop('disabled', this.formState.wasInspectionDisabled);
+            this.wrapper.find('#rejection_type').prop('disabled', this.formState.wasRejectionTypeDisabled);
+            this.wrapper.find('#rejection_qty').prop('disabled', this.formState.wasRejectionQtyDisabled);
+        } else {
+            // If no stored state, just enable the batch scan at least
+            this.wrapper.find('#scan_batch').prop('disabled', false);
+        }
+        
+        // Enable all buttons
+        this.wrapper.find('button').prop('disabled', false);
+        
+        // Remove the visual indicator
+        this.wrapper.find('input, select').removeClass('form-disabled');
+    }
+
     submit_process() {
         const messageElement = this.wrapper.find('#submit_message');
 
@@ -1713,6 +1777,9 @@ class SubLotProcessPage {
             `);
             return;
         }
+
+        // LOCK ALL FORM FIELDS - New functionality
+        this.lockAllFields();
 
         // Initialize basic progress tracker with a progress bar
         messageElement.html(`
@@ -1803,8 +1870,9 @@ class SubLotProcessPage {
                     // Start polling for status updates
                     this.startStatusPolling(trackerId);
                 } else {
-                    // Re-enable the submit button
+                    // Re-enable the submit button and unlock fields if submission fails
                     this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                    this.unlockAllFields();
                     
                     const errorMsg = response.message ? response.message.message : "Failed to save process";
 
@@ -1816,8 +1884,9 @@ class SubLotProcessPage {
                 }
             },
             error: (err) => {
-                // Re-enable the submit button
+                // Re-enable the submit button and unlock fields if there's an error
                 this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                this.unlockAllFields();
                 
                 console.error("Error saving process:", err);
 
@@ -1928,6 +1997,27 @@ class SubLotProcessPage {
                 
                 // Re-enable the submit button
                 self.wrapper.find('#submit_process_btn').prop('disabled', false);
+                
+                // NEW: Refresh the page after a short delay to prevent duplicate submissions
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000); // 5 second delay to allow the user to see the confirmation message
+                
+                // Add countdown message
+                const $countdown = $(`<div class="alert alert-info mt-3">
+                    <i class="fa fa-refresh fa-spin mr-1"></i> Page will refresh in <span class="countdown">5</span> seconds...
+                </div>`);
+                $container.append($countdown);
+                
+                // Start countdown
+                let countdownValue = 5;
+                const countdownInterval = setInterval(() => {
+                    countdownValue--;
+                    $countdown.find('.countdown').text(countdownValue);
+                    if (countdownValue <= 0) {
+                        clearInterval(countdownInterval);
+                    }
+                }, 1000);
                 
                 // Stop polling
                 return false;
