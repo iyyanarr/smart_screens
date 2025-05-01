@@ -1983,34 +1983,27 @@ class SubLotProcessPage {
                     frappe.set_route("Form", data.reference_doctype, data.reference_name);
                 });
                 
-                // Bind the reset form button
+                // Bind the reset form button with complete reset
                 self.wrapper.find('.btn-new-process').on('click', () => {
-                    // Reset the form
-                    self.reset_form();
-                    // Clear the submit message area
-                    self.wrapper.find('#submit_message').empty();
-                    // Re-enable the submit button
-                    self.wrapper.find('#submit_process_btn').prop('disabled', false);
-                    // Focus on the batch scan input
-                    self.wrapper.find('#scan_batch').focus();
+                    self.completeFormReset();
                 });
                 
                 // Re-enable the submit button
                 self.wrapper.find('#submit_process_btn').prop('disabled', false);
                 
-                // NEW: Refresh the page after a short delay to prevent duplicate submissions
+                // Automatically reset the form after 3 seconds
                 setTimeout(() => {
-                    window.location.reload();
-                }, 5000); // 5 second delay to allow the user to see the confirmation message
+                    self.completeFormReset();
+                }, 10000); // 10 seconds delay to allow user to see confirmation and print label if needed
                 
                 // Add countdown message
                 const $countdown = $(`<div class="alert alert-info mt-3">
-                    <i class="fa fa-refresh fa-spin mr-1"></i> Page will refresh in <span class="countdown">5</span> seconds...
+                    <i class="fa fa-refresh mr-1"></i> Form will reset in <span class="countdown">10</span> seconds. Click "New Process" to reset now.
                 </div>`);
                 $container.append($countdown);
                 
                 // Start countdown
-                let countdownValue = 5;
+                let countdownValue = 10;
                 const countdownInterval = setInterval(() => {
                     countdownValue--;
                     $countdown.find('.countdown').text(countdownValue);
@@ -2162,6 +2155,12 @@ class SubLotProcessPage {
         this.operationDetails = null;
         this.inspectionInfo = null;
         this.rejectionDetails = null;
+    }
+
+    completeFormReset() {
+        this.reset_form();
+        this.wrapper.find('#submit_process_btn').prop('disabled', false);
+        this.wrapper.find('#scan_batch').focus();
     }
 
     printSubLotLabel(processId) {
