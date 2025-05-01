@@ -79,7 +79,7 @@ def get_next_available_batch_number(batch_number):
         frappe.logger().error(f"Error in get_next_available_batch_number: {str(e)}")
         frappe.throw(f"Failed to generate next available batch number: {str(e)}")
 
-
+@frappe.whitelist()
 def check_stock_availability(item_code, batch_number, qty, source_warehouse):
     """
     Check if sufficient stock is available in the source warehouse for the specified batch.
@@ -96,32 +96,12 @@ def check_stock_availability(item_code, batch_number, qty, source_warehouse):
             float: Actual available quantity
     """
     try:
-        # Using frappe.qb approach like ERPNext's stock ledger report
-        from frappe.utils import get_datetime, nowdate
-        from_date = get_datetime("2020-01-01 00:00:00")  # Using same starting date as original
-        to_date = get_datetime(nowdate() + " 23:59:59")  # Current date end
-
-        sle = frappe.qb.DocType("Stock Ledger Entry")
-        query = (
-            frappe.qb.from_(sle)
-            .select(
-                frappe.qb.functions.Sum(sle.actual_qty).as_("total_qty")
-            )
-            .where(
-                (sle.docstatus < 2) & 
-                (sle.is_cancelled == 0) & 
-                (sle.posting_datetime[from_date:to_date]) &
-                (sle.item_code == item_code) &
-                (sle.batch_no == batch_number) &
-                (sle.warehouse == source_warehouse)
-            )
-        )
-        
-        result = query.run(as_dict=True)
-        available_qty = flt(result[0].total_qty) if result and result[0].total_qty else 0
+        # Use ERPNext's built-in get_batch_qty function which is used by the Stock Ledger report
+        from erpnext.stock.doctype.batch.batch import get_batch_qty
+        available_qty = get_batch_qty(batch_number, source_warehouse, item_code)
         
         # Return whether there's enough stock and the available quantity
-        return available_qty >= flt(qty), available_qty
+        return flt(available_qty) >= flt(qty), flt(available_qty)
         
     except Exception as e:
         frappe.logger().error(f"Error checking stock availability: {str(e)}")

@@ -224,30 +224,8 @@ def lot_validation(mixed_barcode, stage, warehouse):
     stock_entry_name = result[0].get("stock_entry_name")
 
     # Get batch quantity using QueryBuilder for better performance
-    from_date = get_datetime("2020-01-01 00:00:00")  # Using fixed starting date
-    to_date = get_datetime(nowdate() + " 23:59:59")  # Current date end
 
-    sle = frappe.qb.DocType("Stock Ledger Entry")
-    query = (
-        frappe.qb.from_(sle)
-        .select(
-            Sum(sle.actual_qty).as_("total_qty")
-        )
-        .where(
-            (sle.docstatus < 2) & 
-            (sle.is_cancelled == 0) & 
-            (sle.posting_datetime[from_date:to_date]) &
-            (sle.item_code == item_code) &
-            (sle.batch_no == fg_batch_no) &
-            (sle.warehouse == warehouse)
-        )
-    )
-    
-    result = query.run(as_dict=True)
-    quantity = flt(result[0].total_qty) if result and result[0].total_qty else 0
-    
-    if quantity <= 0:
-        frappe.throw(f"No Batch Quantity found for Batch: {fg_batch_no} in Warehouse: {warehouse}")
+    quantity = check_stock_availability(item_code, fg_batch_no, warehouse)
     
     # Get UOM information for the item
     uom = frappe.db.get_value("Item", item_code, "stock_uom")
@@ -265,3 +243,28 @@ def lot_validation(mixed_barcode, stage, warehouse):
         "uom": uom,
         "stock_entry": stock_entry_name
     }
+
+@frappe.whitelist()
+def check_stock_availability(item_code, batch_number, source_warehouse):
+    """
+    Check stock availability for a batch in the specified warehouse.
+    
+    Args:
+        item_code (str): The item code to check.
+        batch_number (str): The batch number to check.
+        source_warehouse (str): The source warehouse to check.
+        
+    Returns:
+        float: Actual available quantity
+    """
+    try:
+        # Use ERPNext's built-in get_batch_qty function which is used by the Stock Ledger report
+        from erpnext.stock.doctype.batch.batch import get_batch_qty
+        batch_qty_in_warehouse = get_batch_qty(batch_number, source_warehouse, item_code)
+        
+        # Return the quantity as is, even if it's 0
+        return flt(batch_qty_in_warehouse)
+        
+    except Exception as e:
+        frappe.logger().error(f"Error checking stock availability: {str(e)}")
+        return 0
