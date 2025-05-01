@@ -1535,7 +1535,7 @@ class SubLotProcessPage {
         if (!inspectionQty || inspectionQty <= 0) {
             messageElement.html(`
                 <div class="alert alert-warning">
-                    <i class="fa fa-exclamation-triangle"></i> Please enter a valid inspection quantity
+                    <i class="fa fa-exclamation-triangle"></i> Please enter a valid inspection quantity (must be greater than 0)
                 </div>
             `);
             return;
@@ -1545,28 +1545,30 @@ class SubLotProcessPage {
         const batchQty = parseFloat(this.batchInfo.quantity);
         const enteredQty = parseFloat(inspectionQty);
         
+        // Allow inspection quantity greater than batch quantity, but show a warning
         if (enteredQty > batchQty) {
             messageElement.html(`
-                <div class="alert alert-danger">
-                    <i class="fa fa-exclamation-circle"></i> Inspection quantity (${enteredQty}) cannot exceed available batch quantity (${batchQty})
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i> Warning: Inspection quantity (${enteredQty}) exceeds available batch quantity (${batchQty}). You may continue, but please verify the quantity.
                 </div>
             `);
-            return;
+            
+            // Still proceed with inspection and enable rejection section
+        } else {
+            // Show success message for normal case
+            messageElement.html(`
+                <div class="alert alert-success">
+                    <i class="fa fa-check-circle"></i> Inspection quantity verified: ${inspectionQty}
+                </div>
+            `);
         }
 
         // Store inspection details without any inspector code
         this.inspectionInfo = {
             inspectionQuantity: inspectionQty
         };
-
-        // Show success message and enable rejection section
-        messageElement.html(`
-            <div class="alert alert-success">
-                <i class="fa fa-check-circle"></i> Inspection quantity verified: ${inspectionQty}
-            </div>
-        `);
         
-        // Enable rejection section
+        // Enable rejection section in both cases
         this.enableRejectionSection();
     }
 

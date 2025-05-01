@@ -1,5 +1,6 @@
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, get_datetime, nowdate
+from frappe.query_builder.functions import Sum
 import time
 
 @frappe.whitelist()
@@ -74,34 +75,31 @@ def sub_lot_validation(sublot, stage, warehouse):
     batch_no = item_detail.get("batch_no")
     spp_batch_number = item_detail.get("spp_batch_number") or sublot
     
-    # Now get batch quantity from Item Batch Balance List if it exists
-    batch_qty_result = frappe.db.sql("""
-        SELECT 
-            SUM(qty) as qty
-        FROM 
-            `tabItem Batch Stock Balance`
-        WHERE 
-            batch_no = %s
-            AND warehouse = %s
-    """, (batch_no, warehouse), as_dict=1)
+    # Now get batch quantity using QueryBuilder for better performance
+    from_date = get_datetime("2020-01-01 00:00:00")  # Using fixed starting date
+    to_date = get_datetime(nowdate() + " 23:59:59")  # Current date end
+
+    sle = frappe.qb.DocType("Stock Ledger Entry")
+    query = (
+        frappe.qb.from_(sle)
+        .select(
+            Sum(sle.actual_qty).as_("total_qty")
+        )
+        .where(
+            (sle.docstatus < 2) & 
+            (sle.is_cancelled == 0) & 
+            (sle.posting_datetime[from_date:to_date]) &
+            (sle.item_code == item_code) &
+            (sle.batch_no == batch_no) &
+            (sle.warehouse == warehouse)
+        )
+    )
     
-    # If no results from Item Batch Balance List, try Stock Ledger Entry
-    if not batch_qty_result or not batch_qty_result[0].get("qty"):
-        # Get Batch Quantity from Stock Ledger Entry
-        batch_qty_result = frappe.db.sql("""
-            SELECT 
-                SUM(actual_qty) as qty
-            FROM 
-                `tabStock Ledger Entry`
-            WHERE 
-                batch_no = %s
-                AND warehouse = %s
-        """, (batch_no, warehouse), as_dict=1)
+    result = query.run(as_dict=True)
+    quantity = flt(result[0].total_qty) if result and result[0].total_qty else 0
     
-    if not batch_qty_result or batch_qty_result[0].get("qty") is None:
+    if quantity <= 0:
         frappe.throw(f"No Batch Quantity found for Batch: {batch_no} in Warehouse: {warehouse}")
-    
-    quantity = flt(batch_qty_result[0].get("qty"))
     
     # Get UOM information for the item
     uom = frappe.db.get_value("Item", item_code, "stock_uom")
@@ -225,21 +223,31 @@ def lot_validation(mixed_barcode, stage, warehouse):
     item_code = result[0].get("item_code")
     stock_entry_name = result[0].get("stock_entry_name")
 
-    # Get Batch Quantity with optimized query
-    batch_qty_result = frappe.db.sql("""
-        SELECT 
-            SUM(qty) as qty
-        FROM 
-            `tabItem Batch Stock Balance`
-        WHERE 
-            batch_no = %s
-            AND warehouse = %s
-    """, (fg_batch_no, warehouse), as_dict=1)
-    
-    if not batch_qty_result or not batch_qty_result[0].get("qty"):
-        frappe.throw(f"No Batch Quantity found for Batch: {fg_batch_no} in Warehouse: {warehouse}")
+    # Get batch quantity using QueryBuilder for better performance
+    from_date = get_datetime("2020-01-01 00:00:00")  # Using fixed starting date
+    to_date = get_datetime(nowdate() + " 23:59:59")  # Current date end
 
-    quantity = flt(batch_qty_result[0].get("qty"))
+    sle = frappe.qb.DocType("Stock Ledger Entry")
+    query = (
+        frappe.qb.from_(sle)
+        .select(
+            Sum(sle.actual_qty).as_("total_qty")
+        )
+        .where(
+            (sle.docstatus < 2) & 
+            (sle.is_cancelled == 0) & 
+            (sle.posting_datetime[from_date:to_date]) &
+            (sle.item_code == item_code) &
+            (sle.batch_no == fg_batch_no) &
+            (sle.warehouse == warehouse)
+        )
+    )
+    
+    result = query.run(as_dict=True)
+    quantity = flt(result[0].total_qty) if result and result[0].total_qty else 0
+    
+    if quantity <= 0:
+        frappe.throw(f"No Batch Quantity found for Batch: {fg_batch_no} in Warehouse: {warehouse}")
     
     # Get UOM information for the item
     uom = frappe.db.get_value("Item", item_code, "stock_uom")
