@@ -1,7 +1,7 @@
 frappe.pages['sub_lot_process_page'].on_page_load = function(wrapper) {
     const page = frappe.ui.make_app_page({
         parent: wrapper,
-        title: 'Sub Lot Process',
+        title: 'Finishing Process Entry',
         single_column: true
     });
      show_location_selection_dialog(function(selected) {
