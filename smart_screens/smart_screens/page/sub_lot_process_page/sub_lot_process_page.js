@@ -1715,26 +1715,18 @@ class SubLotProcessPage {
     }
 
     unlockAllFields() {
-        // Only restore the fields that were previously enabled, keep others disabled
-        if (this.formState) {
-            this.wrapper.find('#scan_batch').prop('disabled', this.formState.wasBatchDisabled);
-            this.wrapper.find('#scan_employee').prop('disabled', this.formState.wasEmployeeDisabled);
-            if (this.wrapper.find('#operation_type').length) {
-                this.wrapper.find('#operation_type').prop('disabled', this.formState.wasOperationDisabled);
-            }
-            this.wrapper.find('#inspection_qty').prop('disabled', this.formState.wasInspectionDisabled);
-            this.wrapper.find('#rejection_type').prop('disabled', this.formState.wasRejectionTypeDisabled);
-            this.wrapper.find('#rejection_qty').prop('disabled', this.formState.wasRejectionQtyDisabled);
-        } else {
-            // If no stored state, just enable the batch scan at least
-            this.wrapper.find('#scan_batch').prop('disabled', false);
-        }
+        // Force enable crucial form fields regardless of previous state
+        this.wrapper.find('#scan_batch').prop('disabled', false);
+        this.wrapper.find('#validate_batch_btn').prop('disabled', false);
         
-        // Enable all buttons
+        // Re-enable all buttons
         this.wrapper.find('button').prop('disabled', false);
         
         // Remove the visual indicator
         this.wrapper.find('input, select').removeClass('form-disabled');
+        
+        // Reset any stored state
+        this.formState = null;
     }
 
     submit_process() {
