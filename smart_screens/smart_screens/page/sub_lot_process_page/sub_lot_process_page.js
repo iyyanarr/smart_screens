@@ -206,6 +206,9 @@ class SubLotProcessPage {
             return;
         }
 
+        // Clear all form fields before validating a new batch to prevent operations mismatch
+        this.clearFormFieldsForNewBatch();
+
         resultElement.html(`
             <div class="alert alert-info">
                 <i class="fa fa-spinner fa-spin"></i> Validating batch number...
@@ -1991,26 +1994,7 @@ class SubLotProcessPage {
                 // Re-enable the submit button
                 self.wrapper.find('#submit_process_btn').prop('disabled', false);
                 
-                // Automatically reset the form after 3 seconds
-                setTimeout(() => {
-                    self.completeFormReset();
-                }, 10000); // 10 seconds delay to allow user to see confirmation and print label if needed
-                
-                // Add countdown message
-                const $countdown = $(`<div class="alert alert-info mt-3">
-                    <i class="fa fa-refresh mr-1"></i> Form will reset in <span class="countdown">10</span> seconds. Click "New Process" to reset now.
-                </div>`);
-                $container.append($countdown);
-                
-                // Start countdown
-                let countdownValue = 10;
-                const countdownInterval = setInterval(() => {
-                    countdownValue--;
-                    $countdown.find('.countdown').text(countdownValue);
-                    if (countdownValue <= 0) {
-                        clearInterval(countdownInterval);
-                    }
-                }, 1000);
+                // No automatic reset - user must click the button to reset
                 
                 // Stop polling
                 return false;
@@ -2158,8 +2142,19 @@ class SubLotProcessPage {
     }
 
     completeFormReset() {
+        // First unlock all fields
+        this.unlockAllFields();
+        
+        // Then reset the form
         this.reset_form();
+        
+        // Re-enable the submit button
         this.wrapper.find('#submit_process_btn').prop('disabled', false);
+        
+        // Remove any form-disabled CSS class that might remain
+        this.wrapper.find('input, select').removeClass('form-disabled');
+        
+        // Focus on the batch scan input for next entry
         this.wrapper.find('#scan_batch').focus();
     }
 
@@ -2731,5 +2726,53 @@ class SubLotProcessPage {
             console.error("Error generating barcode data URL:", e);
             return null;
         }
+    }
+
+    // Clear all form fields when a new batch is being validated
+    clearFormFieldsForNewBatch() {
+        // Clear operation section
+        this.operationDetails = null;
+        this.wrapper.find('#operations_table tbody').html(`
+            <tr>
+                <td colspan="4" class="text-center text-muted">No operations added yet</td>
+            </tr>
+        `);
+        this.wrapper.find('#scan_employee').val('');
+        this.wrapper.find('#employee_validation_message').empty();
+        
+        // Clear operation dropdown if it exists
+        if (this.wrapper.find('#operation_type').length > 0) {
+            this.wrapper.find('#operation_type').empty().append('<option value="">-- Select Operation --</option>');
+        }
+        
+        // Clear inspection section
+        this.inspectionInfo = null;
+        this.wrapper.find('#inspection_qty').val('');
+        this.wrapper.find('#inspector_validation_message').empty();
+        
+        // Clear rejection section
+        this.rejectionDetails = null;
+        this.wrapper.find('#rejection_type').val('');
+        this.wrapper.find('#rejection_qty').val('');
+        this.wrapper.find('#rejections_table tbody').html(`
+            <tr>
+                <td colspan="3" class="text-center text-muted">No rejections added</td>
+            </tr>
+        `);
+        
+        // Disable all fields except batch scanning
+        this.wrapper.find('#scan_employee').prop('disabled', true);
+        this.wrapper.find('#add_employee_btn').prop('disabled', true);
+        this.wrapper.find('#inspection_qty').prop('disabled', true);
+        this.wrapper.find('#rejection_type').prop('disabled', true);
+        this.wrapper.find('#rejection_qty').prop('disabled', true);
+        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
+        
+        // Remove any highlight or badge classes added to sections
+        this.wrapper.find('.section').removeClass('highlight-section');
+        this.wrapper.find('.section-head .badge').remove();
+        
+        // Clear the submit message area
+        this.wrapper.find('#submit_message').empty();
     }
 }
