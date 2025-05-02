@@ -903,49 +903,60 @@ class SubLotProcessPage {
             
             .sub-lot-process-page #batch_details_content {
                 background-color: #182234;
-                font-size: 13px;
-                line-height: 1.5;
-                padding: 10px;
+                font-size: 16px;
+                line-height: 1.6;
+                padding: 15px;
                 border-radius: 4px;
                 border: 1px solid #334155;
                 color: #F8FAFC;
+                font-weight: 500;
             }
             
             .sub-lot-process-page #location_details_content {
                 background-color: #1e3a5f;
-                font-size: 13px;
-                line-height: 1.5;
-                padding: 10px;
+                font-size: 16px;
+                line-height: 1.6;
+                padding: 15px;
                 border-radius: 4px;
                 border: 1px solid #334155;
                 color: #F8FAFC;
+                font-weight: 500;
             }
             
             .sub-lot-process-page #bom_details_content {
                 background-color: #0F172A;
-                font-size: 13px;
-                line-height: 1.5;
-                padding: 10px;
+                font-size: 16px;
+                line-height: 1.6;
+                padding: 15px;
                 border-radius: 4px;
                 border: 1px solid #334155;
                 color: #F8FAFC;
+                font-weight: 500;
             }
             
             .sub-lot-process-page .panel-content {
-                font-size: 13px;
-                line-height: 1.5;
+                font-size: 16px;
+                line-height: 1.6;
                 background-color: #0F172A;
-                padding: 10px;
+                padding: 15px;
                 border-radius: 4px;
                 border: 1px solid #334155;
                 color: #F8FAFC;
+                font-weight: 500;
             }
             
             .sub-lot-process-page .info-content div {
-                margin-bottom: 6px;
+                margin-bottom: 8px;
                 color: #F8FAFC;
+                font-weight: 500;
             }
             
+            .sub-lot-process-page .info-content strong {
+                font-weight: 700;
+                color: #38BDF8;
+                text-shadow: 0px 0px 5px rgba(56, 189, 248, 0.3);
+            }
+
             .sub-lot-process-page .placeholder-text {
                 color: #94A3B8;
                 font-style: italic;
