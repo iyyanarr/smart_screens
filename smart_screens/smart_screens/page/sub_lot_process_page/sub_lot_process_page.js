@@ -2148,17 +2148,67 @@ class SubLotProcessPage {
         // First unlock all fields
         this.unlockAllFields();
         
-        // Then reset the form
+        // Then reset the form completely
         this.reset_form();
+        
+        // CRITICAL: Immediately re-enable batch scanning which is the first step
+        this.wrapper.find('#scan_batch').prop('disabled', false);
+        this.wrapper.find('#validate_batch_btn').prop('disabled', false);
+        
+        // CRITICAL: Clear all form state data
+        this.batchInfo = null;
+        this.operationDetails = [];
+        this.inspectionInfo = null;
+        this.rejectionDetails = [];
+        this.formState = null;
+        this.bom_details = null;
+        
+        // Reset batch input field
+        this.wrapper.find('#scan_batch').val('');
+        
+        // Reset batch details contents to default
+        this.wrapper.find('#batch_details_content').html(`<div class="placeholder-text">Batch information will appear here after scanning</div>`);
+        this.wrapper.find('#location_details_content').html(`<div class="placeholder-text">Location information will appear here after scanning</div>`);
+        this.wrapper.find('#bom_details_content').html(`<div class="placeholder-text">BOM details will appear here after scanning</div>`);
+        
+        // Clear all validation messages
+        this.wrapper.find('#batch_validation_result').empty();
+        this.wrapper.find('#employee_validation_message').empty();
+        this.wrapper.find('#inspector_validation_message').empty();
+        this.wrapper.find('#submit_message').empty();
+        
+        // Remove the form-disabled CSS class
+        this.wrapper.find('input, select').removeClass('form-disabled');
         
         // Re-enable the submit button
         this.wrapper.find('#submit_process_btn').prop('disabled', false);
         
-        // Remove any form-disabled CSS class that might remain
-        this.wrapper.find('input, select').removeClass('form-disabled');
+        // Properly disable fields that should be disabled in the initial state
+        // (we want only batch scanning to be enabled at the start)
+        this.wrapper.find('#scan_employee').prop('disabled', true);
+        this.wrapper.find('#add_employee_btn').prop('disabled', true);
+        this.wrapper.find('#inspection_qty').prop('disabled', true);
+        this.wrapper.find('#verify_inspector_btn').prop('disabled', false);
+        this.wrapper.find('#rejection_type').prop('disabled', true);
+        this.wrapper.find('#rejection_qty').prop('disabled', true);
+        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
+        
+        // Remove any section highlight classes that may have been added
+        this.wrapper.find('.inspection-section').removeClass('highlight-section');
+        this.wrapper.find('.rejection-section').removeClass('highlight-section');
+        
+        // Remove any badges added to section headers
+        this.wrapper.find('.section-head .badge').remove();
+        
+        // Remove operation dropdown if it exists
+        if (this.wrapper.find('#operation_type').length) {
+            this.wrapper.find('#operation_type').closest('.form-group').remove();
+        }
         
         // Focus on the batch scan input for next entry
         this.wrapper.find('#scan_batch').focus();
+        
+        console.log("Form has been completely reset to initial state");
     }
 
     printSubLotLabel(processId) {
@@ -2560,25 +2610,21 @@ class SubLotProcessPage {
             .label-key {
                 font-weight: bold;
                 width: 25%;
-                text-align: right;
-                padding-right: 1mm;
-                color: #555;
+                padding: 1mm;
             }
             
             .label-value {
                 width: 25%;
-                padding-left: 1mm;
-                font-weight: bold;
-                color: #000;
+                padding: 1mm;
             }
             
             .label-footer {
-                margin-top: auto;
+                margin-top: 2mm;
                 text-align: center;
                 font-size: 7pt;
                 color: #777;
-                border-top: 0.3mm solid #eee;
-                padding-top: 2mm;
+                border-top: 0.3mm solid #ddd;
+                padding-top: 1mm;
             }
             
             .footer-note {
@@ -2588,194 +2634,54 @@ class SubLotProcessPage {
             .no-operations {
                 text-align: center;
                 font-style: italic;
-                font-size: 7pt;
-                color: #999;
+                color: #777;
                 padding: 2mm;
+                font-size: 8pt;
             }
             
-            /* For printing */
+            /* Additional styles for better printing */
             @media print {
-                html, body {
-                    width: 100mm;
-                    height: 150mm;
-                    margin: 0;
-                    padding: 0;
-                }
-                
-                .label-container {
-                    page-break-after: avoid;
-                    page-break-inside: avoid;
-                }
+                body { margin: 0; padding: 0; }
+                .label-container { page-break-after: always; }
             }
         `;
     }
 
-    generateLabelHtml(data) {
-        // Generate direct data URL for the barcode (more reliable than API)
-        const barcodeContent = `
-            <svg id="barcode"></svg>
-            <script>
-                JsBarcode("#barcode", "${data.sub_lot_number || 'N/A'}", {
-                    format: "CODE128",
-                    width: 2,
-                    height: 70,
-                    displayValue: false
-                });
-            </script>
-        `;
-
-        // Generate HTML for the label with improved barcode visibility and focus on sublot info and operations
-        return `
-            <div class="label-container">
-                <div class="label-header">
-                    <div class="company-logo">
-                        <img src="/assets/smart_screens/images/logo.png" alt="Company Logo">
-                    </div>
-                    <div class="label-title">SUB LOT</div>
-                </div>
-                
-                <!-- SUB LOT NUMBER with BARCODE -->
-                <div class="label-section main-barcode-section">
-                    <div class="section-title">SUB LOT NUMBER</div>
-                    <div class="label-barcode">
-                        <div class="barcode-container">${barcodeContent}</div>
-                        <div class="barcode-number">${data.sub_lot_number || 'N/A'}</div>
-                    </div>
-                </div>
-                
-                <!-- Item and Batch Information -->
-                <div class="item-info-section">
-                    <table class="details-table">
-                        <tr>
-                            <td class="label-key">Item Code:</td>
-                            <td class="label-value">${data.item_code || 'N/A'}</td>
-                            <td class="label-key">Batch:</td>
-                            <td class="label-value">${data.batch_no || 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td class="label-key">Qty:</td>
-                            <td class="label-value">${data.sublot_qty || 'N/A'} ${data.stock_uom || ''}</td>
-                            <td class="label-key">Date:</td>
-                            <td class="label-value">${frappe.datetime.str_to_user(data.creation) || 'N/A'}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <!-- Operations Information -->
-                <div class="operations-section">
-                    <div class="section-title">OPERATIONS</div>
-                    <div class="operations-list">
-                        ${this.generateOperationsList(data)}
-                    </div>
-                </div>
-                
-                <div class="label-footer">
-                    <div class="footer-note">Smart Screens Processing System</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Generate operations list
-    generateOperationsList(data) {
-        if (!data.operations || !data.operations.length) {
-            return '<div class="no-operations">No operations data available</div>';
-        }
-        
-        let html = '<table class="operations-table">';
-        html += '<tr><th>Operation</th><th>Employee</th></tr>';
-        
-        data.operations.forEach(op => {
-            html += `
-                <tr>
-                    <td>${op.operation || 'N/A'}</td>
-                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</table>';
-        return html;
-    }
-
-    // Alternate method in case JsBarcode is not available
-    generateBarcodeDataUrl(data, width, height) {
-        // Function to generate a simple barcode using HTML canvas
-        try {
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            
-            // Clear background
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, width, height);
-            
-            // Draw simple black lines (primitive barcode representation)
-            let x = 10;
-            const chars = data.split('');
-            ctx.fillStyle = '#000000';
-            
-            for (let i = 0; i < chars.length; i++) {
-                const charCode = chars[i].charCodeAt(0);
-                const barWidth = 2 + (charCode % 3);
-                
-                ctx.fillRect(x, 5, barWidth, height - 10);
-                x += barWidth + 2;
-            }
-            
-            return canvas.toDataURL('image/png');
-        } catch (e) {
-            console.error("Error generating barcode data URL:", e);
-            return null;
-        }
-    }
-
-    // Clear all form fields when a new batch is being validated
     clearFormFieldsForNewBatch() {
-        // Clear operation section
+        // Reset operations
         this.operationDetails = null;
         this.wrapper.find('#operations_table tbody').html(`
             <tr>
                 <td colspan="4" class="text-center text-muted">No operations added yet</td>
             </tr>
         `);
-        this.wrapper.find('#scan_employee').val('');
-        this.wrapper.find('#employee_validation_message').empty();
         
-        // Clear operation dropdown if it exists
-        if (this.wrapper.find('#operation_type').length > 0) {
-            this.wrapper.find('#operation_type').empty().append('<option value="">-- Select Operation --</option>');
-        }
-        
-        // Clear inspection section
+        // Reset inspection
         this.inspectionInfo = null;
         this.wrapper.find('#inspection_qty').val('');
-        this.wrapper.find('#inspector_validation_message').empty();
+        this.wrapper.find('#inspection_qty').prop('disabled', true);
         
-        // Clear rejection section
+        // Reset rejection
         this.rejectionDetails = null;
         this.wrapper.find('#rejection_type').val('');
         this.wrapper.find('#rejection_qty').val('');
+        this.wrapper.find('#rejection_type').prop('disabled', true);
+        this.wrapper.find('#rejection_qty').prop('disabled', true);
+        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
         this.wrapper.find('#rejections_table tbody').html(`
             <tr>
                 <td colspan="3" class="text-center text-muted">No rejections added</td>
             </tr>
         `);
         
-        // Disable all fields except batch scanning
-        this.wrapper.find('#scan_employee').prop('disabled', true);
-        this.wrapper.find('#add_employee_btn').prop('disabled', true);
-        this.wrapper.find('#inspection_qty').prop('disabled', true);
-        this.wrapper.find('#rejection_type').prop('disabled', true);
-        this.wrapper.find('#rejection_qty').prop('disabled', true);
-        this.wrapper.find('#add_rejection_btn').prop('disabled', true);
-        
-        // Remove any highlight or badge classes added to sections
-        this.wrapper.find('.section').removeClass('highlight-section');
-        this.wrapper.find('.section-head .badge').remove();
-        
-        // Clear the submit message area
+        // Clear validation messages
+        this.wrapper.find('#employee_validation_message').empty();
+        this.wrapper.find('#inspector_validation_message').empty();
         this.wrapper.find('#submit_message').empty();
+        
+        // Remove operation dropdown if it exists
+        if (this.wrapper.find('#operation_type').length) {
+            this.wrapper.find('#operation_type').closest('.form-group').remove();
+        }
     }
 }
