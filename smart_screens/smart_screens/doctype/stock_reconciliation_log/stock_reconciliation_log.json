@@ -1,6 +1,7 @@
 {
+ "actions": [],
  "autoname": "format:STKRECLOG-{####}",
- "creation": "2023-12-05 10:00:00.000000",
+ "creation": "2023-12-05 10:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -18,7 +19,6 @@
   "difference",
   "column_break_13",
   "stock_reconciliation",
-  "creation_document",
   "created_by",
   "section_break_17",
   "reason",
@@ -114,12 +114,6 @@
    "options": "Stock Reconciliation"
   },
   {
-   "fieldname": "creation_document",
-   "fieldtype": "Dynamic Link",
-   "label": "Creation Document",
-   "options": "creation_doctype"
-  },
-  {
    "fieldname": "created_by",
    "fieldtype": "Link",
    "label": "Created By",
@@ -143,7 +137,8 @@
    "label": "Comments"
   }
  ],
- "modified": "2023-12-05 10:00:00.000000",
+ "links": [],
+ "modified": "2025-05-03 12:40:48.868518",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Stock Reconciliation Log",
@@ -163,7 +158,6 @@
   },
   {
    "create": 1,
-   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
@@ -183,7 +177,9 @@
    "share": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }

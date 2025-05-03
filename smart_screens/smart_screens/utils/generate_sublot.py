@@ -388,8 +388,7 @@ def create_stock_reconciliation(item_code, batch_number, warehouse, qty_required
 
 
 def create_stock_reconciliation_log(item_code, batch_no, warehouse, actual_qty, expected_qty, 
-                                   stock_reconciliation=None, creation_document=None, 
-                                   creation_doctype=None, reason=None, comments=None):
+                                   stock_reconciliation=None, reason=None, comments=None):
     """
     Create a log entry for stock reconciliation for supervisor review.
     
@@ -426,9 +425,6 @@ def create_stock_reconciliation_log(item_code, batch_no, warehouse, actual_qty, 
         if stock_reconciliation:
             log_entry.stock_reconciliation = stock_reconciliation
             
-        if creation_document and creation_doctype:
-            log_entry.creation_document = creation_document
-            log_entry.creation_doctype = creation_doctype
             
         if reason:
             log_entry.reason = reason
