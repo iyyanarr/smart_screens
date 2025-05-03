@@ -1783,9 +1783,25 @@ class SubLotProcessPage {
             `);
             return;
         }
+        
+        // Check if form is already being submitted - prevent double submissions
+        if (this.isSubmitting) {
+            console.log("Form submission already in progress, preventing duplicate submission");
+            return;
+        }
+        
+        // Set flag to indicate submission is in progress
+        this.isSubmitting = true;
 
         // LOCK ALL FORM FIELDS - New functionality
         this.lockAllFields();
+        
+        // Immediately disable the submit button to prevent double submissions
+        this.wrapper.find('#submit_process_btn').prop('disabled', true)
+            .addClass('disabled')
+            .css('pointer-events', 'none')
+            .attr('disabled', 'disabled')
+            .html('<i class="fa fa-spinner fa-spin mr-2"></i> Processing...');
 
         // Initialize basic progress tracker with a progress bar
         messageElement.html(`
@@ -1853,9 +1869,6 @@ class SubLotProcessPage {
             locationInfo: this.location_data || [] // Add location data to form submission
         };
 
-        // Disable the submit button to prevent double submissions
-        this.wrapper.find('#submit_process_btn').prop('disabled', true);
-
         // Submit the process record
         frappe.call({
             method: "smart_screens.smart_screens.api.sub_lot_process.create_sublot_process",
@@ -1877,7 +1890,13 @@ class SubLotProcessPage {
                     this.startStatusPolling(trackerId);
                 } else {
                     // Re-enable the submit button and unlock fields if submission fails
-                    this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                    this.isSubmitting = false;
+                    this.wrapper.find('#submit_process_btn')
+                        .prop('disabled', false)
+                        .removeClass('disabled')
+                        .css('pointer-events', 'auto')
+                        .removeAttr('disabled')
+                        .html('<i class="fa fa-check-circle mr-2"></i> Submit Process');
                     this.unlockAllFields();
                     
                     const errorMsg = response.message ? response.message.message : "Failed to save process";
@@ -1891,7 +1910,13 @@ class SubLotProcessPage {
             },
             error: (err) => {
                 // Re-enable the submit button and unlock fields if there's an error
-                this.wrapper.find('#submit_process_btn').prop('disabled', false);
+                this.isSubmitting = false;
+                this.wrapper.find('#submit_process_btn')
+                    .prop('disabled', false)
+                    .removeClass('disabled')
+                    .css('pointer-events', 'auto')
+                    .removeAttr('disabled')
+                    .html('<i class="fa fa-check-circle mr-2"></i> Submit Process');
                 this.unlockAllFields();
                 
                 console.error("Error saving process:", err);
@@ -2148,8 +2173,19 @@ class SubLotProcessPage {
         // First unlock all fields
         this.unlockAllFields();
         
+        // Reset the submission state flag
+        this.isSubmitting = false;
+        
         // Then reset the form completely
         this.reset_form();
+        
+        // CRITICAL: Immediately reset the submit button to its original state
+        this.wrapper.find('#submit_process_btn')
+            .prop('disabled', false)
+            .removeClass('disabled')
+            .css('pointer-events', 'auto')
+            .removeAttr('disabled')
+            .html('<i class="fa fa-check-circle mr-2"></i> Submit Process');
         
         // CRITICAL: Immediately re-enable batch scanning which is the first step
         this.wrapper.find('#scan_batch').prop('disabled', false);
@@ -2179,9 +2215,6 @@ class SubLotProcessPage {
         
         // Remove the form-disabled CSS class
         this.wrapper.find('input, select').removeClass('form-disabled');
-        
-        // Re-enable the submit button
-        this.wrapper.find('#submit_process_btn').prop('disabled', false);
         
         // Properly disable fields that should be disabled in the initial state
         // (we want only batch scanning to be enabled at the start)
@@ -2465,11 +2498,11 @@ class SubLotProcessPage {
     }
 
     getLabelStyles() {
-        // CSS styles for the label - resized for single page printing
+        // CSS styles for the label - resized for A4 printing
         return `
             @page {
-                size: 100mm 150mm; /* Standard label size */
-                margin: 3mm; /* Minimal margins */
+                size: A4 portrait; /* Standard A4 size */
+                margin: 0.5cm; /* Small margins */
             }
             
             body {
@@ -2480,32 +2513,31 @@ class SubLotProcessPage {
             }
             
             .label-container {
-                width: 94mm;
-                height: 144mm;
-                padding: 3mm;
+                width: 100%;
+                max-width: 21cm; /* A4 width */
+                padding: 0.8cm;
                 box-sizing: border-box;
-                border: 0.5mm solid #ccc;
+                border: 1px solid #ccc;
                 background-color: white;
-                display: flex;
-                flex-direction: column;
-                page-break-after: avoid;
-                overflow: hidden;
+                font-size: 10pt;
             }
             
             .label-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 3mm;
+                margin-bottom: 0.5cm;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 0.5cm;
             }
             
             .company-logo img {
-                height: 10mm;
-                max-width: 20mm;
+                height: 1.5cm;
+                max-width: 4cm;
             }
             
             .label-title {
-                font-size: 10pt;
+                font-size: 16pt;
                 font-weight: bold;
                 color: #333;
                 text-align: center;
@@ -2514,135 +2546,125 @@ class SubLotProcessPage {
             
             /* Main barcode section */
             .main-barcode-section {
-                margin: 2mm 0;
-                border: 0.5mm solid #000;
-                border-radius: 1mm;
-                padding: 2mm;
-                background-color: #f9f9f9;
+                margin: 0.5cm 0;
+                border: 1px solid #000;
+                padding: 0.5cm;
+                background-color: #fff;
+                text-align: center;
             }
             
             .label-section {
-                margin: 2mm 0;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                padding: 2mm;
-                background-color: #f9f9f9;
+                margin: 0.5cm 0;
+                border: 1px solid #ddd;
+                padding: 0.5cm;
+                background-color: #fff;
             }
             
             .section-title {
-                font-size: 9pt;
+                font-size: 12pt;
                 font-weight: bold;
                 color: #333;
                 text-align: center;
-                margin-bottom: 2mm;
-                border-bottom: 0.3mm solid #ddd;
-                padding-bottom: 1mm;
+                margin-bottom: 0.3cm;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 0.2cm;
             }
             
             .label-barcode {
                 text-align: center;
-                margin: 2mm 0;
+                margin: 0.5cm 0;
             }
             
             .barcode-container {
                 margin: 0 auto;
-                width: 80mm;
-                height: 15mm;
-            }
-            
-            .barcode-container svg {
-                width: 100%;
-                height: 100%;
+                width: 80%;
+                height: 2cm;
             }
             
             .barcode-number {
-                font-size: 10pt;
-                margin-top: 1mm;
+                font-size: 12pt;
+                margin-top: 0.2cm;
                 font-weight: bold;
             }
             
             .item-info-section {
-                margin: 2mm 0;
-                padding: 2mm;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                background-color: #f9f9f9;
+                margin: 0.5cm 0;
+                padding: 0.5cm;
+                border: 1px solid #ddd;
+                background-color: #fff;
             }
             
             .operations-section {
-                margin: 2mm 0;
-                padding: 2mm;
-                border: 0.3mm solid #ddd;
-                border-radius: 1mm;
-                background-color: #f9f9f9;
-                flex-grow: 1;
-                overflow-y: auto;
+                margin: 0.5cm 0;
+                padding: 0.5cm;
+                border: 1px solid #ddd;
+                background-color: #fff;
             }
             
             .operations-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 8pt;
+                margin-top: 0.3cm;
             }
             
             .operations-table th {
-                background-color: #eee;
-                padding: 1mm;
+                background-color: #f4f4f4;
+                padding: 0.2cm;
                 text-align: left;
-                border-bottom: 0.5mm solid #ddd;
+                border-bottom: 1px solid #ddd;
+                font-weight: bold;
             }
             
             .operations-table td {
-                padding: 1mm;
-                border-bottom: 0.3mm solid #ddd;
+                padding: 0.2cm;
+                border-bottom: 1px solid #eee;
             }
             
             .details-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 8pt;
+                margin-top: 0.3cm;
             }
             
             .details-table tr {
-                height: 5mm;
+                height: 0.8cm;
             }
             
             .label-key {
                 font-weight: bold;
                 width: 25%;
-                padding: 1mm;
+                text-align: right;
+                padding-right: 0.5cm;
             }
             
             .label-value {
                 width: 25%;
-                padding: 1mm;
             }
             
             .label-footer {
-                margin-top: 2mm;
+                margin-top: 0.5cm;
                 text-align: center;
-                font-size: 7pt;
+                font-size: 8pt;
                 color: #777;
-                border-top: 0.3mm solid #ddd;
-                padding-top: 1mm;
+                border-top: 1px solid #ddd;
+                padding-top: 0.3cm;
             }
             
             .footer-note {
-                margin-bottom: 1mm;
+                margin-bottom: 0.2cm;
             }
             
             .no-operations {
                 text-align: center;
                 font-style: italic;
                 color: #777;
-                padding: 2mm;
-                font-size: 8pt;
+                padding: 0.3cm;
             }
             
             /* Additional styles for better printing */
             @media print {
                 body { margin: 0; padding: 0; }
-                .label-container { page-break-after: always; }
+                .label-container { border: none; }
             }
         `;
     }
