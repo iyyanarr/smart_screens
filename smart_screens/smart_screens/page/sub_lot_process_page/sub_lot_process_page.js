@@ -2365,21 +2365,67 @@ class SubLotProcessPage {
                 if (response.message && response.message.status === "success") {
                     const data = response.message.data;
                     
+                    // Debug logging to find issues with quantity values
+                    console.log("Label data received:", data);
+                    
                     // Store sublot number for reference
                     dialog.sublotNumber = data.sub_lot_number || 'N/A';
                     
-                    // Calculate qty after rejection
-                    let inspectionQty = parseFloat(data.inspection_qty || 0);
+                    // Calculate qty after rejection with better type handling
+                    let inspectionQty = parseFloat(data.sublotQty || 0);
                     let totalRejectionQty = 0;
                     
-                    if (data.rejections && data.rejections.length > 0) {
-                        data.rejections.forEach(rejection => {
-                            totalRejectionQty += parseFloat(rejection.qty || 0);
+                    // Look for rejections in both possible locations: 'rejections' and 'rejection_items'
+                    let rejectionData = null;
+                    if (data.rejection_items && Array.isArray(data.rejection_items) && data.rejection_items.length > 0) {
+                        console.log("Found rejections in rejection_items:", data.rejection_items);
+                        rejectionData = data.rejection_items;
+                    } else if (data.rejections && Array.isArray(data.rejections) && data.rejections.length > 0) {
+                        console.log("Found rejections in rejections:", data.rejections);
+                        rejectionData = data.rejections;
+                    }
+                    
+                    // Process rejection data if available
+                    if (rejectionData) {
+                        rejectionData.forEach(rejection => {
+                            // The quantity field might be named 'qty' or 'quantity'
+                            const rejQty = parseFloat(rejection.quantity || rejection.qty || 0);
+                            const rejType = rejection.rejection_type || rejection.type || "Unknown";
+                            console.log(`Rejection: ${rejType}, Qty: ${rejQty}`);
+                            if (!isNaN(rejQty)) {
+                                totalRejectionQty += rejQty;
+                            }
                         });
                     }
                     
-                    let qtyAfterRejection = inspectionQty - totalRejectionQty;
-                    if (isNaN(qtyAfterRejection)) qtyAfterRejection = data.sublot_qty || 0;
+                    console.log(`Inspection Qty: ${inspectionQty}, Total Rejection Qty: ${totalRejectionQty}`);
+                    
+                    // Handle the case where inspection quantity is 0 or not set
+                    // In this case, final quantity should be (sublot_qty - rejection_qty)
+                    let qtyAfterRejection;
+                    let sublotQty = parseFloat(data.sublot_qty || 0);
+                    
+                    if (inspectionQty <= 0) {
+                        // If inspection quantity isn't set, use the sublot quantity as base
+                        console.log("Using sublot quantity as base because inspection qty is 0");
+                        qtyAfterRejection = sublotQty - totalRejectionQty;
+                    } else {
+                        // Normal case: inspection quantity is set
+                        qtyAfterRejection = inspectionQty - totalRejectionQty;
+                    }
+                    
+                    // Ensure we don't have negative quantities
+                    if (isNaN(qtyAfterRejection) || qtyAfterRejection < 0) {
+                        console.log("Calculated negative quantity, using 0 instead");
+                        qtyAfterRejection = 0;
+                    }
+                    
+                    console.log(`Final Qty After Rejection: ${qtyAfterRejection}`);
+                    
+                    // Format numbers to avoid showing too many decimal places
+                    inspectionQty = inspectionQty.toFixed(2).replace(/\.00$/, '');
+                    totalRejectionQty = totalRejectionQty.toFixed(2).replace(/\.00$/, '');
+                    qtyAfterRejection = qtyAfterRejection.toFixed(2).replace(/\.00$/, '');
                     
                     // Pre-generate HTML sections to pass to print window
                     dialog.itemSection = `
@@ -2408,15 +2454,15 @@ class SubLotProcessPage {
                             <table class="details-table">
                                 <tr>
                                     <td class="label-key">Inspection Qty:</td>
-                                    <td class="label-value">${inspectionQty} ${data.stock_uom || ''}</td>
+                                    <td class="label-value">${inspectionQty} </td>
                                 </tr>
                                 <tr>
                                     <td class="label-key">Rejection Qty:</td>
-                                    <td class="label-value">${totalRejectionQty} ${data.stock_uom || ''}</td>
+                                    <td class="label-value">${totalRejectionQty}</td>
                                 </tr>
                                 <tr>
                                     <td class="label-key">Final Qty:</td>
-                                    <td class="label-value"><strong>${qtyAfterRejection} ${data.stock_uom || ''}</strong></td>
+                                    <td class="label-value"><strong>${qtyAfterRejection} </strong></td>
                                 </tr>
                             </table>
                         </div>
