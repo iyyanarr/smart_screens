@@ -2301,8 +2301,8 @@ class SubLotProcessPage {
                             <!-- Item and Batch Information -->
                             ${dialog.itemSection || ''}
                             
-                            <!-- Operations Information -->
-                            ${dialog.operationsSection || ''}
+                            <!-- Qty After Rejection Information -->
+                            ${dialog.qtyAfterRejectionSection || ''}
                             
                             <div class="label-footer">
                                 <div class="footer-note">Smart Screens Processing System</div>
@@ -2368,6 +2368,19 @@ class SubLotProcessPage {
                     // Store sublot number for reference
                     dialog.sublotNumber = data.sub_lot_number || 'N/A';
                     
+                    // Calculate qty after rejection
+                    let inspectionQty = parseFloat(data.inspection_qty || 0);
+                    let totalRejectionQty = 0;
+                    
+                    if (data.rejections && data.rejections.length > 0) {
+                        data.rejections.forEach(rejection => {
+                            totalRejectionQty += parseFloat(rejection.qty || 0);
+                        });
+                    }
+                    
+                    let qtyAfterRejection = inspectionQty - totalRejectionQty;
+                    if (isNaN(qtyAfterRejection)) qtyAfterRejection = data.sublot_qty || 0;
+                    
                     // Pre-generate HTML sections to pass to print window
                     dialog.itemSection = `
                         <div class="item-info-section">
@@ -2388,29 +2401,26 @@ class SubLotProcessPage {
                         </div>
                     `;
                     
-                    // Generate operations HTML section
-                    let operationsHtml = '<div class="operations-section"><div class="section-title">OPERATIONS</div>';
-                    
-                    if (data.operations && data.operations.length > 0) {
-                        operationsHtml += '<table class="operations-table">';
-                        operationsHtml += '<tr><th>Operation</th><th>Employee</th></tr>';
-                        
-                        data.operations.forEach(op => {
-                            operationsHtml += `
+                    // Generate quantity after rejection section
+                    dialog.qtyAfterRejectionSection = `
+                        <div class="qty-section">
+                            <div class="section-title">QUANTITY DETAILS</div>
+                            <table class="details-table">
                                 <tr>
-                                    <td>${op.operation || 'N/A'}</td>
-                                    <td>${op.employee_name || op.employee_code || 'N/A'}</td>
+                                    <td class="label-key">Inspection Qty:</td>
+                                    <td class="label-value">${inspectionQty} ${data.stock_uom || ''}</td>
                                 </tr>
-                            `;
-                        });
-                        
-                        operationsHtml += '</table>';
-                    } else {
-                        operationsHtml += '<div class="no-operations">No operations data available</div>';
-                    }
-                    
-                    operationsHtml += '</div>';
-                    dialog.operationsSection = operationsHtml;
+                                <tr>
+                                    <td class="label-key">Rejection Qty:</td>
+                                    <td class="label-value">${totalRejectionQty} ${data.stock_uom || ''}</td>
+                                </tr>
+                                <tr>
+                                    <td class="label-key">Final Qty:</td>
+                                    <td class="label-value"><strong>${qtyAfterRejection} ${data.stock_uom || ''}</strong></td>
+                                </tr>
+                            </table>
+                        </div>
+                    `;
                     
                     // Generate preview HTML
                     let previewHtml = `
@@ -2431,7 +2441,7 @@ class SubLotProcessPage {
                             </div>
                             
                             ${dialog.itemSection.replace(/<td/g, '<td style="padding: 3px; font-size: 12px;"')}
-                            ${dialog.operationsSection.replace(/<th/g, '<th style="background-color: #eee; padding: 5px; text-align: left; font-size: 12px;"').replace(/<td/g, '<td style="padding: 3px; font-size: 12px; border-bottom: 1px solid #eee;"')}
+                            ${dialog.qtyAfterRejectionSection.replace(/<td/g, '<td style="padding: 3px; font-size: 12px;"')}
                             
                             <div style="margin-top: 10px; text-align: center; font-size: 11px; color: #777; border-top: 1px solid #eee; padding-top: 5px;">
                                 Smart Screens Processing System
