@@ -1,0 +1,29 @@
+{
+  "content_type": null,
+  "creation": "2025-05-07 14:33:11.123456",
+  "docstatus": 0,
+  "doctype": "Page",
+  "idx": 0,
+  "modified": "2025-05-07 14:33:11.123456",
+  "modified_by": "Administrator",
+  "module": "Smart Screens",
+  "name": "sublot-import-tool",
+  "owner": "Administrator",
+  "page_name": "sublot-import-tool",
+  "roles": [
+    {
+      "role": "System Manager"
+    },
+    {
+      "role": "Manufacturing User"
+    },
+    {
+      "role": "Smart Screen User"
+    }
+  ],
+  "script": null,
+  "standard": "Yes",
+  "style": null,
+  "system_page": 0,
+  "title": "Sublot Import Tool"
+}
