@@ -16,6 +16,7 @@ class SubLotBulkImportTool {
         
         // Initialize variables to store data
         this.parsed_data = null;
+        this.import_completed = false; // Add flag to track import status
         
         // Add actions in the page header
         this.page.set_primary_action('Reset Form', () => this.reset_form(), 'fa fa-refresh');
@@ -1525,6 +1526,23 @@ class SubLotBulkImportTool {
         
         // Show the preview section again for detailed results
         this.wrapper.find('.preview-section').show();
+        
+        // Mark import as completed
+        this.import_completed = true;
+        
+        // Disable the import button to prevent duplicate imports
+        const importBtn = this.wrapper.find('#import_all_btn');
+        importBtn.prop('disabled', true);
+        importBtn.html('<i class="fa fa-check mr-1"></i> Import Completed');
+        importBtn.removeClass('btn-success').addClass('btn-secondary');
+        
+        // Add a warning message about duplicate imports
+        this.wrapper.find('.preview-section .section-body').prepend(`
+            <div class="alert alert-warning mb-3" id="import_completed_warning">
+                <i class="fa fa-exclamation-triangle mr-2"></i>
+                <strong>Import already completed!</strong> To process new data, please click the "Reset Form" button in the page header.
+            </div>
+        `);
     }
     
     format_number(number) {
