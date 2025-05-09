@@ -150,7 +150,7 @@ def create_sublot_process(form_data):
                     "quantity": quantity
                 })
         
-        # Update progress - Adding location information
+        # Update progress - Adding location informationssss
         process_tracker.current_stage = "Location Setup"
         process_tracker.progress_percent = 70
         process_tracker.stage_description = "Adding location information..."
@@ -589,6 +589,7 @@ def create_simplified_sublot_process(batch_info, inspection_qty=None, rejection_
         # 6. Save the document in draft mode
         try:
             process_doc.insert()
+            process_doc.submit()
             
             # Verify rejections were added correctly
             saved_doc = frappe.get_doc("Sub Lot Process", process_doc.name)

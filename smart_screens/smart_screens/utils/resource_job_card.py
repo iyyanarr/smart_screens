@@ -254,54 +254,61 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         inspection_entry.warehouse = sublot_process.warehouse
         
         # Set quantity information - Use inspection_quantity field from sublot_process if available
+        # Convert all quantities to float to avoid type mismatches
         if hasattr(sublot_process, 'inspection_quantity') and sublot_process.inspection_quantity:
-            inspection_entry.inspected_qty_nos = sublot_process.inspection_quantity
-            inspection_entry.total_inspected_qty_nos = sublot_process.inspection_quantity
-            inspection_entry.available_qty_nos = sublot_process.inspection_quantity
+            inspection_entry.inspected_qty_nos = float(sublot_process.inspection_quantity)
+            inspection_entry.total_inspected_qty_nos = float(sublot_process.inspection_quantity)
+            inspection_entry.available_qty_nos = float(sublot_process.inspection_quantity)
         elif hasattr(sublot_process, 'available_quantity') and sublot_process.available_quantity:
-            inspection_entry.inspected_qty_nos = sublot_process.available_quantity
-            inspection_entry.total_inspected_qty_nos = sublot_process.available_quantity
-            inspection_entry.available_qty_nos = sublot_process.available_quantity
+            inspection_entry.inspected_qty_nos = float(sublot_process.available_quantity)
+            inspection_entry.total_inspected_qty_nos = float(sublot_process.available_quantity)
+            inspection_entry.available_qty_nos = float(sublot_process.available_quantity)
         else:
             # Set default values
-            inspection_entry.inspected_qty_nos = 1
-            inspection_entry.total_inspected_qty_nos = 1
-            inspection_entry.available_qty_nos = 1
+            inspection_entry.inspected_qty_nos = 1.0
+            inspection_entry.total_inspected_qty_nos = 1.0
+            inspection_entry.available_qty_nos = 1.0
         
         # Set rejection details
-        inspection_entry.rejected_qty_nos = 0  # Default to 0 rejected quantity
+        inspection_entry.rejected_qty_nos = 0.0  # Default to 0 rejected quantity
         inspection_entry.rejection_reason = ""  # Empty rejection reason by default
         
         # If sublot_process has rejection details, use those
         if hasattr(sublot_process, 'rejected_quantity') and sublot_process.rejected_quantity:
-            inspection_entry.rejected_qty_nos = sublot_process.rejected_quantity
+            inspection_entry.rejected_qty_nos = float(sublot_process.rejected_quantity)
             
         if hasattr(sublot_process, 'rejection_reason') and sublot_process.rejection_reason:
             inspection_entry.rejection_reason = sublot_process.rejection_reason
             
         # Calculate accepted quantity (inspected - rejected)
         if hasattr(inspection_entry, 'inspected_qty_nos') and hasattr(inspection_entry, 'rejected_qty_nos'):
-            inspection_entry.accepted_qty_nos = inspection_entry.inspected_qty_nos - inspection_entry.rejected_qty_nos
+            # Ensure both values are floats before subtraction
+            inspected_qty = float(inspection_entry.inspected_qty_nos)
+            rejected_qty = float(inspection_entry.rejected_qty_nos)
+            inspection_entry.accepted_qty_nos = inspected_qty - rejected_qty
         
         # Add rejection details from sublot process to the inspection entry
-        total_rejected = 0
+        total_rejected = 0.0
         if hasattr(sublot_process, 'rejection_items') and sublot_process.rejection_items:
             for item in sublot_process.rejection_items:
                 # Add each rejection item from sublot process to inspection entry
                 # Use the correct field names as per the sample data (items, type_of_defect, rejected_qty, rejected_qty_kg)
+                rejection_qty = float(item.quantity) if hasattr(item, 'quantity') else 0.0
                 inspection_entry.append("items", {
                     "type_of_defect": item.rejection_type,
-                    "rejected_qty": item.quantity,
-                    "rejected_qty_kg": 0  # Default to 0 for kg measurement
+                    "rejected_qty": rejection_qty,
+                    "rejected_qty_kg": 0.0  # Default to 0 for kg measurement
                 })
                 # Sum up the rejected quantities
                 if hasattr(item, 'rejected_qty'):
-                    total_rejected += item.rejected_qty
+                    total_rejected += float(item.rejected_qty)
+                elif hasattr(item, 'quantity'):
+                    total_rejected += float(item.quantity)
             
             # Update the total rejected quantity
             inspection_entry.rejected_qty_nos = total_rejected
             inspection_entry.total_rejected_qty = total_rejected  # Set both fields for consistency
-            inspection_entry.accepted_qty_nos = inspection_entry.inspected_qty_nos - total_rejected
+            inspection_entry.accepted_qty_nos = float(inspection_entry.inspected_qty_nos) - total_rejected
         
         # Set inspector information - Use inspector_code from sublot_process
         if hasattr(sublot_process, 'inspector_code') and sublot_process.inspector_code:
@@ -346,6 +353,8 @@ def create_inspection_entry(sublot_process, lot_resource_tag=None, inspector_id=
         
     except Exception as e:
         frappe.log_error(f"Error creating inspection entry: {str(e)}", "Inspection Entry Creation Error")
+        import traceback
+        frappe.log_error(f"Traceback: {traceback.format_exc()}", "Inspection Entry Creation Traceback")
         return {
             "status": "error",
             "message": f"Failed to create inspection entry: {str(e)}"
