@@ -68,6 +68,24 @@ def get_aggregated_stock_data(filters=None):
     # Aggregate data by common code and item group prefix
     aggregated_data = {}
     grand_total = {
+        "Finished Product": {
+            "opening_qty": 0,
+            "incoming_qty": 0,
+            "outgoing_qty": 0,
+            "closing_qty": 0
+        },
+        "Mat": {
+            "opening_qty": 0,
+            "incoming_qty": 0,
+            "outgoing_qty": 0,
+            "closing_qty": 0
+        },
+        "Products": {
+            "opening_qty": 0,
+            "incoming_qty": 0,
+            "outgoing_qty": 0,
+            "closing_qty": 0
+        },
         "opening_qty": 0,
         "incoming_qty": 0,
         "outgoing_qty": 0,
@@ -93,6 +111,10 @@ def get_aggregated_stock_data(filters=None):
         }
         
         group = prefix_map.get(prefix, "Other")
+        
+        # Skip items that don't belong to one of our groups
+        if group == "Other":
+            continue
         
         # Create aggregated data structure if it doesn't exist
         if common_code not in aggregated_data:
@@ -137,7 +159,13 @@ def get_aggregated_stock_data(filters=None):
             aggregated_data[common_code]["total"]["outgoing_qty"] += item.outgoing_qty or 0
             aggregated_data[common_code]["total"]["closing_qty"] += item.closing_qty or 0
             
-            # Update grand totals
+            # Update grand totals for the category
+            grand_total[group]["opening_qty"] += item.opening_qty or 0
+            grand_total[group]["incoming_qty"] += item.incoming_qty or 0
+            grand_total[group]["outgoing_qty"] += item.outgoing_qty or 0
+            grand_total[group]["closing_qty"] += item.closing_qty or 0
+            
+            # Update overall grand totals
             grand_total["opening_qty"] += item.opening_qty or 0
             grand_total["incoming_qty"] += item.incoming_qty or 0
             grand_total["outgoing_qty"] += item.outgoing_qty or 0

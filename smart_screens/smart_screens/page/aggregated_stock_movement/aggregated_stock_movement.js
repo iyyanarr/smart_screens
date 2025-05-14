@@ -22,6 +22,10 @@ class AggregatedStockMovement {
 		this.filters.from_date.set_value(last_month);
 		this.filters.to_date.set_value(today);
 		
+		// Initialize sorting state
+		this.sort_by = 'common_code';
+		this.sort_order = 'asc';
+		
 		this.make_report();
 	}
 	
@@ -30,7 +34,7 @@ class AggregatedStockMovement {
 			fields: [
 				{
 					fieldtype: 'Section Break',
-					label: 'Date Range'
+					label: 'Filters'
 				},
 				{
 					label: 'From Date',
@@ -50,6 +54,15 @@ class AggregatedStockMovement {
 					default: frappe.datetime.get_today()
 				},
 				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Item Code',
+					fieldtype: 'Data',
+					fieldname: 'item_code_filter',
+					placeholder: 'Filter by item code...'
+				},
+				{
 					fieldtype: 'Section Break'
 				}
 			],
@@ -63,9 +76,14 @@ class AggregatedStockMovement {
 	add_filters() {
 		this.page.add_inner_button(__('Refresh'), () => this.make_report());
 		
-		// Add event listeners to date filters
+		// Add event listeners to filters
 		this.filters.from_date.$input.on('change', () => this.make_report());
 		this.filters.to_date.$input.on('change', () => this.make_report());
+		
+		// Add debounced filter for item code
+		this.filters.item_code_filter.$input.on('input', 
+			frappe.utils.debounce(() => this.apply_filters(), 300)
+		);
 	}
 	
 	make_report() {
@@ -88,15 +106,76 @@ class AggregatedStockMovement {
 			},
 			callback: (r) => {
 				if (r.message && r.message.data) {
-					this.render_report(r.message);
+					this.original_data = r.message.data;
+					this.grand_total = r.message.grand_total;
+					this.filtered_data = [...this.original_data];
+					this.sort_data();
+					this.render_report();
 				}
 			}
 		});
 	}
 	
-	render_report(result) {
-		const data = result.data;
-		const grand_total = result.grand_total;
+	apply_filters() {
+		const item_code_filter = this.filters.item_code_filter.get_value();
+		
+		if (item_code_filter) {
+			this.filtered_data = this.original_data.filter(item => 
+				item.common_code.toLowerCase().includes(item_code_filter.toLowerCase())
+			);
+		} else {
+			this.filtered_data = [...this.original_data];
+		}
+		
+		this.sort_data();
+		this.render_report();
+	}
+	
+	sort_data() {
+		// Sort the filtered data based on current sort settings
+		this.filtered_data.sort((a, b) => {
+			let val_a, val_b;
+			
+			// Extract values based on sort field
+			if (this.sort_by === 'common_code') {
+				val_a = a.common_code;
+				val_b = b.common_code;
+			} else {
+				// Parse sort key into category and field
+				const [category, field] = this.sort_by.split('_');
+				
+				if (category && field && a[category] && b[category]) {
+					val_a = a[category][field + '_qty'] || 0;
+					val_b = b[category][field + '_qty'] || 0;
+				} else {
+					val_a = 0;
+					val_b = 0;
+				}
+			}
+			
+			// Compare based on data type
+			if (typeof val_a === 'string') {
+				// String comparison
+				const comparison = val_a.localeCompare(val_b);
+				return this.sort_order === 'asc' ? comparison : -comparison;
+			} else {
+				// Numeric comparison
+				const comparison = val_a - val_b;
+				return this.sort_order === 'asc' ? comparison : -comparison;
+			}
+		});
+	}
+	
+	get_sort_icon(field) {
+		if (this.sort_by === field) {
+			return this.sort_order === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+		}
+		return 'fa-sort';
+	}
+	
+	render_report() {
+		const data = this.filtered_data;
+		const grand_total = this.grand_total;
 		
 		if (!data || data.length === 0) {
 			this.$report_container.html(`<div class="text-muted">No data found</div>`);
@@ -108,73 +187,103 @@ class AggregatedStockMovement {
 				<table class="table table-bordered">
 					<thead>
 						<tr>
-							<th rowspan="2">Common Code</th>
-							<th colspan="4">Finished Product</th>
-							<th colspan="4">Mat</th>
-							<th colspan="4">Products</th>
-							<th colspan="4">Grand Total</th>
+							<th rowspan="2" class="common-code-header sortable" data-sort="common_code">
+								Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
+							</th>
+							<th colspan="4" class="finished-product-header">Finished Product</th>
+							<th colspan="4" class="mat-header">Mat</th>
+							<th colspan="4" class="products-header">Products</th>
+							<th rowspan="2" class="grand-total-header">Total</th>
 						</tr>
 						<tr>
-							<th>Opening Stock</th>
-							<th>Incoming</th>
-							<th>Outgoing</th>
-							<th>End Stock</th>
+							<th class="finished-product-subheader sortable" data-sort="Finished Product_opening">
+								Opening <i class="sort-icon fa ${this.get_sort_icon('Finished Product_opening')}"></i>
+							</th>
+							<th class="finished-product-subheader sortable" data-sort="Finished Product_incoming">
+								Incoming <i class="sort-icon fa ${this.get_sort_icon('Finished Product_incoming')}"></i>
+							</th>
+							<th class="finished-product-subheader sortable" data-sort="Finished Product_outgoing">
+								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Finished Product_outgoing')}"></i>
+							</th>
+							<th class="finished-product-subheader sortable" data-sort="Finished Product_closing">
+								End Stock <i class="sort-icon fa ${this.get_sort_icon('Finished Product_closing')}"></i>
+							</th>
 							
-							<th>Opening Stock</th>
-							<th>Incoming</th>
-							<th>Outgoing</th>
-							<th>End Stock</th>
+							<th class="mat-subheader sortable" data-sort="Mat_opening">
+								Opening <i class="sort-icon fa ${this.get_sort_icon('Mat_opening')}"></i>
+							</th>
+							<th class="mat-subheader sortable" data-sort="Mat_incoming">
+								Incoming <i class="sort-icon fa ${this.get_sort_icon('Mat_incoming')}"></i>
+							</th>
+							<th class="mat-subheader sortable" data-sort="Mat_outgoing">
+								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Mat_outgoing')}"></i>
+							</th>
+							<th class="mat-subheader sortable" data-sort="Mat_closing">
+								End Stock <i class="sort-icon fa ${this.get_sort_icon('Mat_closing')}"></i>
+							</th>
 							
-							<th>Opening Stock</th>
-							<th>Incoming</th>
-							<th>Outgoing</th>
-							<th>End Stock</th>
-							
-							<th>Opening Stock</th>
-							<th>Incoming</th>
-							<th>Outgoing</th>
-							<th>End Stock</th>
+							<th class="products-subheader sortable" data-sort="Products_opening">
+								Opening <i class="sort-icon fa ${this.get_sort_icon('Products_opening')}"></i>
+							</th>
+							<th class="products-subheader sortable" data-sort="Products_incoming">
+								Incoming <i class="sort-icon fa ${this.get_sort_icon('Products_incoming')}"></i>
+							</th>
+							<th class="products-subheader sortable" data-sort="Products_outgoing">
+								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Products_outgoing')}"></i>
+							</th>
+							<th class="products-subheader sortable" data-sort="Products_closing">
+								End Stock <i class="sort-icon fa ${this.get_sort_icon('Products_closing')}"></i>
+							</th>
 						</tr>
 					</thead>
 					<tbody>`;
 		
-		// Add rows for each item group
+		// Add rows for each item
 		data.forEach(item => {
 			html += `
 				<tr>
-					<td>${item.common_code}</td>
+					<td class="item-code">${item.common_code}</td>
 					
-					<td>${this.format_number(item["Finished Product"].opening_qty)}</td>
-					<td>${this.format_number(item["Finished Product"].incoming_qty)}</td>
-					<td>${this.format_number(item["Finished Product"].outgoing_qty)}</td>
-					<td>${this.format_number(item["Finished Product"].closing_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].closing_qty)}</td>
 					
-					<td>${this.format_number(item["Mat"].opening_qty)}</td>
-					<td>${this.format_number(item["Mat"].incoming_qty)}</td>
-					<td>${this.format_number(item["Mat"].outgoing_qty)}</td>
-					<td>${this.format_number(item["Mat"].closing_qty)}</td>
+					<td class="mat-cell">${this.format_number(item["Mat"].opening_qty)}</td>
+					<td class="mat-cell">${this.format_number(item["Mat"].incoming_qty)}</td>
+					<td class="mat-cell">${this.format_number(item["Mat"].outgoing_qty)}</td>
+					<td class="mat-cell">${this.format_number(item["Mat"].closing_qty)}</td>
 					
-					<td>${this.format_number(item["Products"].opening_qty)}</td>
-					<td>${this.format_number(item["Products"].incoming_qty)}</td>
-					<td>${this.format_number(item["Products"].outgoing_qty)}</td>
-					<td>${this.format_number(item["Products"].closing_qty)}</td>
+					<td class="products-cell">${this.format_number(item["Products"].opening_qty)}</td>
+					<td class="products-cell">${this.format_number(item["Products"].incoming_qty)}</td>
+					<td class="products-cell">${this.format_number(item["Products"].outgoing_qty)}</td>
+					<td class="products-cell">${this.format_number(item["Products"].closing_qty)}</td>
 					
-					<td>${this.format_number(item["total"].opening_qty)}</td>
-					<td>${this.format_number(item["total"].incoming_qty)}</td>
-					<td>${this.format_number(item["total"].outgoing_qty)}</td>
-					<td>${this.format_number(item["total"].closing_qty)}</td>
+					<td class="grand-total-cell">${this.format_number(item["total"].closing_qty)}</td>
 				</tr>`;
 		});
 		
 		// Add grand total row
 		html += `
-			<tr class="grand-total">
-				<td><strong>Grand Total</strong></td>
+			<tr class="grand-total-row">
+				<td class="total-label"><strong>Grand Total</strong></td>
 				
-				<td colspan="16"><strong>${this.format_number(grand_total.opening_qty)}</strong></td>
-				<td><strong>${this.format_number(grand_total.incoming_qty)}</strong></td>
-				<td><strong>${this.format_number(grand_total.outgoing_qty)}</strong></td>
-				<td><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
+				
+				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].opening_qty)}</strong></td>
+				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].incoming_qty)}</strong></td>
+				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].outgoing_qty)}</strong></td>
+				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].closing_qty)}</strong></td>
+				
+				<td class="products-total"><strong>${this.format_number(grand_total["Products"].opening_qty)}</strong></td>
+				<td class="products-total"><strong>${this.format_number(grand_total["Products"].incoming_qty)}</strong></td>
+				<td class="products-total"><strong>${this.format_number(grand_total["Products"].outgoing_qty)}</strong></td>
+				<td class="products-total"><strong>${this.format_number(grand_total["Products"].closing_qty)}</strong></td>
+				
+				<td class="grand-total-total"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
 			</tr>`;
 		
 		html += `
@@ -185,6 +294,25 @@ class AggregatedStockMovement {
 		
 		this.$report_container.html(html);
 		this.apply_styles();
+		this.bind_events();
+	}
+	
+	bind_events() {
+		// Bind sorting events
+		this.$report_container.find('.sortable').on('click', (e) => {
+			const sort_field = $(e.currentTarget).data('sort');
+			
+			// Toggle sort order if same field clicked again
+			if (this.sort_by === sort_field) {
+				this.sort_order = this.sort_order === 'asc' ? 'desc' : 'asc';
+			} else {
+				this.sort_by = sort_field;
+				this.sort_order = 'asc';
+			}
+			
+			this.sort_data();
+			this.render_report();
+		});
 	}
 	
 	format_number(value) {
@@ -192,7 +320,7 @@ class AggregatedStockMovement {
 	}
 	
 	apply_styles() {
-		// Add custom styles for the report
+		// Add custom styles for the report with colorful headers
 		$("<style>")
 			.prop("type", "text/css")
 			.html(`
@@ -201,23 +329,127 @@ class AggregatedStockMovement {
 				}
 				.stock-movement-report table {
 					min-width: 100%;
+					border-collapse: collapse;
+					box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 				}
 				.stock-movement-report th {
-					background-color: #f0f4f7;
 					font-weight: bold;
 					text-align: center;
 					vertical-align: middle !important;
+					padding: 8px 10px;
+					border: 1px solid #dee2e6;
+					position: relative;
+					white-space: nowrap;
 				}
 				.stock-movement-report td {
 					text-align: right;
-					padding: 5px 10px;
+					padding: 6px 10px;
+					border: 1px solid #dee2e6;
 				}
+				.sortable {
+					cursor: pointer;
+				}
+				.sortable:hover {
+					background-color: rgba(0, 0, 0, 0.05);
+				}
+				.sort-icon {
+					margin-left: 5px;
+				}
+				
+				/* Header Styling */
+				.common-code-header {
+					background-color: #343a40;
+					color: white;
+					font-weight: bold;
+				}
+				
+				/* Finished Product Header */
+				.finished-product-header {
+					background-color: #3498db;
+					color: white;
+					font-weight: bold;
+				}
+				.finished-product-subheader {
+					background-color: #5dade2;
+					color: white;
+				}
+				.finished-product-cell {
+					background-color: #ebf5fb;
+				}
+				.finished-product-total {
+					background-color: #d6eaf8;
+					font-weight: bold;
+				}
+				
+				/* Mat Header */
+				.mat-header {
+					background-color: #e74c3c;
+					color: white;
+					font-weight: bold;
+				}
+				.mat-subheader {
+					background-color: #ec7063;
+					color: white;
+				}
+				.mat-cell {
+					background-color: #fdedec;
+				}
+				.mat-total {
+					background-color: #f5b7b1;
+					font-weight: bold;
+				}
+				
+				/* Products Header */
+				.products-header {
+					background-color: #2ecc71;
+					color: white;
+					font-weight: bold;
+				}
+				.products-subheader {
+					background-color: #58d68d;
+					color: white;
+				}
+				.products-cell {
+					background-color: #eafaf1;
+				}
+				.products-total {
+					background-color: #abebc6;
+					font-weight: bold;
+				}
+				
+				/* Grand Total Header */
+				.grand-total-header {
+					background-color: #9b59b6;
+					color: white;
+					font-weight: bold;
+				}
+				.grand-total-cell {
+					background-color: #f4ecf7;
+					font-weight: bold;
+				}
+				.grand-total-total {
+					background-color: #d2b4de;
+					font-weight: bold;
+				}
+				
+				/* Common Styles */
 				.stock-movement-report td:first-child {
 					text-align: left;
-				}
-				.grand-total td {
-					background-color: #eef9fe;
+					background-color: #f8f9fa;
 					font-weight: bold;
+				}
+				.grand-total-row {
+					border-top: 2px solid #666;
+				}
+				.total-label {
+					background-color: #343a40 !important;
+					color: white;
+					font-weight: bold;
+				}
+				
+				/* Hover effects */
+				.stock-movement-report tbody tr:hover td {
+					box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 				}
 			`)
 			.appendTo("head");
