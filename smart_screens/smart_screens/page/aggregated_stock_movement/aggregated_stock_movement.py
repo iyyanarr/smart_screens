@@ -5,8 +5,8 @@ import json
 @frappe.whitelist()
 def get_aggregated_stock_data(filters=None):
     """
-    Get aggregated stock movement data for items grouped by their item code suffix
-    (Products, Finished Products, and Mat)
+    Get aggregated stock movement data for items grouped by their item code prefix
+    and belonging to specific item groups (Products, Finished Product, and Mat)
     """
     if isinstance(filters, str):
         filters = json.loads(filters)
@@ -24,7 +24,25 @@ def get_aggregated_stock_data(filters=None):
     if not to_date:
         to_date = frappe.utils.nowdate()
 
-    # Query to get all stock entries within the date range - using proper escaping for % signs
+    # Get the list of item groups we want to include
+    valid_item_groups = ['Mat', 'Products', 'Finished Product', 'Finished Products']
+    
+    # Get valid item group children
+    item_group_children = []
+    for group in valid_item_groups:
+        children = frappe.db.sql("""
+            SELECT name FROM `tabItem Group`
+            WHERE parent_item_group = %s
+        """, group, as_dict=1)
+        item_group_children.extend([child.name for child in children])
+    
+    # Combine parent and child item groups
+    all_valid_groups = valid_item_groups + item_group_children
+    
+    # Convert to SQL-safe format for IN clause
+    group_list = ', '.join(["'" + group.replace("'", "''") + "'" for group in all_valid_groups])
+
+    # Query to get all stock entries within the date range with correct item groups
     query = """
         SELECT 
             i.name as item_code,
@@ -54,9 +72,10 @@ def get_aggregated_stock_data(filters=None):
         LEFT JOIN `tabStock Ledger Entry` sle ON i.name = sle.item_code
         WHERE 
             (i.name LIKE 'P%%' OR i.name LIKE 'F%%' OR i.name LIKE 'T%%') AND
+            i.item_group IN ({})  AND
             (sle.posting_date IS NULL OR sle.posting_date <= %(to_date)s)
         GROUP BY i.name, i.item_name, i.item_group, i.description, common_code
-    """
+    """.format(group_list)
     
     params = {
         "from_date": from_date,
