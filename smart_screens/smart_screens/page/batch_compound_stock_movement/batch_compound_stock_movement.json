@@ -1,0 +1,19 @@
+{
+ "doctype": "Page",
+ "name": "batch-compound-stock-movement",
+ "owner": "Administrator",
+ "module": "Smart Screens",
+ "page_name": "Batch Compound Stock Movement",
+ "roles": [
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "title": "Batch Compound Stock Movement"
+}
