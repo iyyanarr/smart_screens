@@ -108,6 +108,8 @@ class AggregatedStockMovement {
 				if (r.message && r.message.data) {
 					this.original_data = r.message.data;
 					this.grand_total = r.message.grand_total;
+					this.mat_uom = r.message.mat_uom || "kg";
+					this.has_converted_mat_items = r.message.has_converted_mat_items || false;
 					this.filtered_data = [...this.original_data];
 					this.sort_data();
 					this.render_report();
@@ -190,9 +192,9 @@ class AggregatedStockMovement {
 							<th rowspan="2" class="common-code-header sortable" data-sort="common_code">
 								Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 							</th>
-							<th colspan="4" class="finished-product-header">Finished Product</th>
-							<th colspan="4" class="mat-header">Mat</th>
-							<th colspan="4" class="products-header">Products</th>
+							<th colspan="4" class="finished-product-header">Finished Product (kg)</th>
+							<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
+							<th colspan="4" class="products-header">Products (kg)</th>
 							<th rowspan="2" class="grand-total-header">Total</th>
 						</tr>
 						<tr>
@@ -289,6 +291,7 @@ class AggregatedStockMovement {
 		html += `
 					</tbody>
 				</table>
+				${this.has_converted_mat_items ? '<div class="mt-2 text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
 			</div>
 		`;
 		

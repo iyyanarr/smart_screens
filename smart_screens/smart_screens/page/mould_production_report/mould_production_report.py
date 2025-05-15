@@ -8,6 +8,15 @@ import datetime
 from dateutil.relativedelta import relativedelta
 import json
 
+def debug_log(title, message=None, log_type="Mould Report"):
+    """Helper function to properly log messages with large data"""
+    if message is None:
+        # If no message is provided, log the title as the message with a generic title
+        frappe.log_error(message=title, title=log_type)
+    else:
+        # Keep title short, put details in message
+        frappe.log_error(message=message, title=f"{log_type}: {title}")
+
 @frappe.whitelist()
 def get_mould_production_data(filters=None):
     try:
@@ -21,15 +30,15 @@ def get_mould_production_data(filters=None):
             }
         
         # Add brief debug logging (avoiding truncation errors)
-        frappe.log_error("Processing request with filters", "Mould Report")
+        debug_log("Processing request", f"Filters: {filters}")
         
         # Get moulds data
         moulds = get_moulds_data(filters)
-        frappe.log_error(f"Fetched {len(moulds)} moulds", "Mould Report")
+        debug_log("Moulds fetched", f"Count: {len(moulds)}")
         
         # Get production entries for the moulds
         mould_production_data = get_mould_production_entries(filters)
-        frappe.log_error(f"Fetched production data for {len(mould_production_data)} moulds", "Mould Report")
+        debug_log("Production data fetched", f"For {len(mould_production_data)} moulds")
         
         # Get month columns for the report
         month_columns = get_month_columns()
@@ -77,7 +86,7 @@ def get_mould_production_data(filters=None):
                     month_key = entry.moulding_date.strftime('%Y-%m')
                     
                     # Debug the month key generation
-                    frappe.log_error(f"Month key: {month_key} from date: {entry.moulding_date}", "Mould Report Month Key")
+                    debug_log("Month key generation", f"Month key: {month_key} from date: {entry.moulding_date}")
                     
                     # Add to the monthly data
                     if month_key not in mould['monthly_data']:
@@ -89,14 +98,15 @@ def get_mould_production_data(filters=None):
                     mould['monthly_data'][month_key]['total_lifts'] += entry_lifts
                     mould['monthly_data'][month_key]['entry_count'] += 1
                 except Exception as e:
-                    frappe.log_error(f"Error generating month key: {str(e)}, date: {entry.moulding_date}", "Mould Report Error")
+                    debug_log("Error generating month key", f"Error: {str(e)}, date: {entry.moulding_date}")
                     continue
             
             # Get historical data (all lifts before current year)
             mould['historical_data'] = get_historical_data(mould.name)
             
             # Log the monthly data for debugging
-            frappe.log_error(f"Mould {mould.name} ({mould.mould_ref}) monthly data: {mould['monthly_data']}", "Mould Report Month Data")
+            mould_desc = f"Mould {mould.name} ({mould.mould_ref})"
+            debug_log("Monthly data", f"{mould_desc} monthly data: {mould['monthly_data']}")
             
             # Calculate cavity utilization - ensure noof_cavities is a number
             noof_cavities = convert_to_int(mould.noof_cavities)
@@ -138,14 +148,10 @@ def get_mould_production_data(filters=None):
         
         # Identify top performers
         top_performers = sorted(moulds, key=lambda m: m.get('total_lifts', 0), reverse=True)[:5]
-        top_performers = [{
-            'mould_ref': m.get('mould_ref', m.get('name', '')),
-            'spp_ref': m.get('spp_ref', ''),
-            'total_lifts': m.get('total_lifts', 0)
-        } for m in top_performers if m.get('total_lifts', 0) > 0]
         
+        # Create the result dictionary
         result = {
-            'data': moulds,
+            'moulds': moulds,
             'month_columns': month_columns,
             'total_moulds': total_moulds,
             'total_entries': total_entries,
@@ -157,7 +163,7 @@ def get_mould_production_data(filters=None):
         return result
     
     except Exception as e:
-        frappe.log_error(f"Error in mould production report: {str(e)}", "Mould Production Report Error")
+        debug_log("Error", f"Error in mould production report: {str(e)}")
         return {
             'error': str(e)
         }
@@ -166,7 +172,7 @@ def get_month_columns():
     """Get only the current year months as column headers"""
     today = datetime.date.today()
     current_year = today.year
-    frappe.log_error(f"Current year detected as: {current_year}", "Mould Report Month Debug")
+    debug_log("Month columns", f"Current year detected as: {current_year}")
     
     months = []
     
@@ -180,7 +186,7 @@ def get_month_columns():
         year = month_date.strftime("%Y")
         month_key = month_date.strftime("%Y-%m")
         
-        frappe.log_error(f"Adding month column: {month_name} {year}, key: {month_key}", "Mould Report Month Debug")
+        debug_log("Month column", f"Adding month column: {month_name} {year}, key: {month_key}")
         
         months.append({
             "key": month_key,
@@ -344,7 +350,7 @@ def get_mould_production_entries(filters):
     
     # Add debug logging for date range
     if filters.get('from_date') and filters.get('to_date'):
-        frappe.log_error(f"Date range: {filters.get('from_date')} to {filters.get('to_date')}", "Mould Report Date Debug")
+        debug_log("Date range", f"From {filters.get('from_date')} to {filters.get('to_date')}")
     
     # Execute the query to fetch mould production entries
     query = f"""
@@ -364,11 +370,11 @@ def get_mould_production_entries(filters):
     """
     
     entries = frappe.db.sql(query, tuple(params), as_dict=1)
-    frappe.log_error(f"Retrieved {len(entries)} production entries", "Mould Report Date Debug")
+    debug_log("Production entries", f"Retrieved {len(entries)} production entries")
     
     # Log a sample entry if available to debug date format
     if entries and len(entries) > 0:
-        frappe.log_error(f"Sample entry date: {entries[0].moulding_date}, type: {type(entries[0].moulding_date)}", "Mould Report Date Debug")
+        debug_log("Sample entry", f"Date: {entries[0].moulding_date}, type: {type(entries[0].moulding_date)}")
     
     # Group entries by mould reference
     for entry in entries:
@@ -380,10 +386,10 @@ def get_mould_production_entries(filters):
                     parsed_date = datetime.datetime.strptime(entry.moulding_date, '%Y-%m-%d')
                     entry.moulding_date = parsed_date.date()
                 except (ValueError, TypeError):
-                    frappe.log_error(f"Failed to parse date: {entry.moulding_date}", "Mould Report Date Error")
+                    debug_log("Date parsing error", f"Failed to parse date: {entry.moulding_date}")
                     continue
             
             entries_by_mould[entry.mould_reference].append(entry)
     
-    frappe.log_error(f"Grouped entries for {len(entries_by_mould)} moulds", "Mould Report Date Debug")
+    debug_log("Grouped entries", f"Entries grouped for {len(entries_by_mould)} moulds")
     return entries_by_mould

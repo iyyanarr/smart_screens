@@ -48,6 +48,7 @@ def get_aggregated_stock_data(filters=None):
             i.name as item_code,
             i.item_name,
             i.item_group,
+            i.stock_uom,
             i.description,
             SUBSTRING(i.name, 2, 4) as common_code,
             SUM(CASE 
@@ -74,7 +75,7 @@ def get_aggregated_stock_data(filters=None):
             (i.name LIKE 'P%%' OR i.name LIKE 'F%%' OR i.name LIKE 'T%%') AND
             i.item_group IN ({})  AND
             (sle.posting_date IS NULL OR sle.posting_date <= %(to_date)s)
-        GROUP BY i.name, i.item_name, i.item_group, i.description, common_code
+        GROUP BY i.name, i.item_name, i.item_group, i.stock_uom, i.description, common_code
     """.format(group_list)
     
     params = {
@@ -83,6 +84,32 @@ def get_aggregated_stock_data(filters=None):
     }
     
     stock_data = frappe.db.sql(query, params, as_dict=1)
+    
+    # Get UOM conversion factors for Mat items (items that start with 'T')
+    mat_item_codes = [item.item_code for item in stock_data 
+                     if item.item_code and item.item_code.startswith('T')]
+    
+    conversion_factors = {}
+    if mat_item_codes:
+        # Fetch conversion factors from Nos to stock UOM (typically kg)
+        cf_query = """
+            SELECT 
+                parent as item_code,
+                value
+            FROM `tabUOM Conversion Factor`
+            WHERE parent IN ({0})
+            AND from_uom = 'Nos'
+        """.format(','.join(['%s'] * len(mat_item_codes)))
+        
+        cf_data = frappe.db.sql(cf_query, mat_item_codes, as_dict=1)
+        
+        # Create a mapping of item_code to conversion factor
+        for cf in cf_data:
+            conversion_factors[cf.item_code] = cf.value
+    
+    # Flag to indicate whether we've converted any Mat items
+    has_converted_mat_items = False
+    mat_uom = "Nos"
     
     # Aggregate data by common code and item group prefix
     aggregated_data = {}
@@ -134,6 +161,17 @@ def get_aggregated_stock_data(filters=None):
         # Skip items that don't belong to one of our groups
         if group == "Other":
             continue
+        
+        # Convert Mat items from kg to numbers if conversion factor exists
+        if group == "Mat" and item.item_code in conversion_factors and conversion_factors[item.item_code] > 0:
+            # Convert from kg to number by dividing by the conversion factor
+            # (If 1 Nos = 5 kg, then 10 kg = 2 Nos, so we divide by 5)
+            cf = conversion_factors[item.item_code]
+            item.opening_qty = item.opening_qty / cf if item.opening_qty else 0
+            item.incoming_qty = item.incoming_qty / cf if item.incoming_qty else 0
+            item.outgoing_qty = item.outgoing_qty / cf if item.outgoing_qty else 0
+            item.closing_qty = item.closing_qty / cf if item.closing_qty else 0
+            has_converted_mat_items = True
         
         # Create aggregated data structure if it doesn't exist
         if common_code not in aggregated_data:
@@ -197,5 +235,7 @@ def get_aggregated_stock_data(filters=None):
     
     return {
         "data": result,
-        "grand_total": grand_total
+        "grand_total": grand_total,
+        "mat_uom": mat_uom,
+        "has_converted_mat_items": has_converted_mat_items
     }
