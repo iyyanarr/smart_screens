@@ -174,7 +174,7 @@ class MouldProductionReport {
 		let month_columns = data.month_columns;
 		let current_year = new Date().getFullYear();
 		
-		 // Add debug logging
+		// Add debug logging
 		console.log("Month columns received:", month_columns);
 		console.log("Data received:", data);
 		
@@ -217,7 +217,11 @@ class MouldProductionReport {
 			monthly_totals[month.key] = 0;
 		});
 		
-		data.data.forEach(mould => {
+		// Check if data is structured correctly and use the appropriate property
+		const moulds = data.moulds || data.data || [];
+		console.log("Moulds data to process:", moulds);
+		
+		moulds.forEach(mould => {
 			let $row = $(`<tr class="mould-row ${mould.is_active ? 'active-mould' : 'inactive-mould'}" data-mould="${mould.name}"></tr>`);
 			
 			// Fixed columns
@@ -229,7 +233,7 @@ class MouldProductionReport {
 			historical_total += historical_lifts;
 			$row.append(`<td class="historical-cell">${historical_lifts > 0 ? historical_lifts.toLocaleString() : '-'}</td>`);
 			
-			 // Add debug
+			// Add debug
 			console.log(`Mould ${mould.mould_ref || mould.name} monthly data:`, mould.monthly_data);
 			
 			// Current year total
@@ -522,7 +526,15 @@ class MouldProductionReport {
 				filters: filters
 			},
 			callback: (r) => {
-				if (r.message && r.message.data) {
+				if (r.message) {
+					// Use either moulds or data property, depending on what's available
+					const mouldsData = r.message.moulds || r.message.data || [];
+					
+					if (mouldsData.length === 0) {
+						frappe.msgprint(__("No data to export"));
+						return;
+					}
+					
 					const viewMode = this.filters.view_mode.get_value() || 'Monthly Spreadsheet';
 					
 					// Prepare data for export
@@ -547,7 +559,7 @@ class MouldProductionReport {
 						rows.push(headers);
 						
 						// Add data rows
-						r.message.data.forEach(mould => {
+						mouldsData.forEach(mould => {
 							let row = [
 								mould.mould_ref || mould.name || '',
 								mould.spp_ref || '',
@@ -585,7 +597,7 @@ class MouldProductionReport {
 						]);
 						
 						// Add data rows
-						r.message.data.forEach(item => {
+						mouldsData.forEach(item => {
 							rows.push([
 								item.mould_ref || '',
 								item.spp_ref || '',
