@@ -18,24 +18,23 @@ class MouldPerformanceReport {
     make() {
         this.make_filters();
         this.make_body();
-        this.add_actions();
         this.load_data();
+        
+        // Add print button to the page
+        this.page.set_primary_action('Print', () => this.print_report(), 'printer');
     }
 
     make_filters() {
-        // Date Range Filter
+        // Add date range filter
         this.page.add_field({
             label: 'Date Range',
             fieldtype: 'DateRange',
             fieldname: 'date_range',
-            default: [
-                frappe.datetime.add_months(frappe.datetime.get_today(), -12),
-                frappe.datetime.get_today()
-            ],
+            default: [frappe.datetime.add_months(frappe.datetime.now_date(), -12), frappe.datetime.now_date()],
             change: () => this.load_data()
         });
 
-        // Mould Reference Filter
+        // Add mould reference filter
         this.page.add_field({
             label: 'Mould Reference',
             fieldtype: 'Link',
@@ -48,15 +47,16 @@ class MouldPerformanceReport {
     make_body() {
         this.$body = $(this.page.body);
         this.$report_area = $('<div class="report-table"></div>').appendTo(this.$body);
-    }
-
-    add_actions() {
-        this.page.add_inner_button(__('Print Report'), () => this.print_report());
-        this.page.add_inner_button(__('Export'), () => this.export_report());
+        
+        // Add loading state
+        this.$report_area.html('<div class="text-muted">Loading report data...</div>');
     }
 
     load_data() {
         let filters = this.get_filters();
+        
+        // Show loading message
+        this.$report_area.html('<div class="text-muted">Loading report data...</div>');
         
         frappe.call({
             method: 'smart_screens.smart_screens.page.mould_performance_report.mould_performance_report.get_mould_performance_data',
@@ -65,8 +65,10 @@ class MouldPerformanceReport {
             },
             callback: (r) => {
                 if (r.message && r.message.status === 'success') {
+                    this.data = r.message;
                     this.render_data(r.message);
                 } else {
+                    this.$report_area.html('<div class="text-muted">Error loading data</div>');
                     frappe.msgprint(__('Error loading data'));
                 }
             }
@@ -74,11 +76,9 @@ class MouldPerformanceReport {
     }
 
     get_filters() {
-        const date_range = this.page.fields_dict.date_range.get_value();
         return {
-            mould_ref: this.page.fields_dict.mould_ref.get_value(),
-            from_date: date_range && date_range[0],
-            to_date: date_range && date_range[1]
+            date_range: this.page.fields_dict.date_range.get_value(),
+            mould_ref: this.page.fields_dict.mould_ref.get_value()
         };
     }
 
@@ -95,32 +95,29 @@ class MouldPerformanceReport {
         const headerHTML = `
             <thead>
                 <tr>
-                    <th rowspan="2">Mould Ref</th>
-                    <th rowspan="2">Part No</th>
-                    <th class="historical-column" rowspan="2">Historical Lifts<br><small>(Pre-${data.current_year})</small></th>
-                    <th class="current-year-header" colspan="12">${data.current_year} Monthly Lifts</th>
-                    <th rowspan="2">Total Lifts</th>
-                </tr>
-                <tr>
-                    ${monthNames.map(month => `<th class="month-column">${month}</th>`).join('')}
+                    <th class="mould-col">Mould Ref</th>
+                    <th class="part-col">Part No</th>
+                    <th class="historical-col">Historical Lifts<br><small>(Pre-${data.current_year})</small></th>
+                    ${monthNames.map((month, idx) => `<th class="month-col month-${idx+1}">${month}</th>`).join('')}
+                    <th class="total-col">Total Lifts</th>
                 </tr>
             </thead>
         `;
 
         // Create table rows
         const rowsHTML = data.report_data.map(row => `
-            <tr class="mould-row" data-mould='${JSON.stringify(row)}'>
-                <td>${row.mould_ref || ''}</td>
+            <tr class="mould-row" data-mould-ref="${row.mould_ref}">
+                <td class="mould-cell">${row.mould_ref || ''}</td>
                 <td>${row.part_no || ''}</td>
-                <td class="text-right historical-column">
+                <td class="text-right historical-cell" data-value="${row.historical_lifts}">
                     ${frappe.format(row.historical_lifts, { fieldtype: 'Int' })}
                 </td>
-                ${row.monthly_lifts.map(lifts => 
-                    `<td class="text-right month-column ${lifts > 0 ? 'has-lifts' : ''}">${
-                        frappe.format(lifts, { fieldtype: 'Int' })
-                    }</td>`
+                ${row.monthly_lifts.map((lifts, idx) => 
+                    `<td class="text-right month-cell month-${idx+1}" data-month="${idx+1}" data-value="${lifts}">
+                        ${frappe.format(lifts, { fieldtype: 'Int' })}
+                    </td>`
                 ).join('')}
-                <td class="text-right total-column">
+                <td class="text-right total-cell" data-value="${row.total_lifts}">
                     <strong>${frappe.format(row.total_lifts, { fieldtype: 'Int' })}</strong>
                 </td>
             </tr>
@@ -129,7 +126,7 @@ class MouldPerformanceReport {
         // Create table
         const tableHTML = `
             <div class="table-responsive">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover mould-performance-table">
                     ${headerHTML}
                     <tbody>
                         ${rowsHTML}
@@ -139,126 +136,442 @@ class MouldPerformanceReport {
         `;
 
         this.$report_area.html(tableHTML);
-        this.bind_row_click();
-    }
 
-    bind_row_click() {
-        this.$report_area.find('.mould-row').on('click', (e) => {
-            const row = $(e.currentTarget);
-            const data = JSON.parse(row.attr('data-mould'));
-            this.show_detail_dialog(data);
-        });
+        // Add conditional formatting for better visualization
+        this.add_conditional_formatting();
+        
+        // Add click events to open the dialog
+        this.add_click_events();
     }
-
-    show_detail_dialog(data) {
-        const monthNames = moment.months();
-        const dialog = new frappe.ui.Dialog({
-            title: __('Mould Performance Details'),
-            fields: [
-                {
-                    fieldtype: 'Section Break',
-                    label: __('Mould Information')
-                },
-                {
-                    fieldtype: 'HTML',
-                    fieldname: 'mould_info',
-                    options: `
-                        <div class="mould-details">
-                            <div class="row">
-                                <div class="col-sm-6">
-                                    <p><strong>Mould Reference:</strong> ${data.mould_ref}</p>
-                                    <p><strong>Part Number:</strong> ${data.part_no}</p>
-                                </div>
-                                <div class="col-sm-6">
-                                    <p><strong>Total Lifts:</strong> ${frappe.format(data.total_lifts, { fieldtype: 'Int' })}</p>
-                                    <p><strong>Historical Lifts:</strong> ${frappe.format(data.historical_lifts, { fieldtype: 'Int' })}</p>
-                                </div>
-                            </div>
-                        </div>
-                    `
-                },
-                {
-                    fieldtype: 'Section Break',
-                    label: __('Monthly Performance')
-                },
-                {
-                    fieldtype: 'HTML',
-                    fieldname: 'monthly_chart',
-                    options: `<div id="monthly_chart"></div>`
-                }
-            ],
-            primary_action_label: __('Print'),
-            primary_action: () => {
-                this.print_mould_details(data);
+    
+    add_conditional_formatting() {
+        // Format historical cells
+        this.$report_area.find('.historical-cell').each(function() {
+            const value = parseInt($(this).attr('data-value') || 0);
+            if (value > 0) {
+                $(this).addClass('historical-data');
+                
+                // Add intensity based on value
+                if (value > 1000) $(this).addClass('high-value');
+                else if (value > 500) $(this).addClass('medium-value');
+                else $(this).addClass('low-value');
             }
         });
-
+        
+        // Format monthly cells
+        this.$report_area.find('.month-cell').each(function() {
+            const value = parseInt($(this).attr('data-value') || 0);
+            if (value > 0) {
+                $(this).addClass('monthly-data');
+                
+                // Add intensity based on value
+                if (value > 100) $(this).addClass('high-value');
+                else if (value > 50) $(this).addClass('medium-value');
+                else $(this).addClass('low-value');
+            }
+        });
+        
+        // Format total cells
+        this.$report_area.find('.total-cell').each(function() {
+            const value = parseInt($(this).attr('data-value') || 0);
+            if (value > 0) {
+                $(this).addClass('total-data');
+                
+                // Add intensity based on value
+                if (value > 1000) $(this).addClass('high-value');
+                else if (value > 500) $(this).addClass('medium-value');
+                else $(this).addClass('low-value');
+            }
+        });
+    }
+    
+    add_click_events() {
+        // Add click event to mould cells
+        this.$report_area.find('.mould-cell').on('click', (e) => {
+            const $row = $(e.currentTarget).closest('tr');
+            const mouldRef = $row.attr('data-mould-ref');
+            
+            if (mouldRef) {
+                this.show_mould_details(mouldRef);
+            }
+        });
+        
+        // Add click event to month cells
+        this.$report_area.find('.month-cell').on('click', (e) => {
+            const $cell = $(e.currentTarget);
+            const mouldRef = $cell.closest('tr').attr('data-mould-ref');
+            const month = $cell.attr('data-month');
+            
+            if (mouldRef && month) {
+                this.show_month_details(mouldRef, parseInt(month));
+            }
+        });
+    }
+    
+    show_mould_details(mouldRef) {
+        // Find mould data
+        const mouldData = this.data.report_data.find(m => m.mould_ref === mouldRef);
+        
+        if (!mouldData) return;
+        
+        const mouldSpec = mouldData.specification || {};
+        
+        // Create dialog content
+        const dialogContent = `
+            <div class="mould-detail-dialog">
+                <div class="mould-spec-section">
+                    <h4>Mould Specification</h4>
+                    <table class="table table-bordered table-condensed">
+                        <tr>
+                            <th>Mould Reference</th>
+                            <td>${mouldRef}</td>
+                            <th>Part Number</th>
+                            <td>${mouldSpec.part_no || ''}</td>
+                        </tr>
+                        <tr>
+                            <th>Compound Code</th>
+                            <td>${mouldSpec.compound_code || ''}</td>
+                            <th>Mould Status</th>
+                            <td>${mouldSpec.mould_status || ''}</td>
+                        </tr>
+                        <tr>
+                            <th>No. of Cavities</th>
+                            <td>${mouldSpec.noof_cavities || ''}</td>
+                            <th>Cavities per Blank</th>
+                            <td>${mouldSpec.no_of_cavity_per_blank || ''}</td>
+                        </tr>
+                        <tr>
+                            <th>Piece Weight (Min/Avg/Max)</th>
+                            <td>${mouldSpec.wtpiece_min_gms || '0'} / ${mouldSpec.wtpiece_avg_gms || '0'} / ${mouldSpec.wtpiece_max_gms || '0'} gms</td>
+                            <th>Lift Weight (Avg)</th>
+                            <td>${mouldSpec.wtlift_avg_gms || '0'} gms</td>
+                        </tr>
+                        <tr>
+                            <th>Blank Type</th>
+                            <td>${mouldSpec.blank_type || ''}</td>
+                            <th>Blank Dimensions</th>
+                            <td>${mouldSpec.blank_length || '0'} x ${mouldSpec.blank_width || '0'} x ${mouldSpec.blank_thickness || '0'}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="mould-performance-section">
+                    <h4>Lift Performance Summary</h4>
+                    <table class="table table-bordered table-condensed">
+                        <tr>
+                            <th class="historical-header">Historical Lifts (Pre-${this.data.current_year})</th>
+                            <td class="historical-data text-right">${frappe.format(mouldData.historical_lifts, { fieldtype: 'Int' })}</td>
+                        </tr>
+                        <tr>
+                            <th>Current Year Lifts (${this.data.current_year})</th>
+                            <td class="text-right">${frappe.format(mouldData.monthly_lifts.reduce((a, b) => a + b, 0), { fieldtype: 'Int' })}</td>
+                        </tr>
+                        <tr>
+                            <th class="total-header">Total Lifts</th>
+                            <td class="total-data text-right">${frappe.format(mouldData.total_lifts, { fieldtype: 'Int' })}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="monthly-performance-chart">
+                    <h4>Monthly Performance (${this.data.current_year})</h4>
+                    <div id="monthly-chart"></div>
+                </div>
+            </div>
+        `;
+        
+        // Create and show dialog
+        const dialog = new frappe.ui.Dialog({
+            title: `Mould Details: ${mouldRef}`,
+            size: 'large',
+            fields: [
+                {
+                    fieldname: 'details_html',
+                    fieldtype: 'HTML',
+                    options: dialogContent
+                }
+            ],
+            primary_action_label: 'Print',
+            primary_action: () => {
+                this.print_mould_details(mouldRef, dialog.$wrapper);
+            }
+        });
+        
         dialog.show();
-
+        
         // Render chart after dialog is shown
         setTimeout(() => {
-            new frappe.Chart("#monthly_chart", {
+            const monthNames = moment.monthsShort();
+            new frappe.Chart(dialog.$wrapper.find('#monthly-chart')[0], {
                 data: {
                     labels: monthNames,
                     datasets: [{
-                        name: "Monthly Lifts",
-                        values: data.monthly_lifts
+                        name: 'Lifts',
+                        values: mouldData.monthly_lifts
                     }]
                 },
                 type: 'bar',
-                height: 300,
-                colors: ['#7cd6fd']
+                height: 250,
+                colors: ['#5e64ff'],
+                axisOptions: {
+                    xIsSeries: true
+                }
             });
-        }, 250);
+        }, 300);
     }
-
-    print_mould_details(data) {
-        const monthNames = moment.months();
-        const print_content = `
-            <h2>Mould Performance Report</h2>
-            <hr>
-            <div class="mould-info">
-                <h3>Mould Information</h3>
-                <p><strong>Mould Reference:</strong> ${data.mould_ref}</p>
-                <p><strong>Part Number:</strong> ${data.part_no}</p>
-                <p><strong>Total Lifts:</strong> ${frappe.format(data.total_lifts, { fieldtype: 'Int' })}</p>
-                <p><strong>Historical Lifts:</strong> ${frappe.format(data.historical_lifts, { fieldtype: 'Int' })}</p>
-            </div>
-            <div class="monthly-performance">
-                <h3>Monthly Performance</h3>
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>Month</th>
-                            <th>Number of Lifts</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${monthNames.map((month, idx) => `
-                            <tr>
-                                <td>${month}</td>
-                                <td>${frappe.format(data.monthly_lifts[idx], { fieldtype: 'Int' })}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
+    
+    show_month_details(mouldRef, month) {
+        // Find mould data
+        const mouldData = this.data.report_data.find(m => m.mould_ref === mouldRef);
+        
+        if (!mouldData || !mouldData.detailed_entries) return;
+        
+        const monthKey = `${this.data.current_year}-${month}`;
+        const monthEntries = mouldData.detailed_entries[monthKey] || [];
+        const monthName = moment().month(month-1).format('MMMM');
+        
+        if (monthEntries.length === 0) {
+            frappe.msgprint(`No entries found for ${mouldRef} in ${monthName} ${this.data.current_year}`);
+            return;
+        }
+        
+        // Create entries table
+        let entriesHTML = `
+            <table class="table table-bordered table-condensed">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Production Entry</th>
+                        <th>Compound</th>
+                        <th>Operator</th>
+                        <th>Batch No</th>
+                        <th>Running Cavities</th>
+                        <th>Curing Time</th>
+                        <th>Lifts</th>
+                        <th>Weight</th>
+                    </tr>
+                </thead>
+                <tbody>
         `;
-
-        const w = window.open();
-        frappe.dom.set_style(frappe.dom.get_print_style());
-        w.document.write(print_content);
-        w.print();
+        
+        monthEntries.forEach(entry => {
+            entriesHTML += `
+                <tr>
+                    <td>${frappe.datetime.str_to_user(entry.moulding_date)}</td>
+                    <td>${entry.production_entry}</td>
+                    <td>${entry.compound || ''}</td>
+                    <td>${entry.employee_name || ''}</td>
+                    <td>${entry.batch_no || ''}</td>
+                    <td class="text-right">${entry.no_of_running_cavities || '0'}</td>
+                    <td class="text-right">${entry.curing_time || '0'}</td>
+                    <td class="text-right">${entry.number_of_lifts || '0'}</td>
+                    <td class="text-right">${frappe.format(entry.weight_without_shell || 0, { fieldtype: 'Float', precision: 2 })}</td>
+                </tr>
+            `;
+        });
+        
+        entriesHTML += `
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="7" class="text-right">Total:</th>
+                        <th class="text-right">${monthEntries.reduce((sum, entry) => sum + (entry.number_of_lifts || 0), 0)}</th>
+                        <th class="text-right">${frappe.format(monthEntries.reduce((sum, entry) => sum + (entry.weight_without_shell || 0), 0), { fieldtype: 'Float', precision: 2 })}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+        
+        // Create and show dialog
+        const dialog = new frappe.ui.Dialog({
+            title: `${mouldRef} - ${monthName} ${this.data.current_year} Details`,
+            size: 'large',
+            fields: [
+                {
+                    fieldname: 'month_details_html',
+                    fieldtype: 'HTML',
+                    options: entriesHTML
+                }
+            ],
+            primary_action_label: 'Print',
+            primary_action: () => {
+                this.print_month_details(mouldRef, month, dialog.$wrapper);
+            }
+        });
+        
+        dialog.show();
     }
-
+    
     print_report() {
-        let w = window.open();
-        frappe.dom.set_style(frappe.dom.get_print_style());
-        w.document.write(this.$report_area.html());
-        w.print();
+        const reportTitle = 'Mould Performance Report';
+        const dateRange = this.page.fields_dict.date_range.get_value();
+        const dateRangeText = dateRange ? 
+            `${frappe.datetime.str_to_user(dateRange[0])} to ${frappe.datetime.str_to_user(dateRange[1])}` : 
+            'All Dates';
+        
+        const printWindow = window.open('', '_blank');
+        
+        if (!printWindow) {
+            frappe.msgprint(__('Pop-up blocked. Please allow pop-ups for printing.'));
+            return;
+        }
+        
+        // Get the table HTML
+        const tableHtml = this.$report_area.html();
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>${reportTitle}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; }
+                        .report-header { text-align: center; margin-bottom: 20px; }
+                        .report-title { font-size: 18px; font-weight: bold; }
+                        .report-date { font-size: 14px; color: #666; }
+                        .table { border-collapse: collapse; width: 100%; }
+                        .table th, .table td { border: 1px solid #ddd; padding: 8px; }
+                        .text-right { text-align: right; }
+                        .historical-data { background-color: #f2d7d5; }
+                        .monthly-data { background-color: #d4e6f1; }
+                        .total-data { background-color: #d5f5e3; }
+                        .low-value { opacity: 0.7; }
+                        .medium-value { opacity: 0.85; }
+                        .high-value { opacity: 1; }
+                        @media print {
+                            .report-header { margin-bottom: 15px; }
+                            .table th, .table td { padding: 5px; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="report-header">
+                        <div class="report-title">${reportTitle}</div>
+                        <div class="report-date">Date Range: ${dateRangeText}</div>
+                    </div>
+                    ${tableHtml}
+                </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Print after a short delay to ensure styles are loaded
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
     }
-
-    export_report() {
-        frappe.tools.downloadTable(this.$report_area.find('table')[0], 'Mould_Performance_Report');
+    
+    print_mould_details(mouldRef, $wrapper) {
+        const printWindow = window.open('', '_blank');
+        
+        if (!printWindow) {
+            frappe.msgprint(__('Pop-up blocked. Please allow pop-ups for printing.'));
+            return;
+        }
+        
+        const content = $wrapper.find('.mould-detail-dialog').html();
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Mould Details: ${mouldRef}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        h4 { margin-top: 20px; margin-bottom: 10px; }
+                        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+                        th, td { border: 1px solid #ddd; padding: 8px; }
+                        .text-right { text-align: right; }
+                        .historical-data { background-color: #f2d7d5; }
+                        .historical-header { background-color: #f9ebea; }
+                        .total-data { background-color: #d5f5e3; }
+                        .total-header { background-color: #eafaf1; }
+                        @media print {
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h2>Mould Details: ${mouldRef}</h2>
+                    ${content}
+                </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Render chart in print window
+        setTimeout(() => {
+            const mouldData = this.data.report_data.find(m => m.mould_ref === mouldRef);
+            const monthNames = moment.monthsShort();
+            
+            if (mouldData && printWindow.document.getElementById('monthly-chart')) {
+                new frappe.Chart(printWindow.document.getElementById('monthly-chart'), {
+                    data: {
+                        labels: monthNames,
+                        datasets: [{
+                            name: 'Lifts',
+                            values: mouldData.monthly_lifts
+                        }]
+                    },
+                    type: 'bar',
+                    height: 250,
+                    colors: ['#5e64ff'],
+                    axisOptions: {
+                        xIsSeries: true
+                    }
+                });
+                
+                // Print after chart is rendered
+                setTimeout(() => {
+                    printWindow.print();
+                }, 300);
+            } else {
+                printWindow.print();
+            }
+        }, 500);
+    }
+    
+    print_month_details(mouldRef, month, $wrapper) {
+        const monthName = moment().month(month-1).format('MMMM');
+        const printWindow = window.open('', '_blank');
+        
+        if (!printWindow) {
+            frappe.msgprint(__('Pop-up blocked. Please allow pop-ups for printing.'));
+            return;
+        }
+        
+        const content = $wrapper.find('.modal-body').html();
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>${mouldRef} - ${monthName} ${this.data.current_year} Details</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #ddd; padding: 8px; }
+                        .text-right { text-align: right; }
+                        tfoot { font-weight: bold; }
+                        @media print {
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h2>${mouldRef} - ${monthName} ${this.data.current_year} Details</h2>
+                    ${content}
+                </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Print after a short delay
+        setTimeout(() => {
+            printWindow.print();
+        }, 300);
     }
 }

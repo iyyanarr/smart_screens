@@ -58,36 +58,124 @@
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 20px;
         }
 
-        .report-table table {
+        .mould-performance-table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        .report-table th {
+        /* Header styling */
+        .mould-performance-table th {
             background-color: var(--bg-gray);
             position: sticky;
             top: 0;
             z-index: 1;
             white-space: nowrap;
+            padding: 10px;
+            text-align: center;
+            vertical-align: middle;
         }
 
-        .report-table td {
+        /* Column header specific styles */
+        .mould-performance-table th.historical-col {
+            background-color: #f9ebea;
+            color: #922b21;
+        }
+
+        .mould-performance-table th.month-col {
+            background-color: #ebf5fb;
+            color: #2874a6;
+        }
+
+        .mould-performance-table th.total-col {
+            background-color: #eafaf1;
+            color: #1e8449;
+        }
+
+        /* Cell styling */
+        .mould-performance-table td {
             white-space: nowrap;
             padding: 8px !important;
         }
 
-        .report-table .text-right {
+        .text-right {
             text-align: right;
         }
 
-        .report-table .table-success {
-            background-color: var(--alert-green-bg);
+        /* Cell specific styling */
+        .mould-performance-table .historical-data {
+            background-color: #f2d7d5;
         }
 
-        .report-table td strong {
+        .mould-performance-table .monthly-data {
+            background-color: #d4e6f1;
+        }
+
+        .mould-performance-table .total-data {
+            background-color: #d5f5e3;
+        }
+
+        /* Value intensity */
+        .low-value {
+            opacity: 0.7;
+        }
+
+        .medium-value {
+            opacity: 0.85;
+        }
+
+        .high-value {
+            opacity: 1;
+            font-weight: bold;
+        }
+
+        /* Row hover effect */
+        .mould-performance-table tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        /* Clickable cells */
+        .mould-cell, .month-cell {
+            cursor: pointer;
+        }
+
+        .mould-cell:hover {
+            text-decoration: underline;
+            color: var(--primary);
+        }
+
+        .month-cell:hover {
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        /* Dialog styling */
+        .mould-detail-dialog h4 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-weight: bold;
             color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .mould-spec-section table th {
+            background-color: var(--bg-gray);
+            width: 20%;
+        }
+
+        .mould-performance-section table th.historical-header {
+            background-color: #f9ebea;
+        }
+
+        .mould-performance-section table th.total-header {
+            background-color: #eafaf1;
+        }
+
+        .monthly-performance-chart {
+            margin-top: 20px;
         }
 
         @media (max-width: 768px) {
