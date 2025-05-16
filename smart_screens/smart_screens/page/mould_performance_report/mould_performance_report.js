@@ -25,12 +25,21 @@ class MouldPerformanceReport {
     }
 
     make_filters() {
-        // Add date range filter
+        // Add from date filter
         this.page.add_field({
-            label: 'Date Range',
-            fieldtype: 'DateRange',
-            fieldname: 'date_range',
-            default: [frappe.datetime.add_months(frappe.datetime.now_date(), -12), frappe.datetime.now_date()],
+            label: 'From Date',
+            fieldtype: 'Date',
+            fieldname: 'from_date',
+            default: frappe.datetime.add_months(frappe.datetime.now_date(), -12),
+            change: () => this.load_data()
+        });
+
+        // Add to date filter
+        this.page.add_field({
+            label: 'To Date',
+            fieldtype: 'Date',
+            fieldname: 'to_date',
+            default: frappe.datetime.now_date(),
             change: () => this.load_data()
         });
 
@@ -77,7 +86,10 @@ class MouldPerformanceReport {
 
     get_filters() {
         return {
-            date_range: this.page.fields_dict.date_range.get_value(),
+            date_range: [
+                this.page.fields_dict.from_date.get_value(),
+                this.page.fields_dict.to_date.get_value()
+            ],
             mould_ref: this.page.fields_dict.mould_ref.get_value()
         };
     }
@@ -183,6 +195,9 @@ class MouldPerformanceReport {
                 else $(this).addClass('low-value');
             }
         });
+        
+        // Add alternating row colors
+        this.$report_area.find('tr.mould-row:odd').addClass('alt-row');
     }
     
     add_click_events() {
@@ -221,12 +236,12 @@ class MouldPerformanceReport {
             <div class="mould-detail-dialog">
                 <div class="mould-spec-section">
                     <h4>Mould Specification</h4>
-                    <table class="table table-bordered table-condensed">
+                    <table class="table table-bordered table-condensed spec-table">
                         <tr>
-                            <th>Mould Reference</th>
-                            <td>${mouldRef}</td>
-                            <th>Part Number</th>
-                            <td>${mouldSpec.part_no || ''}</td>
+                            <th width="20%">Mould Reference</th>
+                            <td width="30%">${mouldRef}</td>
+                            <th width="20%">Part Number</th>
+                            <td width="30%">${mouldSpec.part_no || ''}</td>
                         </tr>
                         <tr>
                             <th>Compound Code</th>
@@ -257,10 +272,10 @@ class MouldPerformanceReport {
                 
                 <div class="mould-performance-section">
                     <h4>Lift Performance Summary</h4>
-                    <table class="table table-bordered table-condensed">
+                    <table class="table table-bordered table-condensed summary-table">
                         <tr>
-                            <th class="historical-header">Historical Lifts (Pre-${this.data.current_year})</th>
-                            <td class="historical-data text-right">${frappe.format(mouldData.historical_lifts, { fieldtype: 'Int' })}</td>
+                            <th class="historical-header" width="50%">Historical Lifts (Pre-${this.data.current_year})</th>
+                            <td class="historical-data text-right" width="50%">${frappe.format(mouldData.historical_lifts, { fieldtype: 'Int' })}</td>
                         </tr>
                         <tr>
                             <th>Current Year Lifts (${this.data.current_year})</th>
@@ -337,26 +352,27 @@ class MouldPerformanceReport {
         
         // Create entries table
         let entriesHTML = `
-            <table class="table table-bordered table-condensed">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Production Entry</th>
-                        <th>Compound</th>
-                        <th>Operator</th>
-                        <th>Batch No</th>
-                        <th>Running Cavities</th>
-                        <th>Curing Time</th>
-                        <th>Lifts</th>
-                        <th>Weight</th>
-                    </tr>
-                </thead>
-                <tbody>
+            <div class="month-details-table">
+                <table class="table table-bordered table-condensed">
+                    <thead>
+                        <tr class="table-head">
+                            <th>Date</th>
+                            <th>Production Entry</th>
+                            <th>Compound</th>
+                            <th>Operator</th>
+                            <th>Batch No</th>
+                            <th class="text-center">Running Cavities</th>
+                            <th class="text-center">Curing Time</th>
+                            <th class="text-center">Lifts</th>
+                            <th class="text-center">Weight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
         
-        monthEntries.forEach(entry => {
+        monthEntries.forEach((entry, idx) => {
             entriesHTML += `
-                <tr>
+                <tr class="${idx % 2 === 1 ? 'alt-row' : ''}">
                     <td>${frappe.datetime.str_to_user(entry.moulding_date)}</td>
                     <td>${entry.production_entry}</td>
                     <td>${entry.compound || ''}</td>
@@ -373,13 +389,14 @@ class MouldPerformanceReport {
         entriesHTML += `
                 </tbody>
                 <tfoot>
-                    <tr>
+                    <tr class="total-row">
                         <th colspan="7" class="text-right">Total:</th>
                         <th class="text-right">${monthEntries.reduce((sum, entry) => sum + (entry.number_of_lifts || 0), 0)}</th>
                         <th class="text-right">${frappe.format(monthEntries.reduce((sum, entry) => sum + (entry.weight_without_shell || 0), 0), { fieldtype: 'Float', precision: 2 })}</th>
                     </tr>
                 </tfoot>
             </table>
+            </div>
         `;
         
         // Create and show dialog
@@ -404,10 +421,9 @@ class MouldPerformanceReport {
     
     print_report() {
         const reportTitle = 'Mould Performance Report';
-        const dateRange = this.page.fields_dict.date_range.get_value();
-        const dateRangeText = dateRange ? 
-            `${frappe.datetime.str_to_user(dateRange[0])} to ${frappe.datetime.str_to_user(dateRange[1])}` : 
-            'All Dates';
+        const fromDate = frappe.datetime.str_to_user(this.page.fields_dict.from_date.get_value());
+        const toDate = frappe.datetime.str_to_user(this.page.fields_dict.to_date.get_value());
+        const dateRangeText = `${fromDate} to ${toDate}`;
         
         const printWindow = window.open('', '_blank');
         
@@ -434,6 +450,7 @@ class MouldPerformanceReport {
                         .historical-data { background-color: #f2d7d5; }
                         .monthly-data { background-color: #d4e6f1; }
                         .total-data { background-color: #d5f5e3; }
+                        .alt-row { background-color: #f9f9f9; }
                         .low-value { opacity: 0.7; }
                         .medium-value { opacity: 0.85; }
                         .high-value { opacity: 1; }
@@ -478,7 +495,7 @@ class MouldPerformanceReport {
                     <title>Mould Details: ${mouldRef}</title>
                     <style>
                         body { font-family: Arial, sans-serif; padding: 20px; }
-                        h4 { margin-top: 20px; margin-bottom: 10px; }
+                        h4 { margin-top: 20px; margin-bottom: 10px; font-weight: bold; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
                         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
                         th, td { border: 1px solid #ddd; padding: 8px; }
                         .text-right { text-align: right; }
@@ -486,6 +503,7 @@ class MouldPerformanceReport {
                         .historical-header { background-color: #f9ebea; }
                         .total-data { background-color: #d5f5e3; }
                         .total-header { background-color: #eafaf1; }
+                        .spec-table th { background-color: #f1f1f1; }
                         @media print {
                             body { padding: 0; }
                         }
@@ -542,7 +560,7 @@ class MouldPerformanceReport {
             return;
         }
         
-        const content = $wrapper.find('.modal-body').html();
+        const content = $wrapper.find('.month-details-table').html();
         
         printWindow.document.write(`
             <html>
@@ -553,6 +571,9 @@ class MouldPerformanceReport {
                         table { border-collapse: collapse; width: 100%; }
                         th, td { border: 1px solid #ddd; padding: 8px; }
                         .text-right { text-align: right; }
+                        .table-head { background-color: #f1f1f1; }
+                        .alt-row { background-color: #f9f9f9; }
+                        .total-row { background-color: #eafaf1; font-weight: bold; }
                         tfoot { font-weight: bold; }
                         @media print {
                             body { padding: 0; }
