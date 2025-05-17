@@ -12,6 +12,8 @@ frappe.pages['mould-performance-report'].on_page_load = function(wrapper) {
 class MouldPerformanceReport {
     constructor(page) {
         this.page = page;
+        // Flag to populate mould_ref options only once
+        this.optionsPopulated = false;
         this.make();
     }
 
@@ -35,7 +37,7 @@ class MouldPerformanceReport {
             label: 'From Date',
             fieldtype: 'Date',
             fieldname: 'from_date',
-            default: frappe.datetime.add_months(frappe.datetime.now_date(), -12),
+            // default blank: no date filter by default
             change: () => this.load_data()
         });
 
@@ -44,16 +46,16 @@ class MouldPerformanceReport {
             label: 'To Date',
             fieldtype: 'Date',
             fieldname: 'to_date',
-            default: frappe.datetime.now_date(),
+            // default blank: no date filter by default
             change: () => this.load_data()
         });
 
-        // Add mould reference filter with proper options
+        // Mould reference filter: use Select populated from backend data
         this.page.add_field({
             label: 'Mould Reference',
-            fieldtype: 'Link',
+            fieldtype: 'Select',
             fieldname: 'mould_ref',
-            options: 'Mould Specification',
+            options: '',  // will populate after data load
             change: () => this.load_data()
         });
         
@@ -83,32 +85,62 @@ class MouldPerformanceReport {
         
         frappe.call({
             method: 'smart_screens.smart_screens.page.mould_performance_report.mould_performance_report.get_mould_performance_data',
-            args: {
-                filters: filters
-            },
+            args: { filters: filters },
             callback: (r) => {
+                console.log('Mould performance data response:', r);
+                // Handle server exception
+                if (r.exc) {
+                    console.error('Server exception:', r.exc);
+                    this.$report_area.html(`<div class="text-muted">Server exception: ${r.exc}</div>`);
+                    frappe.msgprint(r.exc);
+                    return;
+                }
+                // Handle successful response
                 if (r.message && r.message.status === 'success') {
+                    // Store aggregated data
                     this.data = r.message;
-                    this.original_data = r.message.report_data;
+                    this.original_data = r.message.report_data || [];
                     this.filtered_data = [...this.original_data];
                     this.sort_data();
-                    this.render_data(r.message);
+                    this.render_data();
+                    
+                    // Populate mould reference options only once
+                    if (!this.optionsPopulated) {
+                        this.populate_mould_reference_options(this.original_data);
+                        this.optionsPopulated = true;
+                    }
+                } else if (r.message && r.message.status === 'error') {
+                    console.error('Error loading mould performance data:', r.message.message);
+                    const errMsg = r.message.message;
+                    this.$report_area.html(`<div class="text-muted">${errMsg}</div>`);
+                    frappe.msgprint(__(errMsg));
                 } else {
-                    this.$report_area.html('<div class="text-muted">Error loading data</div>');
-                    frappe.msgprint(__('Error loading data'));
+                    // Unexpected response structure
+                    const resp = JSON.stringify(r);
+                    console.error('Unexpected response:', resp);
+                    this.$report_area.html(`<div class="text-muted">Unexpected response: ${resp}</div>`);
+                    frappe.msgprint(__('Unexpected response received.')); 
                 }
+            },
+            error: (err) => {
+                console.error('Server error in mould performance call:', err);
+                this.$report_area.html('<div class="text-muted">Server error. Check console.</div>');
+                frappe.msgprint(__('Server error occurred. See console for details.'));
             }
         });
     }
 
     get_filters() {
-        return {
-            date_range: [
-                this.page.fields_dict.from_date.get_value(),
-                this.page.fields_dict.to_date.get_value()
-            ],
-            mould_ref: this.page.fields_dict.mould_ref.get_value()
+        const filters = { 
+            mould_ref: this.page.fields_dict.mould_ref.get_value() || null
         };
+        const from = this.page.fields_dict.from_date.get_value();
+        const to = this.page.fields_dict.to_date.get_value();
+        // apply date_range only when both from and to are set
+        if (from && to) {
+            filters.date_range = [from, to];
+        }
+        return filters;
     }
     
     apply_filters() {
@@ -128,39 +160,23 @@ class MouldPerformanceReport {
     }
     
     sort_data() {
-        const sort_field = this.sort_by;
-        const sort_order = this.sort_order;
-        
+        const field = this.sort_by;
+        const order = this.sort_order;
         this.filtered_data.sort((a, b) => {
-            let val_a, val_b;
-            
-            // Extract values based on sort field
-            if (sort_field === 'mould_ref' || sort_field === 'part_no') {
-                val_a = (a[sort_field] || '').toString();
-                val_b = (b[sort_field] || '').toString();
-                
-                // String comparison
-                return sort_order === 'asc' 
-                    ? val_a.localeCompare(val_b) 
-                    : val_b.localeCompare(val_a);
-            } else if (sort_field === 'historical_lifts') {
-                val_a = a.historical_lifts || 0;
-                val_b = b.historical_lifts || 0;
-            } else if (sort_field === 'total_lifts') {
-                val_a = a.total_lifts || 0;
-                val_b = b.total_lifts || 0;
-            } else if (sort_field.startsWith('month_')) {
-                // For monthly columns (month_0, month_1, etc.)
-                const month_idx = parseInt(sort_field.split('_')[1]);
-                val_a = (a.monthly_lifts && a.monthly_lifts[month_idx]) || 0;
-                val_b = (b.monthly_lifts && b.monthly_lifts[month_idx]) || 0;
-            } else {
-                val_a = 0;
-                val_b = 0;
+            let valA = a[field];
+            let valB = b[field];
+            // Default to empty string or zero
+            if (field === 'mould_ref') {
+                valA = (valA || '').toString();
+                valB = (valB || '').toString();
+                return order === 'asc'
+                    ? valA.localeCompare(valB)
+                    : valB.localeCompare(valA);
             }
-            
-            // Numeric comparison for non-string fields
-            return sort_order === 'asc' ? val_a - val_b : val_b - val_a;
+            // Numeric fields
+            valA = parseFloat(valA) || 0;
+            valB = parseFloat(valB) || 0;
+            return order === 'asc' ? valA - valB : valB - valA;
         });
     }
     
@@ -171,7 +187,7 @@ class MouldPerformanceReport {
         return 'fa-sort';
     }
 
-    render_data(data) {
+    render_data() {
         this.$report_area.empty();
 
         if (!this.filtered_data || this.filtered_data.length === 0) {
@@ -179,77 +195,79 @@ class MouldPerformanceReport {
             return;
         }
 
-        // Create table header
-        const monthNames = moment.monthsShort();
+        // Build table with columns: Mould Ref, Lifts Before 2025, monthly, Total Lifts
+        // Generate month headers dynamically for current year
+        const monthLabels = moment.monthsShort();
         const headerHTML = `
             <thead>
                 <tr>
-                    <th class="mould-col sortable" data-sort="mould_ref">
+                    <th class="sortable" data-sort="mould_ref">
                         Mould Ref <i class="sort-icon fa ${this.get_sort_icon('mould_ref')}"></i>
                     </th>
-                    <th class="part-col sortable" data-sort="part_no">
-                        Part No <i class="sort-icon fa ${this.get_sort_icon('part_no')}"></i>
+                    <th class="sortable text-right" data-sort="lifts_before_2025">
+                        Pre-2025 Lifts <i class="sort-icon fa ${this.get_sort_icon('lifts_before_2025')}"></i>
                     </th>
-                    <th class="historical-col sortable" data-sort="historical_lifts">
-                        Historical Lifts<br><small>(Pre-${data.current_year})</small>
-                        <i class="sort-icon fa ${this.get_sort_icon('historical_lifts')}"></i>
+                    ${monthLabels.map((m, idx) => `
+                    <th class="sortable text-right" data-sort="month_${idx+1}">
+                        ${m} <i class="sort-icon fa ${this.get_sort_icon('month_' + (idx+1))}"></i>
                     </th>
-                    ${monthNames.map((month, idx) => `
-                        <th class="month-col month-${idx+1} sortable" data-sort="month_${idx}">
-                            ${month} <i class="sort-icon fa ${this.get_sort_icon('month_' + idx)}"></i>
-                        </th>
                     `).join('')}
-                    <th class="total-col sortable" data-sort="total_lifts">
+                    <th class="sortable text-right" data-sort="total_lifts">
                         Total Lifts <i class="sort-icon fa ${this.get_sort_icon('total_lifts')}"></i>
                     </th>
                 </tr>
             </thead>
         `;
 
-        // Create table rows
         const rowsHTML = this.filtered_data.map(row => `
-            <tr class="mould-row" data-mould-ref="${row.mould_ref}">
-                <td class="mould-cell">${row.mould_ref || ''}</td>
-                <td>${row.part_no || ''}</td>
-                <td class="text-right historical-cell" data-value="${row.historical_lifts}">
-                    ${frappe.format(row.historical_lifts, { fieldtype: 'Int' })}
+            <tr>
+                <td>${frappe.utils.escape_html(row.mould_ref || '')}</td>
+                <td class="text-right" data-value="${row.lifts_before_2025}">
+                    ${frappe.format(row.lifts_before_2025, { fieldtype: 'Int' })}
                 </td>
-                ${row.monthly_lifts.map((lifts, idx) => 
-                    `<td class="text-right month-cell month-${idx+1}" data-month="${idx+1}" data-value="${lifts}">
-                        ${frappe.format(lifts, { fieldtype: 'Int' })}
-                    </td>`
-                ).join('')}
-                <td class="text-right total-cell" data-value="${row.total_lifts}">
-                    <strong>${frappe.format(row.total_lifts, { fieldtype: 'Int' })}</strong>
+                ${monthLabels.map((_, idx) => `
+                <td class="text-right" data-value="${row['month_' + (idx+1)]}">
+                    ${frappe.format(row['month_' + (idx+1)] || 0, { fieldtype: 'Int' })}
+                </td>
+                `).join('')}
+                <td class="text-right" data-value="${row.total_lifts}">
+                    ${frappe.format(row.total_lifts, { fieldtype: 'Int' })}
                 </td>
             </tr>
         `).join('');
 
-        // Create table
         const tableHTML = `
             <div class="table-responsive">
-                <table class="table table-bordered table-hover mould-performance-table">
+                <table class="table table-bordered table-hover">
                     ${headerHTML}
-                    <tbody>
-                        ${rowsHTML}
-                    </tbody>
+                    <tbody>${rowsHTML}</tbody>
                 </table>
             </div>
         `;
 
         this.$report_area.html(tableHTML);
 
-        // Apply styles first
-        this.apply_styles();
-
-        // Add conditional formatting for better visualization
-        this.add_conditional_formatting();
-        
-        // Add click events to open the dialog
-        this.add_click_events();
-        
-        // Add sorting events
-        this.bind_sorting_events();
+        // Bind sorting events on the new table
+        this.$report_area.find('.sortable').on('click', (e) => {
+            const field = $(e.currentTarget).data('sort');
+            if (this.sort_by === field) {
+                this.sort_order = this.sort_order === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sort_by = field;
+                this.sort_order = 'asc';
+            }
+            this.sort_data();
+            this.render_data();
+        });
+        // Override header styles via jQuery to ensure colors render
+        const $headers = this.$report_area.find('thead th');
+        $headers.css({
+            'background-color': '#3c4858',
+            'color': '#ffffff',
+            'position': 'sticky',
+            'top': '0',
+            'z-index': '5'
+        });
     }
     
     bind_sorting_events() {
@@ -543,6 +561,21 @@ class MouldPerformanceReport {
     
     // Set the content after dialog is shown
     d.fields_dict.month_details_html.$wrapper.html(tableHTML);
+    }
+    
+    populate_mould_reference_options(data) {
+        // populate the mould_ref Select field with unique values from backend data
+        const field = this.page.fields_dict.mould_ref;
+        const $input = field.$input;
+        // clear existing options
+        $input.empty();
+        // add a blank/All option
+        $input.append($('<option>', { value: '', text: '-- All --' }));
+        // get unique and sorted mould_refs
+        const moulds = [...new Set(data.map(r => r.mould_ref).filter(v => v))].sort();
+        moulds.forEach(mr => {
+            $input.append($('<option>', { value: mr, text: mr }));
+        });
     }
     
     apply_styles() {
