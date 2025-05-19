@@ -67,32 +67,62 @@ def get_mould_performance_data(filters=None):
                     filter_conditions += " AND me.moulding_date <= %(range_end)s"
                     filter_values['range_end'] = range_end_str
 
-        # Aggregate lifts by mould_ref, include pre-2025 and monthly sums for current year
-        cutoff_date = f"{current_year}-01-01"
-        # Add current_year to filter_values for SQL
-        sql_values = {**filter_values, 'cutoff': cutoff_date, 'current_year': current_year}
-        result = frappe.db.sql(f"""
+        # Fetch total lifts per mould
+        result = frappe.db.sql(
+            """
             SELECT
-                me.mould_reference AS mould_ref,
-                SUM(me.number_of_lifts) AS total_lifts,
-                SUM(CASE WHEN me.moulding_date < %(cutoff)s THEN me.number_of_lifts ELSE 0 END) AS lifts_before_2025,
-                -- Monthly lifts for current year
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 1 THEN me.number_of_lifts ELSE 0 END) AS month_1,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 2 THEN me.number_of_lifts ELSE 0 END) AS month_2,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 3 THEN me.number_of_lifts ELSE 0 END) AS month_3,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 4 THEN me.number_of_lifts ELSE 0 END) AS month_4,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 5 THEN me.number_of_lifts ELSE 0 END) AS month_5,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 6 THEN me.number_of_lifts ELSE 0 END) AS month_6,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 7 THEN me.number_of_lifts ELSE 0 END) AS month_7,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 8 THEN me.number_of_lifts ELSE 0 END) AS month_8,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 9 THEN me.number_of_lifts ELSE 0 END) AS month_9,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 10 THEN me.number_of_lifts ELSE 0 END) AS month_10,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 11 THEN me.number_of_lifts ELSE 0 END) AS month_11,
-                SUM(CASE WHEN YEAR(me.moulding_date) = %(current_year)s AND MONTH(me.moulding_date) = 12 THEN me.number_of_lifts ELSE 0 END) AS month_12
-            FROM `tabMoulding Production Entry` me
-            WHERE {filter_conditions}
-            GROUP BY me.mould_reference
-        """, sql_values, as_dict=1)
+                mould_reference AS mould_ref,
+                SUM(number_of_lifts) AS total_lifts
+            FROM `tabMoulding Production Entry`
+            GROUP BY mould_reference
+            ORDER BY mould_reference
+            """, as_dict=1
+        )
+
+        # Calculate pre-2025 lifts (historical lifts before current year)
+        cutoff_date = date(current_year, 1, 1)
+        for row in result:
+            pre_sum = frappe.db.sql(
+                """
+                SELECT SUM(number_of_lifts)
+                FROM `tabMoulding Production Entry`
+                WHERE docstatus = 1
+                  AND mould_reference = %s
+                  AND moulding_date < %s
+                """,
+                (row['mould_ref'], cutoff_date),
+                as_list=1
+            )
+            row['lifts_before_2025'] = pre_sum[0][0] or 0
+
+        # Calculate monthly lifts for current year
+        for row in result:
+            # Initialize each month field to zero
+            for m_info in months:
+                row[f"month_{m_info['month']}"] = 0
+            # Build WHERE clause for month query, include year and optional date filters
+            where = "docstatus = 1 AND mould_reference = %s AND YEAR(moulding_date) = %s"
+            args = [row['mould_ref'], current_year]
+            if start_date:
+                where += " AND moulding_date >= %s"
+                args.append(start_date)
+            if end_date:
+                where += " AND moulding_date <= %s"
+                args.append(end_date)
+            # Query monthly lifts within filter and year
+            month_data = frappe.db.sql(
+                f"""
+                SELECT MONTH(moulding_date) AS month, SUM(number_of_lifts) AS lifts
+                FROM `tabMoulding Production Entry`
+                WHERE {where}
+                GROUP BY month
+                """,
+                tuple(args),
+                as_dict=1
+            )
+            for md in month_data:
+                mon = md['month']
+                row[f"month_{mon}"] = md['lifts'] or 0
 
         # Return first-level aggregated report data
         return {

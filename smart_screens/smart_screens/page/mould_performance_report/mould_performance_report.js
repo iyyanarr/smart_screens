@@ -236,10 +236,30 @@ class MouldPerformanceReport {
             </tr>
         `).join('');
 
+        // Calculate sums for Pre-2025 and each current year month and overall total
+        const totalPre2025 = this.filtered_data.reduce((sum, row) => sum + (row.lifts_before_2025 || 0), 0);
+        const monthlyTotals = monthLabels.map((_, idx) =>
+            this.filtered_data.reduce((sum, row) => sum + (parseInt(row['month_' + (idx + 1)] || 0) || 0), 0)
+        );
+        const totalLiftsSum = this.filtered_data.reduce((sum, row) => sum + (row.total_lifts || 0), 0);
+
+        // Build footer row HTML with monthly and total sums
+        const footerHTML = `
+            <tfoot>
+                <tr>
+                    <th>Total:</th>
+                    <th class="text-right">${frappe.format(totalPre2025, { fieldtype: 'Int' })}</th>
+                    ${monthlyTotals.map(mt => `<th class="text-right">${frappe.format(mt, { fieldtype: 'Int' })}</th>`).join('')}
+                    <th class="text-right">${frappe.format(totalLiftsSum, { fieldtype: 'Int' })}</th>
+                </tr>
+            </tfoot>
+        `;
+
         const tableHTML = `
             <div class="table-responsive">
                 <table class="table table-bordered table-hover">
                     ${headerHTML}
+                    ${footerHTML}
                     <tbody>${rowsHTML}</tbody>
                 </table>
             </div>
@@ -549,13 +569,6 @@ class MouldPerformanceReport {
     const totalWeight = monthEntries.reduce((sum, entry) => sum + (parseFloat(entry.weight_without_shell || 0) || 0), 0);
     
     tableHTML += `</tbody>
-            <tfoot>
-                <tr class="total-row">
-                    <th colspan="7" class="text-right">Total:</th>
-                    <th class="text-right">${frappe.format(totalLifts, { fieldtype: 'Int' })}</th>
-                    <th class="text-right">${frappe.format(totalWeight, { fieldtype: 'Float', precision: 2 })}</th>
-                </tr>
-            </tfoot>
         </table>
     </div>`;
     
