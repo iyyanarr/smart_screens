@@ -67,64 +67,27 @@ def get_mould_performance_data(filters=None):
                     filter_conditions += " AND me.moulding_date <= %(range_end)s"
                     filter_values['range_end'] = range_end_str
 
-        # Fetch total lifts per mould
-        result = frappe.db.sql(
-            """
-            SELECT
-                mould_reference AS mould_ref,
-                SUM(number_of_lifts) AS total_lifts
-            FROM `tabMoulding Production Entry`
-            GROUP BY mould_reference
-            ORDER BY mould_reference
-            """, as_dict=1
-        )
-
-        # Calculate pre-2025 lifts (historical lifts before current year)
+        # Build pivot query to aggregate total lifts, pre-2025 and monthly sums for current year
         cutoff_date = date(current_year, 1, 1)
-        for row in result:
-            pre_sum = frappe.db.sql(
-                """
-                SELECT SUM(number_of_lifts)
-                FROM `tabMoulding Production Entry`
-                WHERE docstatus = 1
-                  AND mould_reference = %s
-                  AND moulding_date < %s
-                """,
-                (row['mould_ref'], cutoff_date),
-                as_list=1
+        select_fields = [
+            "me.mould_reference AS mould_ref",
+            "SUM(me.number_of_lifts) AS total_lifts",
+            f"SUM(CASE WHEN me.moulding_date < '{cutoff_date}' THEN me.number_of_lifts ELSE 0 END) AS lifts_before_2025"
+        ]
+        for m in months:
+            select_fields.append(
+                f"SUM(CASE WHEN YEAR(me.moulding_date) = {m['year']} AND MONTH(me.moulding_date) = {m['month']} THEN me.number_of_lifts ELSE 0 END) AS month_{m['month']}"
             )
-            row['lifts_before_2025'] = pre_sum[0][0] or 0
+        query = f"""
+            SELECT {', '.join(select_fields)}
+            FROM `tabMoulding Production Entry` me
+            WHERE me.docstatus = 1
+            GROUP BY me.mould_reference
+            ORDER BY me.mould_reference
+        """
+        result = frappe.db.sql(query, as_dict=1)
 
-        # Calculate monthly lifts for current year
-        for row in result:
-            # Initialize each month field to zero
-            for m_info in months:
-                row[f"month_{m_info['month']}"] = 0
-            # Build WHERE clause for month query, include year and optional date filters
-            where = "docstatus = 1 AND mould_reference = %s AND YEAR(moulding_date) = %s"
-            args = [row['mould_ref'], current_year]
-            if start_date:
-                where += " AND moulding_date >= %s"
-                args.append(start_date)
-            if end_date:
-                where += " AND moulding_date <= %s"
-                args.append(end_date)
-            # Query monthly lifts within filter and year
-            month_data = frappe.db.sql(
-                f"""
-                SELECT MONTH(moulding_date) AS month, SUM(number_of_lifts) AS lifts
-                FROM `tabMoulding Production Entry`
-                WHERE {where}
-                GROUP BY month
-                """,
-                tuple(args),
-                as_dict=1
-            )
-            for md in month_data:
-                mon = md['month']
-                row[f"month_{mon}"] = md['lifts'] or 0
-
-        # Return first-level aggregated report data
+        # Return aggregated report data
         return {
             "status": "success",
             "message": "Aggregated lifts by mould_ref",
