@@ -236,14 +236,12 @@ class MouldPerformanceReport {
             </tr>
         `).join('');
 
-        // Calculate sums for Pre-2025 and each current year month and overall total
+        // Compute footer sums for Pre-2025, each month, and total lifts
         const totalPre2025 = this.filtered_data.reduce((sum, row) => sum + (row.lifts_before_2025 || 0), 0);
         const monthlyTotals = monthLabels.map((_, idx) =>
-            this.filtered_data.reduce((sum, row) => sum + (parseInt(row['month_' + (idx + 1)] || 0) || 0), 0)
+            this.filtered_data.reduce((sum, row) => sum + (parseInt(row['month_' + (idx+1)] || 0) || 0), 0)
         );
         const totalLiftsSum = this.filtered_data.reduce((sum, row) => sum + (row.total_lifts || 0), 0);
-
-        // Build footer row HTML with monthly and total sums
         const footerHTML = `
             <tfoot>
                 <tr>
