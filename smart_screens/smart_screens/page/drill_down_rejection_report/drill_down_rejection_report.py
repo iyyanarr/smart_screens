@@ -1105,6 +1105,201 @@ def clean_defect_name(defect_type):
 @frappe.whitelist()
 def get_defect_pivot_report(filters=None):
 	"""
-	Alias for get_defect_pivot_report_simple to match JavaScript function call
+	Get product-grouped pivot report with drill-down capability
 	"""
-	return get_defect_pivot_report_simple(filters)
+	return get_product_grouped_pivot_report(filters)
+
+def get_product_grouped_pivot_data(data):
+	"""
+	Process data into product-grouped pivot format with drill-down capability
+	Structure: Product -> Lots -> Defect details
+	"""
+	product_groups = {}
+	all_defect_types = set()
+	
+	# First pass: collect all unique defect types and group by product
+	for row in data:
+		product = row.get('item_code') or 'Unknown Product'
+		lot_no = row.get('lot_no') or 'Unknown Lot'
+		
+		# Initialize product group if not exists
+		if product not in product_groups:
+			product_groups[product] = {
+				'product': product,
+				'total_inspected': 0,
+				'total_rejected': 0,
+				'total_rejection_percentage': 0,
+				'lots': {},
+				'defects': {}
+			}
+		
+		# Initialize lot if not exists
+		if lot_no not in product_groups[product]['lots']:
+			product_groups[product]['lots'][lot_no] = {
+				'lot_no': lot_no,
+				'main_lot': row.get('main_lot', ''),
+				'sublot_number': row.get('sublot_number', ''),
+				'inspected_qty': 0,
+				'rejected_qty': 0,
+				'rejection_percentage': 0,
+				'defects': {},
+				'document_name': row.get('document_name'),
+				'source_type': row.get('source_type'),
+				'posting_date': row.get('posting_date'),
+				'inspector_code': row.get('inspector_code')
+			}
+		
+		# Update lot totals
+		lot_data = product_groups[product]['lots'][lot_no]
+		lot_data['inspected_qty'] += row.get('inspected_qty', 0)
+		lot_data['rejected_qty'] += row.get('rejected_qty', 0)
+		if lot_data['inspected_qty'] > 0:
+			lot_data['rejection_percentage'] = (lot_data['rejected_qty'] * 100.0) / lot_data['inspected_qty']
+		
+		# Process defect details for the lot
+		defect_details = row.get('defect_details', '')
+		if defect_details:
+			defect_pairs = defect_details.split('; ')
+			for pair in defect_pairs:
+				if ':' in pair:
+					defect_type, qty_str = pair.split(':', 1)
+					try:
+						qty = float(qty_str)
+						normalized_defect = normalize_defect_type(defect_type.strip())
+						all_defect_types.add(normalized_defect)
+						
+						# Add to lot defects
+						if normalized_defect not in lot_data['defects']:
+							lot_data['defects'][normalized_defect] = 0
+						lot_data['defects'][normalized_defect] += qty
+						
+						# Add to product defects
+						if normalized_defect not in product_groups[product]['defects']:
+							product_groups[product]['defects'][normalized_defect] = 0
+						product_groups[product]['defects'][normalized_defect] += qty
+						
+					except ValueError:
+						continue
+		
+		# Update product totals
+		product_groups[product]['total_inspected'] += row.get('inspected_qty', 0)
+		product_groups[product]['total_rejected'] += row.get('rejected_qty', 0)
+	
+	# Calculate product-level rejection percentages
+	for product_data in product_groups.values():
+		if product_data['total_inspected'] > 0:
+			product_data['total_rejection_percentage'] = (product_data['total_rejected'] * 100.0) / product_data['total_inspected']
+	
+	# Sort defect types for consistent column order
+	sorted_defect_types = sorted(list(all_defect_types))
+	
+	# Convert to final format
+	result = []
+	
+	for product, product_data in product_groups.items():
+		# Create product summary row
+		product_row = {
+			'id': f"product_{product}",
+			'type': 'product',
+			'product': product,
+			'lot_no': '',
+			'main_lot': '',
+			'sublot_number': '',
+			'inspected_qty': product_data['total_inspected'],
+			'rejected_qty': product_data['total_rejected'],
+			'rejection_percentage': round(product_data['total_rejection_percentage'], 2),
+			'has_children': True,
+			'expanded': False,
+			'level': 0
+		}
+		
+		# Add defect columns to product row
+		for defect_type in sorted_defect_types:
+			product_row[defect_type] = product_data['defects'].get(defect_type, 0)
+		
+		result.append(product_row)
+		
+		# Add lot rows (initially hidden)
+		for lot_no, lot_data in product_data['lots'].items():
+			lot_row = {
+				'id': f"lot_{product}_{lot_no}",
+				'type': 'lot',
+				'product': product,
+				'lot_no': lot_no,
+				'main_lot': lot_data['main_lot'],
+				'sublot_number': lot_data['sublot_number'],
+				'inspected_qty': lot_data['inspected_qty'],
+				'rejected_qty': lot_data['rejected_qty'],
+				'rejection_percentage': round(lot_data['rejection_percentage'], 2),
+				'has_children': False,
+				'expanded': False,
+				'level': 1,
+				'parent_id': f"product_{product}",
+				'document_name': lot_data['document_name'],
+				'source_type': lot_data['source_type'],
+				'posting_date': lot_data['posting_date'],
+				'inspector_code': lot_data['inspector_code']
+			}
+			
+			# Add defect columns to lot row
+			for defect_type in sorted_defect_types:
+				lot_row[defect_type] = lot_data['defects'].get(defect_type, 0)
+			
+			result.append(lot_row)
+	
+	return {
+		'rows': result,
+		'defect_columns': sorted_defect_types,
+		'summary': {
+			'total_products': len(product_groups),
+			'total_lots': sum(len(pd['lots']) for pd in product_groups.values()),
+			'total_inspected': sum(pd['total_inspected'] for pd in product_groups.values()),
+			'total_rejected': sum(pd['total_rejected'] for pd in product_groups.values())
+		}
+	}
+
+@frappe.whitelist()
+def get_product_grouped_pivot_report(filters=None):
+	"""
+	Get product-grouped pivot report with drill-down capability
+	"""
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+	
+	if not filters:
+		filters = {}
+	
+	# Set default date range if not provided
+	if not filters.get('from_date'):
+		filters['from_date'] = add_days(nowdate(), -30)
+	if not filters.get('to_date'):
+		filters['to_date'] = nowdate()
+	
+	try:
+		# Get unified rejection data
+		data = get_unified_rejection_data(filters)
+		
+		# Process into grouped pivot format
+		pivot_data = get_product_grouped_pivot_data(data)
+		
+		return {
+			'status': 'success',
+			'data': pivot_data,
+			'message': f'Found {pivot_data["summary"]["total_products"]} products with {pivot_data["summary"]["total_lots"]} lots'
+		}
+	
+	except Exception as e:
+		frappe.log_error(f"Error in get_product_grouped_pivot_report: {str(e)}")
+		return {
+			'status': 'error',
+			'message': f'Error fetching pivot data: {str(e)}',
+			'data': {'rows': [], 'defect_columns': [], 'summary': {}}
+		}
+
+@frappe.whitelist()
+def get_defect_pivot_report_grouped(filters=None):
+	"""
+	Wrapper function for get_product_grouped_pivot_report
+	Used by the frontend API call
+	"""
+	return get_product_grouped_pivot_report(filters)

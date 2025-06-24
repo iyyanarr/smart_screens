@@ -146,6 +146,9 @@ class DrillDownRejectionReport {
 		
 		// Load filter options
 		this.load_filter_options();
+		
+		// Add custom CSS for hierarchical table
+		this.add_custom_styles();
 	}
 
 	switch_view(view) {
@@ -233,7 +236,7 @@ class DrillDownRejectionReport {
 
 		// Choose API method based on current view
 		const method = this.currentView === 'pivot' 
-			? 'smart_screens.smart_screens.page.drill_down_rejection_report.drill_down_rejection_report.get_defect_pivot_report_simple'
+			? 'smart_screens.smart_screens.page.drill_down_rejection_report.drill_down_rejection_report.get_defect_pivot_report'
 			: 'smart_screens.smart_screens.page.drill_down_rejection_report.drill_down_rejection_report.get_rejection_data';
 
 		// Make API call
@@ -246,7 +249,11 @@ class DrillDownRejectionReport {
 				document.getElementById('loading-section').style.display = 'none';
 				
 				if (response.message && response.message.status === 'success') {
-					if (response.message.data && response.message.data.length > 0) {
+					const hasData = this.currentView === 'pivot' 
+						? (response.message.data && response.message.data.rows && response.message.data.rows.length > 0)
+						: (response.message.data && response.message.data.length > 0);
+					
+					if (hasData) {
 						this.display_results(response.message);
 					} else {
 						document.getElementById('no-data-section').style.display = 'block';
@@ -301,13 +308,13 @@ class DrillDownRejectionReport {
 
 	display_pivot_view(result) {
 		// Update table title
-		document.getElementById('table-title').textContent = '📊 Pivot View - Defects as Columns';
+		document.getElementById('table-title').textContent = '📊 Product-Grouped Pivot View with Drill-Down';
 		
 		// Display pivot summary cards
 		this.display_pivot_summary_cards(result);
 		
-		// Display pivot data table
-		this.display_pivot_data_table(result.data, result.defect_types);
+		// Display hierarchical pivot data table
+		this.display_hierarchical_pivot_table(result.data);
 	}
 
 	display_standard_summary_cards(result) {
@@ -401,50 +408,66 @@ class DrillDownRejectionReport {
 	}
 
 	display_pivot_summary_cards(result) {
-		const data = result.data;
-		const defectTypes = result.defect_types || [];
+		const summary = result.data?.summary || result.summary || {};
+		const defectColumns = result.data?.defect_columns || result.defect_columns || [];
 		
-		const totalRejected = data.reduce((sum, row) => sum + (row.total_rejected || 0), 0);
-		const totalInspected = data.reduce((sum, row) => sum + (parseFloat(row.inspected_qty) || 0), 0);
+		const totalProducts = summary.total_products || 0;
+		const totalLots = summary.total_lots || 0;
+		const totalInspected = summary.total_inspected || 0;
+		const totalRejected = summary.total_rejected || 0;
 		const overallRejectionRate = totalInspected > 0 ? (totalRejected / totalInspected * 100).toFixed(2) : 0;
-		
-		const uniqueProducts = new Set(data.map(row => row.item_code)).size;
-		const uniqueLots = new Set(data.map(row => row.main_lot)).size;
 
 		document.getElementById('summary-cards').innerHTML = `
 			<div class="col-md-3">
 				<div class="card bg-primary text-white">
 					<div class="card-body text-center">
-						<h4>${defectTypes.length}</h4>
-						<p>🔍 Defect Types</p>
+						<h4>${totalProducts}</h4>
+						<p>📦 Products</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
 				<div class="card bg-info text-white">
 					<div class="card-body text-center">
-						<h4>${uniqueProducts}</h4>
-						<p>🔧 Products</p>
+						<h4>${totalLots}</h4>
+						<p>📋 Total Lots</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
 				<div class="card bg-success text-white">
 					<div class="card-body text-center">
-						<h4>${uniqueLots}</h4>
-						<p>📦 Main Lots</p>
+						<h4>${totalInspected.toLocaleString()}</h4>
+						<p>🔍 Total Inspected</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-warning text-white">
+				<div class="card bg-${overallRejectionRate > 10 ? 'danger' : overallRejectionRate > 5 ? 'warning' : 'success'} text-white">
 					<div class="card-body text-center">
-						<h4>${totalRejected.toLocaleString()}</h4>
-						<p>❌ Total Rejected</p>
+						<h4>${overallRejectionRate}%</h4>
+						<p>❌ Rejection Rate</p>
 					</div>
 				</div>
 			</div>
 		`;
+		
+		// Add defect types row if available
+		if (defectColumns.length > 0) {
+			const defectTypesCard = `
+				<div class="col-12 mt-3">
+					<div class="card bg-light">
+						<div class="card-body">
+							<h6 class="card-title">🔍 Defect Types in Data (${defectColumns.length})</h6>
+							<div class="defect-types-list">
+								${defectColumns.map(defect => `<span class="badge badge-secondary mr-1 mb-1">${defect}</span>`).join('')}
+							</div>
+						</div>
+					</div>
+				</div>
+			`;
+			document.getElementById('summary-cards').innerHTML += defectTypesCard;
+		}
 	}
 
 	display_standard_data_table(data) {
@@ -474,34 +497,258 @@ class DrillDownRejectionReport {
 		`;
 	}
 
-	display_pivot_data_table(data, defectTypes) {
+	display_hierarchical_pivot_table(result) {
 		const tableContainer = document.getElementById('table-container');
+		const data = result.rows || [];
+		const defectColumns = result.defect_columns || [];
+		
+		// Store data for drill-down functionality
+		this.pivotData = data;
+		this.defectColumns = defectColumns;
 		
 		// Create headers for defect types
-		const defectHeaders = defectTypes.map(defect => {
-			const cleanName = defect.replace(/[^a-zA-Z0-9]/g, ' ').trim();
-			return `<th class="defect-col" title="${defect}">${cleanName}</th>`;
+		const defectHeaders = defectColumns.map(defect => {
+			return `<th class="defect-col text-center" title="${defect}">${defect}</th>`;
 		}).join('');
 		
 		tableContainer.innerHTML = `
-			<table class="table table-striped table-hover table-sm" id="pivot-table">
-				<thead class="thead-dark">
-					<tr>
-						<th>Product</th>
-						<th>Main Lot</th>
-						<th>Sublot</th>
-						<th>Inspector</th>
-						<th>Source</th>
-						<th>Inspected Qty</th>
-						<th>Total Rejected</th>
-						${defectHeaders}
-					</tr>
-				</thead>
-				<tbody id="pivot-tbody">
-					${this.generate_pivot_table_rows(data, defectTypes)}
-				</tbody>
-			</table>
+			<div class="table-responsive">
+				<table class="table table-striped table-hover table-sm" id="hierarchical-pivot-table">
+					<thead class="thead-dark">
+						<tr>
+							<th style="width: 30px;"></th>
+							<th style="width: 250px;">Product / Lot</th>
+							<th style="width: 120px;">Main Lot</th>
+							<th style="width: 80px;">Sublot</th>
+							<th style="width: 100px;">Inspected</th>
+							<th style="width: 100px;">Rejected</th>
+							<th style="width: 80px;">Rejection %</th>
+							${defectHeaders}
+						</tr>
+					</thead>
+					<tbody id="hierarchical-pivot-tbody">
+						${this.generate_hierarchical_pivot_rows(data, defectColumns)}
+					</tbody>
+				</table>
+			</div>
 		`;
+		
+		// Add event listeners for expand/collapse
+		this.add_drill_down_listeners();
+	}
+
+	generate_hierarchical_pivot_rows(data, defectColumns) {
+		return data.map(row => {
+			if (row.type === 'product') {
+				return this.generate_product_row(row, defectColumns);
+			} else if (row.type === 'lot') {
+				return this.generate_lot_row(row, defectColumns);
+			}
+		}).join('');
+	}
+
+	generate_product_row(row, defectColumns) {
+		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
+		let rowClass = 'product-row';
+		
+		if (rejectionRate > 10) {
+			rowClass += ' table-danger';
+		} else if (rejectionRate > 5) {
+			rowClass += ' table-warning';
+		} else if (rejectionRate > 0) {
+			rowClass += ' table-info';
+		} else {
+			rowClass += ' table-success';
+		}
+		
+		// Generate defect columns with color coding based on quantity
+		const defectCells = defectColumns.map(defect => {
+			const qty = row[defect] || 0;
+			let cellClass = 'defect-cell-empty';
+			
+			if (qty > 0) {
+				if (qty >= 100) {
+					cellClass = 'defect-cell-critical';
+				} else if (qty >= 50) {
+					cellClass = 'defect-cell-high';
+				} else if (qty >= 10) {
+					cellClass = 'defect-cell-medium';
+				} else {
+					cellClass = 'defect-cell-low';
+				}
+			}
+			
+			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
+		}).join('');
+		
+		return `
+			<tr class="${rowClass}" data-id="${row.id}" data-type="product">
+				<td class="expand-icon" style="cursor: pointer;">
+					<i class="fa fa-plus-square text-primary" title="Click to expand lots"></i>
+				</td>
+				<td><strong>📦 ${row.product}</strong></td>
+				<td>-</td>
+				<td><span class="badge badge-primary">${this.count_lots_for_product(row.product)}</span></td>
+				<td><strong>${(row.inspected_qty || 0).toLocaleString()}</strong></td>
+				<td><strong>${(row.rejected_qty || 0).toLocaleString()}</strong></td>
+				<td><strong>${rejectionRate.toFixed(2)}%</strong></td>
+				${defectCells}
+			</tr>
+		`;
+	}
+
+	generate_lot_row(row, defectColumns) {
+		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
+		let rowClass = 'lot-row d-none'; // Initially hidden
+		
+		if (rejectionRate > 10) {
+			rowClass += ' table-danger';
+		} else if (rejectionRate > 5) {
+			rowClass += ' table-warning';
+		} else if (rejectionRate > 0) {
+			rowClass += ' table-info';
+		} else {
+			rowClass += ' table-success';
+		}
+		
+		// Generate defect columns with color coding based on quantity
+		const defectCells = defectColumns.map(defect => {
+			const qty = row[defect] || 0;
+			let cellClass = 'defect-cell-empty';
+			
+			if (qty > 0) {
+				if (qty >= 100) {
+					cellClass = 'defect-cell-critical';
+				} else if (qty >= 50) {
+					cellClass = 'defect-cell-high';
+				} else if (qty >= 10) {
+					cellClass = 'defect-cell-medium';
+				} else {
+					cellClass = 'defect-cell-low';
+				}
+			}
+			
+			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
+		}).join('');
+		
+		return `
+			<tr class="${rowClass}" data-id="${row.id}" data-type="lot" data-parent="${row.parent_id}">
+				<td style="padding-left: 25px;">
+					<i class="fa fa-angle-right text-muted"></i>
+				</td>
+				<td style="padding-left: 25px;">
+					📋 ${row.lot_no}
+					<br><small class="text-muted">${row.source_type || ''}</small>
+				</td>
+				<td>${row.main_lot || '-'}</td>
+				<td><span class="badge badge-dark">${row.sublot_number || '1'}</span></td>
+				<td>${(row.inspected_qty || 0).toLocaleString()}</td>
+				<td>${(row.rejected_qty || 0).toLocaleString()}</td>
+				<td>${rejectionRate.toFixed(2)}%</td>
+				${defectCells}
+			</tr>
+		`;
+	}
+
+	count_lots_for_product(product) {
+		return this.pivotData ? this.pivotData.filter(row => row.type === 'lot' && row.product === product).length : 0;
+	}
+
+	add_drill_down_listeners() {
+		// Add click listeners for expand/collapse functionality
+		$(document).off('click', '.expand-icon').on('click', '.expand-icon', (e) => {
+			const row = $(e.currentTarget).closest('tr');
+			const productId = row.data('id');
+			const icon = row.find('i');
+			
+			// Find all lot rows for this product
+			const lotRows = $(`tr[data-parent="${productId}"]`);
+			
+			if (icon.hasClass('fa-plus-square')) {
+				// Expand
+				lotRows.removeClass('d-none');
+				icon.removeClass('fa-plus-square').addClass('fa-minus-square');
+				icon.attr('title', 'Click to collapse lots');
+			} else {
+				// Collapse
+				lotRows.addClass('d-none');
+				icon.removeClass('fa-minus-square').addClass('fa-plus-square');
+				icon.attr('title', 'Click to expand lots');
+			}
+		});
+		
+		// Add click listener for lot rows to show details
+		$(document).off('click', '.lot-row').on('click', '.lot-row', (e) => {
+			const row = $(e.currentTarget);
+			const rowData = this.pivotData.find(r => r.id === row.data('id'));
+			if (rowData) {
+				this.show_lot_details(rowData);
+			}
+		});
+	}
+
+	show_lot_details(lotData) {
+		// Show a modal or detailed view for the lot
+		const defectDetails = this.defectColumns
+			.filter(defect => lotData[defect] > 0)
+			.map(defect => `<li><strong>${defect}:</strong> ${lotData[defect]} rejected</li>`)
+			.join('');
+
+		const modalContent = `
+			<div class="modal fade" id="lotDetailsModal" tabindex="-1">
+				<div class="modal-dialog modal-lg">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title">📋 Lot Details: ${lotData.lot_no}</h5>
+							<button type="button" class="close" data-dismiss="modal">
+								<span>&times;</span>
+							</button>
+						</div>
+						<div class="modal-body">
+							<div class="row">
+								<div class="col-md-6">
+									<h6>📦 Basic Information</h6>
+									<ul class="list-unstyled">
+										<li><strong>Product:</strong> ${lotData.product}</li>
+										<li><strong>Lot Number:</strong> ${lotData.lot_no}</li>
+										<li><strong>Main Lot:</strong> ${lotData.main_lot}</li>
+										<li><strong>Sublot:</strong> ${lotData.sublot_number}</li>
+										<li><strong>Source:</strong> ${lotData.source_type}</li>
+										<li><strong>Document:</strong> ${lotData.document_name}</li>
+									</ul>
+								</div>
+								<div class="col-md-6">
+									<h6>📊 Quality Metrics</h6>
+									<ul class="list-unstyled">
+										<li><strong>Inspected Qty:</strong> ${lotData.inspected_qty.toLocaleString()}</li>
+										<li><strong>Rejected Qty:</strong> ${lotData.rejected_qty.toLocaleString()}</li>
+										<li><strong>Rejection %:</strong> ${lotData.rejection_percentage}%</li>
+										<li><strong>Inspector:</strong> ${lotData.inspector_code || 'N/A'}</li>
+										<li><strong>Date:</strong> ${lotData.posting_date || 'N/A'}</li>
+									</ul>
+								</div>
+							</div>
+							${defectDetails ? `
+								<div class="mt-3">
+									<h6>🚨 Defect Breakdown</h6>
+									<ul>${defectDetails}</ul>
+								</div>
+							` : ''}
+						</div>
+						<div class="modal-footer">
+							<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		`;
+
+		// Remove existing modal if any
+		$('#lotDetailsModal').remove();
+		
+		// Add modal to body and show
+		$('body').append(modalContent);
+		$('#lotDetailsModal').modal('show');
 	}
 
 	generate_standard_table_rows(data) {
@@ -637,5 +884,167 @@ class DrillDownRejectionReport {
 		}
 		
 		frappe.msgprint('Export functionality will be implemented in Phase 2');
+	}
+
+	add_custom_styles() {
+		// Add custom CSS for the hierarchical pivot table
+		if (!document.getElementById('drill-down-custom-styles')) {
+			const style = document.createElement('style');
+			style.id = 'drill-down-custom-styles';
+			style.textContent = `
+				/* Product Row Styling - Clean flat design */
+				.product-row {
+					font-weight: bold;
+					background-color: #f8f9fa !important;
+					color: #dc2626 !important;
+					border-top: 2px solid #dc2626;
+				}
+				
+				.product-row:hover {
+					background-color: #e9ecef !important;
+				}
+				
+				.product-row td {
+					color: #dc2626 !important;
+					border-color: #dc2626;
+				}
+				
+				/* Lot Row Styling - Simple alternating colors */
+				.lot-row {
+					font-size: 0.9em;
+					background-color: #f7fafc !important;
+					border-left: 3px solid #e2e8f0;
+				}
+				
+				.lot-row:nth-child(even) {
+					background-color: #ffffff !important;
+				}
+				
+				.lot-row:hover {
+					background-color: #edf2f7 !important;
+					border-left-color: #3182ce;
+				}
+				
+				/* Expand/Collapse Icon Styling */
+				.expand-icon {
+					text-align: center;
+					user-select: none;
+					background-color: #f0f4f8;
+				}
+				
+				.expand-icon:hover {
+					background-color: #e2e8f0;
+				}
+				
+				/* Defect Columns */
+				.defect-col {
+					min-width: 60px;
+					text-align: center;
+					background-color: #f8f9fa;
+					color: #1a202c;
+					font-weight: 600;
+					border: 1px solid #e2e8f0;
+				}
+				
+				/* Defect Cell Color Coding - Flat colors */
+				.defect-cell-empty {
+					color: #a0aec0;
+					background-color: #f7fafc;
+				}
+				
+				.defect-cell-active {
+					font-weight: bold;
+					text-align: center;
+				}
+				
+				/* Simple flat color coding based on defect quantity */
+				.defect-cell-low {
+					background-color: #c6f6d5;
+					color: #2f855a;
+				}
+				
+				.defect-cell-medium {
+					background-color: #fef5e7;
+					color: #d69e2e;
+				}
+				
+				.defect-cell-high {
+					background-color: #fed7d7;
+					color: #c53030;
+				}
+				
+				.defect-cell-critical {
+					background-color: #fecaca;
+					color: #7f1d1d;
+					font-weight: 900;
+				}
+				
+				/* Table Enhancement */
+				.hierarchical-pivot-table {
+					font-size: 0.9em;
+					border: 1px solid #e2e8f0;
+				}
+				
+				.table-responsive {
+					border: 1px solid #e2e8f0;
+				}
+				
+				/* Header Styling */
+				.thead-dark th {
+					background-color: #f8f9fa !important;
+					border-color: #e2e8f0 !important;
+					color: #1a202c !important;
+					font-weight: 600;
+				}
+				
+				/* Rejection Rate Color Coding for Rows - Flat colors */
+				.table-success {
+					background-color: #f0fff4 !important;
+					border-left: 4px solid #38a169;
+				}
+				
+				.table-info {
+					background-color: #ebf8ff !important;
+					border-left: 4px solid #3182ce;
+				}
+				
+				.table-warning {
+					background-color: #fffbeb !important;
+					border-left: 4px solid #d69e2e;
+				}
+				
+				.table-danger {
+					background-color: #fff5f5 !important;
+					border-left: 4px solid #e53e3e;
+				}
+				
+				/* Summary Cards - Simple flat design */
+				.card {
+					border: 1px solid #e2e8f0;
+					border-radius: 6px;
+				}
+				
+				.card:hover {
+					border-color: #cbd5e0;
+				}
+				
+				/* Mobile Responsiveness */
+				@media (max-width: 768px) {
+					.defect-col {
+						min-width: 45px;
+						font-size: 0.7em;
+					}
+					
+					.product-row, .lot-row {
+						font-size: 0.8em;
+					}
+					
+					.hierarchical-pivot-table {
+						font-size: 0.8em;
+					}
+				}
+			`;
+			document.head.appendChild(style);
+		}
 	}
 }
