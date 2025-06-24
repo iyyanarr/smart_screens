@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "creation": "2025-06-23 10:00:00.000000",
+ "doctype": "Page",
+ "icon": "fa fa-chart-line",
+ "idx": 1,
+ "is_standard": 1,
+ "modified": "2025-06-23 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "drill-down-rejection-report",
+ "owner": "Administrator",
+ "page_name": "Drill Down Rejection Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Quality Manager"
+  }
+ ],
+ "script": "",
+ "standard": "Yes",
+ "style": "",
+ "system_page": 0,
+ "title": "📊 Drill Down Rejection Report"
+}
