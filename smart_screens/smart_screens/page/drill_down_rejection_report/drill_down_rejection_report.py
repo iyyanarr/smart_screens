@@ -1112,15 +1112,16 @@ def get_defect_pivot_report(filters=None):
 def get_product_grouped_pivot_data(data):
 	"""
 	Process data into product-grouped pivot format with drill-down capability
-	Structure: Product -> Lots -> Defect details
+	Structure: Product -> Main Lot -> Sublot -> Defect details
 	"""
 	product_groups = {}
 	all_defect_types = set()
 	
-	# First pass: collect all unique defect types and group by product
+	# First pass: collect all unique defect types and group by product -> main_lot -> sublot
 	for row in data:
 		product = row.get('item_code') or 'Unknown Product'
-		lot_no = row.get('lot_no') or 'Unknown Lot'
+		main_lot = row.get('main_lot') or row.get('lot_no') or 'Unknown Lot'
+		sublot_number = str(row.get('sublot_number', '1'))
 		
 		# Initialize product group if not exists
 		if product not in product_groups:
@@ -1129,16 +1130,28 @@ def get_product_grouped_pivot_data(data):
 				'total_inspected': 0,
 				'total_rejected': 0,
 				'total_rejection_percentage': 0,
-				'lots': {},
+				'main_lots': {},
 				'defects': {}
 			}
 		
-		# Initialize lot if not exists
-		if lot_no not in product_groups[product]['lots']:
-			product_groups[product]['lots'][lot_no] = {
-				'lot_no': lot_no,
-				'main_lot': row.get('main_lot', ''),
-				'sublot_number': row.get('sublot_number', ''),
+		# Initialize main lot if not exists
+		if main_lot not in product_groups[product]['main_lots']:
+			product_groups[product]['main_lots'][main_lot] = {
+				'main_lot': main_lot,
+				'total_inspected': 0,
+				'total_rejected': 0,
+				'total_rejection_percentage': 0,
+				'sublots': {},
+				'defects': {}
+			}
+		
+		# Initialize sublot if not exists
+		sublot_key = f"{main_lot}_{sublot_number}"
+		if sublot_key not in product_groups[product]['main_lots'][main_lot]['sublots']:
+			product_groups[product]['main_lots'][main_lot]['sublots'][sublot_key] = {
+				'lot_no': row.get('lot_no', ''),
+				'main_lot': main_lot,
+				'sublot_number': sublot_number,
 				'inspected_qty': 0,
 				'rejected_qty': 0,
 				'rejection_percentage': 0,
@@ -1149,14 +1162,14 @@ def get_product_grouped_pivot_data(data):
 				'inspector_code': row.get('inspector_code')
 			}
 		
-		# Update lot totals
-		lot_data = product_groups[product]['lots'][lot_no]
-		lot_data['inspected_qty'] += row.get('inspected_qty', 0)
-		lot_data['rejected_qty'] += row.get('rejected_qty', 0)
-		if lot_data['inspected_qty'] > 0:
-			lot_data['rejection_percentage'] = (lot_data['rejected_qty'] * 100.0) / lot_data['inspected_qty']
+		# Update sublot totals
+		sublot_data = product_groups[product]['main_lots'][main_lot]['sublots'][sublot_key]
+		sublot_data['inspected_qty'] += row.get('inspected_qty', 0)
+		sublot_data['rejected_qty'] += row.get('rejected_qty', 0)
+		if sublot_data['inspected_qty'] > 0:
+			sublot_data['rejection_percentage'] = (sublot_data['rejected_qty'] * 100.0) / sublot_data['inspected_qty']
 		
-		# Process defect details for the lot
+		# Process defect details for the sublot
 		defect_details = row.get('defect_details', '')
 		if defect_details:
 			defect_pairs = defect_details.split('; ')
@@ -1168,10 +1181,15 @@ def get_product_grouped_pivot_data(data):
 						normalized_defect = normalize_defect_type(defect_type.strip())
 						all_defect_types.add(normalized_defect)
 						
-						# Add to lot defects
-						if normalized_defect not in lot_data['defects']:
-							lot_data['defects'][normalized_defect] = 0
-						lot_data['defects'][normalized_defect] += qty
+						# Add to sublot defects
+						if normalized_defect not in sublot_data['defects']:
+							sublot_data['defects'][normalized_defect] = 0
+						sublot_data['defects'][normalized_defect] += qty
+						
+						# Add to main lot defects
+						if normalized_defect not in product_groups[product]['main_lots'][main_lot]['defects']:
+							product_groups[product]['main_lots'][main_lot]['defects'][normalized_defect] = 0
+						product_groups[product]['main_lots'][main_lot]['defects'][normalized_defect] += qty
 						
 						# Add to product defects
 						if normalized_defect not in product_groups[product]['defects']:
@@ -1181,12 +1199,22 @@ def get_product_grouped_pivot_data(data):
 					except ValueError:
 						continue
 		
+		# Update main lot totals
+		product_groups[product]['main_lots'][main_lot]['total_inspected'] += row.get('inspected_qty', 0)
+		product_groups[product]['main_lots'][main_lot]['total_rejected'] += row.get('rejected_qty', 0)
+		
 		# Update product totals
 		product_groups[product]['total_inspected'] += row.get('inspected_qty', 0)
 		product_groups[product]['total_rejected'] += row.get('rejected_qty', 0)
 	
-	# Calculate product-level rejection percentages
+	# Calculate rejection percentages for main lots and products
 	for product_data in product_groups.values():
+		# Calculate main lot rejection percentages
+		for main_lot_data in product_data['main_lots'].values():
+			if main_lot_data['total_inspected'] > 0:
+				main_lot_data['total_rejection_percentage'] = (main_lot_data['total_rejected'] * 100.0) / main_lot_data['total_inspected']
+		
+		# Calculate product rejection percentage
 		if product_data['total_inspected'] > 0:
 			product_data['total_rejection_percentage'] = (product_data['total_rejected'] * 100.0) / product_data['total_inspected']
 	
@@ -1203,8 +1231,8 @@ def get_product_grouped_pivot_data(data):
 			'type': 'product',
 			'product': product,
 			'lot_no': '',
-			'main_lot': '',
-			'sublot_number': '',
+			'main_lot': f"{len(product_data['main_lots'])}",
+			'sublot_number': f"{sum(len(ml['sublots']) for ml in product_data['main_lots'].values())}",
 			'inspected_qty': product_data['total_inspected'],
 			'rejected_qty': product_data['total_rejected'],
 			'rejection_percentage': round(product_data['total_rejection_percentage'], 2),
@@ -1219,40 +1247,65 @@ def get_product_grouped_pivot_data(data):
 		
 		result.append(product_row)
 		
-		# Add lot rows (initially hidden)
-		for lot_no, lot_data in product_data['lots'].items():
-			lot_row = {
-				'id': f"lot_{product}_{lot_no}",
-				'type': 'lot',
+		# Add main lot rows (level 1)
+		for main_lot, main_lot_data in product_data['main_lots'].items():
+			main_lot_row = {
+				'id': f"main_lot_{product}_{main_lot}",
+				'type': 'main_lot',
 				'product': product,
-				'lot_no': lot_no,
-				'main_lot': lot_data['main_lot'],
-				'sublot_number': lot_data['sublot_number'],
-				'inspected_qty': lot_data['inspected_qty'],
-				'rejected_qty': lot_data['rejected_qty'],
-				'rejection_percentage': round(lot_data['rejection_percentage'], 2),
-				'has_children': False,
+				'lot_no': '',
+				'main_lot': main_lot,
+				'sublot_number': f"{len(main_lot_data['sublots'])}",
+				'inspected_qty': main_lot_data['total_inspected'],
+				'rejected_qty': main_lot_data['total_rejected'],
+				'rejection_percentage': round(main_lot_data['total_rejection_percentage'], 2),
+				'has_children': True,
 				'expanded': False,
 				'level': 1,
-				'parent_id': f"product_{product}",
-				'document_name': lot_data['document_name'],
-				'source_type': lot_data['source_type'],
-				'posting_date': lot_data['posting_date'],
-				'inspector_code': lot_data['inspector_code']
+				'parent_id': f"product_{product}"
 			}
 			
-			# Add defect columns to lot row
+			# Add defect columns to main lot row
 			for defect_type in sorted_defect_types:
-				lot_row[defect_type] = lot_data['defects'].get(defect_type, 0)
+				main_lot_row[defect_type] = main_lot_data['defects'].get(defect_type, 0)
 			
-			result.append(lot_row)
+			result.append(main_lot_row)
+			
+			# Add sublot rows (level 2)
+			for sublot_key, sublot_data in main_lot_data['sublots'].items():
+				sublot_row = {
+					'id': f"sublot_{product}_{main_lot}_{sublot_data['sublot_number']}",
+					'type': 'sublot',
+					'product': product,
+					'lot_no': sublot_data['lot_no'],
+					'main_lot': main_lot,
+					'sublot_number': sublot_data['sublot_number'],
+					'inspected_qty': sublot_data['inspected_qty'],
+					'rejected_qty': sublot_data['rejected_qty'],
+					'rejection_percentage': round(sublot_data['rejection_percentage'], 2),
+					'has_children': False,
+					'expanded': False,
+					'level': 2,
+					'parent_id': f"main_lot_{product}_{main_lot}",
+					'document_name': sublot_data['document_name'],
+					'source_type': sublot_data['source_type'],
+					'posting_date': sublot_data['posting_date'],
+					'inspector_code': sublot_data['inspector_code']
+				}
+				
+				# Add defect columns to sublot row
+				for defect_type in sorted_defect_types:
+					sublot_row[defect_type] = sublot_data['defects'].get(defect_type, 0)
+				
+				result.append(sublot_row)
 	
 	return {
 		'rows': result,
 		'defect_columns': sorted_defect_types,
 		'summary': {
 			'total_products': len(product_groups),
-			'total_lots': sum(len(pd['lots']) for pd in product_groups.values()),
+			'total_main_lots': sum(len(pd['main_lots']) for pd in product_groups.values()),
+			'total_sublots': sum(sum(len(ml['sublots']) for ml in pd['main_lots'].values()) for pd in product_groups.values()),
 			'total_inspected': sum(pd['total_inspected'] for pd in product_groups.values()),
 			'total_rejected': sum(pd['total_rejected'] for pd in product_groups.values())
 		}
@@ -1285,7 +1338,7 @@ def get_product_grouped_pivot_report(filters=None):
 		return {
 			'status': 'success',
 			'data': pivot_data,
-			'message': f'Found {pivot_data["summary"]["total_products"]} products with {pivot_data["summary"]["total_lots"]} lots'
+			'message': f'Found {pivot_data["summary"]["total_products"]} products with {pivot_data["summary"]["total_main_lots"]} main lots and {pivot_data["summary"]["total_sublots"]} sublots'
 		}
 	
 	except Exception as e:

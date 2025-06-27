@@ -517,9 +517,10 @@ class DrillDownRejectionReport {
 					<thead class="thead-dark">
 						<tr>
 							<th style="width: 30px;"></th>
-							<th style="width: 250px;">Product / Lot</th>
-							<th style="width: 120px;">Main Lot</th>
-							<th style="width: 80px;">Sublot</th>
+							<th style="width: 250px;">Product / Main Lot / Sublot</th>
+							<th style="width: 120px;">Lot Number</th>
+							<th style="width: 80px;">Main Lots</th>
+							<th style="width: 80px;">Sublots</th>
 							<th style="width: 100px;">Inspected</th>
 							<th style="width: 100px;">Rejected</th>
 							<th style="width: 80px;">Rejection %</th>
@@ -541,8 +542,10 @@ class DrillDownRejectionReport {
 		return data.map(row => {
 			if (row.type === 'product') {
 				return this.generate_product_row(row, defectColumns);
-			} else if (row.type === 'lot') {
-				return this.generate_lot_row(row, defectColumns);
+			} else if (row.type === 'main_lot') {
+				return this.generate_main_lot_row(row, defectColumns);
+			} else if (row.type === 'sublot') {
+				return this.generate_sublot_row(row, defectColumns);
 			}
 		}).join('');
 	}
@@ -584,11 +587,12 @@ class DrillDownRejectionReport {
 		return `
 			<tr class="${rowClass}" data-id="${row.id}" data-type="product">
 				<td class="expand-icon" style="cursor: pointer;">
-					<i class="fa fa-plus-square text-primary" title="Click to expand lots"></i>
+					<i class="fa fa-plus-square text-primary" title="Click to expand main lots"></i>
 				</td>
 				<td><strong>📦 ${row.product}</strong></td>
 				<td>-</td>
-				<td><span class="badge badge-primary">${this.count_lots_for_product(row.product)}</span></td>
+				<td><span class="badge badge-primary">${row.main_lot}</span></td>
+				<td><span class="badge badge-secondary">${row.sublot_number}</span></td>
 				<td><strong>${(row.inspected_qty || 0).toLocaleString()}</strong></td>
 				<td><strong>${(row.rejected_qty || 0).toLocaleString()}</strong></td>
 				<td><strong>${rejectionRate.toFixed(2)}%</strong></td>
@@ -597,9 +601,9 @@ class DrillDownRejectionReport {
 		`;
 	}
 
-	generate_lot_row(row, defectColumns) {
+	generate_main_lot_row(row, defectColumns) {
 		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
-		let rowClass = 'lot-row d-none'; // Initially hidden
+		let rowClass = 'main-lot-row d-none'; // Initially hidden
 		
 		if (rejectionRate > 10) {
 			rowClass += ' table-danger';
@@ -632,16 +636,70 @@ class DrillDownRejectionReport {
 		}).join('');
 		
 		return `
-			<tr class="${rowClass}" data-id="${row.id}" data-type="lot" data-parent="${row.parent_id}">
-				<td style="padding-left: 25px;">
-					<i class="fa fa-angle-right text-muted"></i>
+			<tr class="${rowClass}" data-id="${row.id}" data-type="main_lot" data-parent="${row.parent_id}">
+				<td class="expand-icon" style="cursor: pointer; padding-left: 25px;">
+					<i class="fa fa-plus-square text-info" title="Click to expand sublots"></i>
 				</td>
 				<td style="padding-left: 25px;">
-					📋 ${row.lot_no}
+					<strong>📋 ${row.main_lot}</strong>
+				</td>
+				<td>-</td>
+				<td><span class="badge badge-info">${row.sublot_number}</span></td>
+				<td>-</td>
+				<td><strong>${(row.inspected_qty || 0).toLocaleString()}</strong></td>
+				<td><strong>${(row.rejected_qty || 0).toLocaleString()}</strong></td>
+				<td><strong>${rejectionRate.toFixed(2)}%</strong></td>
+				${defectCells}
+			</tr>
+		`;
+	}
+
+	generate_sublot_row(row, defectColumns) {
+		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
+		let rowClass = 'sublot-row d-none'; // Initially hidden
+		
+		if (rejectionRate > 10) {
+			rowClass += ' table-danger';
+		} else if (rejectionRate > 5) {
+			rowClass += ' table-warning';
+		} else if (rejectionRate > 0) {
+			rowClass += ' table-info';
+		} else {
+			rowClass += ' table-success';
+		}
+		
+		// Generate defect columns with color coding based on quantity
+		const defectCells = defectColumns.map(defect => {
+			const qty = row[defect] || 0;
+			let cellClass = 'defect-cell-empty';
+			
+			if (qty > 0) {
+				if (qty >= 100) {
+					cellClass = 'defect-cell-critical';
+				} else if (qty >= 50) {
+					cellClass = 'defect-cell-high';
+				} else if (qty >= 10) {
+					cellClass = 'defect-cell-medium';
+				} else {
+					cellClass = 'defect-cell-low';
+				}
+			}
+			
+			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
+		}).join('');
+		
+		return `
+			<tr class="${rowClass}" data-id="${row.id}" data-type="sublot" data-parent="${row.parent_id}">
+				<td style="padding-left: 50px;">
+					<i class="fa fa-angle-right text-muted"></i>
+				</td>
+				<td style="padding-left: 50px;">
+					� ${row.lot_no}
 					<br><small class="text-muted">${row.source_type || ''}</small>
 				</td>
 				<td>${row.main_lot || '-'}</td>
 				<td><span class="badge badge-dark">${row.sublot_number || '1'}</span></td>
+				<td>-</td>
 				<td>${(row.inspected_qty || 0).toLocaleString()}</td>
 				<td>${(row.rejected_qty || 0).toLocaleString()}</td>
 				<td>${rejectionRate.toFixed(2)}%</td>
@@ -650,35 +708,59 @@ class DrillDownRejectionReport {
 		`;
 	}
 
-	count_lots_for_product(product) {
-		return this.pivotData ? this.pivotData.filter(row => row.type === 'lot' && row.product === product).length : 0;
-	}
-
 	add_drill_down_listeners() {
 		// Add click listeners for expand/collapse functionality
 		$(document).off('click', '.expand-icon').on('click', '.expand-icon', (e) => {
 			const row = $(e.currentTarget).closest('tr');
-			const productId = row.data('id');
+			const rowId = row.data('id');
+			const rowType = row.data('type');
 			const icon = row.find('i');
 			
-			// Find all lot rows for this product
-			const lotRows = $(`tr[data-parent="${productId}"]`);
+			// Find child rows based on parent type
+			let childRows;
+			if (rowType === 'product') {
+				// Find main lot rows for this product
+				childRows = $(`tr[data-parent="${rowId}"]`);
+			} else if (rowType === 'main_lot') {
+				// Find sublot rows for this main lot
+				childRows = $(`tr[data-parent="${rowId}"]`);
+			}
 			
 			if (icon.hasClass('fa-plus-square')) {
 				// Expand
-				lotRows.removeClass('d-none');
+				childRows.removeClass('d-none');
 				icon.removeClass('fa-plus-square').addClass('fa-minus-square');
-				icon.attr('title', 'Click to collapse lots');
+				if (rowType === 'product') {
+					icon.attr('title', 'Click to collapse main lots');
+				} else if (rowType === 'main_lot') {
+					icon.attr('title', 'Click to collapse sublots');
+				}
 			} else {
 				// Collapse
-				lotRows.addClass('d-none');
+				childRows.addClass('d-none');
+				// Also collapse any expanded grandchildren
+				if (rowType === 'product') {
+					// Collapse all sublots under this product
+					childRows.each(function() {
+						const mainLotId = $(this).data('id');
+						$(`tr[data-parent="${mainLotId}"]`).addClass('d-none');
+						$(this).find('i.fa-minus-square').removeClass('fa-minus-square').addClass('fa-plus-square');
+					});
+				}
 				icon.removeClass('fa-minus-square').addClass('fa-plus-square');
-				icon.attr('title', 'Click to expand lots');
+				if (rowType === 'product') {
+					icon.attr('title', 'Click to expand main lots');
+				} else if (rowType === 'main_lot') {
+					icon.attr('title', 'Click to expand sublots');
+				}
 			}
 		});
 		
-		// Add click listener for lot rows to show details
-		$(document).off('click', '.lot-row').on('click', '.lot-row', (e) => {
+		// Add click listener for sublot rows to show details
+		$(document).off('click', '.sublot-row').on('click', '.sublot-row', (e) => {
+			if ($(e.target).hasClass('expand-icon') || $(e.target).closest('.expand-icon').length) {
+				return; // Don't show details if clicking expand icon
+			}
 			const row = $(e.currentTarget);
 			const rowData = this.pivotData.find(r => r.id === row.data('id'));
 			if (rowData) {
