@@ -357,50 +357,50 @@ class DrillDownRejectionReport {
 
 		document.getElementById('summary-cards').innerHTML = `
 			<div class="col-md-3">
-				<div class="card bg-primary text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${uniqueSublots}</h4>
-						<p>📦 Unique Sublots</p>
+						<h4 class="text-primary">${uniqueSublots}</h4>
+						<p class="text-dark">📦 Unique Sublots</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-info text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${uniqueProducts}</h4>
-						<p>🔧 Products</p>
+						<h4 class="text-info">${uniqueProducts}</h4>
+						<p class="text-dark">🔧 Products</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-success text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${perfectSublots}</h4>
-						<p>✅ Perfect Sublots (0% rejection)</p>
+						<h4 class="text-success">${perfectSublots}</h4>
+						<p class="text-dark">✅ Perfect Sublots (0% rejection)</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-danger text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${criticalSublots}</h4>
-						<p>⚠️ Critical Sublots (>10% rejection)</p>
+						<h4 class="text-danger">${criticalSublots}</h4>
+						<p class="text-dark">⚠️ Critical Sublots (>10% rejection)</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-6">
-				<div class="card bg-warning text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${totalInspected.toLocaleString()}</h4>
-						<p>📊 Total Inspected Quantity</p>
+						<h4 class="text-warning">${totalInspected.toLocaleString()}</h4>
+						<p class="text-dark">📊 Total Inspected Quantity</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-6">
-				<div class="card bg-dark text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${overallRejectionRate}%</h4>
-						<p>📈 Overall Rejection Rate</p>
+						<h4 class="text-secondary">${overallRejectionRate}%</h4>
+						<p class="text-dark">📈 Overall Rejection Rate</p>
 					</div>
 				</div>
 			</div>
@@ -419,34 +419,34 @@ class DrillDownRejectionReport {
 
 		document.getElementById('summary-cards').innerHTML = `
 			<div class="col-md-3">
-				<div class="card bg-primary text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${totalProducts}</h4>
-						<p>📦 Products</p>
+						<h4 class="text-primary">${totalProducts}</h4>
+						<p class="text-dark">📦 Products</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-info text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${totalLots}</h4>
-						<p>📋 Total Lots</p>
+						<h4 class="text-info">${totalLots}</h4>
+						<p class="text-dark">📋 Total Lots</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-success text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${totalInspected.toLocaleString()}</h4>
-						<p>🔍 Total Inspected</p>
+						<h4 class="text-success">${totalInspected.toLocaleString()}</h4>
+						<p class="text-dark">🔍 Total Inspected</p>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-3">
-				<div class="card bg-${overallRejectionRate > 10 ? 'danger' : overallRejectionRate > 5 ? 'warning' : 'success'} text-white">
+				<div class="card bg-white text-dark summary-card">
 					<div class="card-body text-center">
-						<h4>${overallRejectionRate}%</h4>
-						<p>❌ Rejection Rate</p>
+						<h4 class="text-${overallRejectionRate > 10 ? 'danger' : overallRejectionRate > 5 ? 'warning' : 'success'}">${overallRejectionRate}%</h4>
+						<p class="text-dark">❌ Rejection Rate</p>
 					</div>
 				</div>
 			</div>
@@ -456,9 +456,9 @@ class DrillDownRejectionReport {
 		if (defectColumns.length > 0) {
 			const defectTypesCard = `
 				<div class="col-12 mt-3">
-					<div class="card bg-light">
+					<div class="card bg-white text-dark summary-card">
 						<div class="card-body">
-							<h6 class="card-title">🔍 Defect Types in Data (${defectColumns.length})</h6>
+							<h6 class="card-title text-dark">🔍 Defect Types in Data (${defectColumns.length})</h6>
 							<div class="defect-types-list">
 								${defectColumns.map(defect => `<span class="badge badge-secondary mr-1 mb-1">${defect}</span>`).join('')}
 							</div>
@@ -1399,6 +1399,36 @@ class DrillDownRejectionReport {
 				
 				.card-header h5, .card-header h6 {
 					color: #ffffff !important;
+					margin-bottom: 0;
+				}
+				
+				/* Summary Cards - White background with colored numbers */
+				.summary-card {
+					border: 2px solid #e2e8f0 !important;
+					border-radius: 8px;
+					box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+					transition: all 0.3s ease;
+				}
+				
+				.summary-card:hover {
+					border-color: #cbd5e0 !important;
+					box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+					transform: translateY(-2px);
+				}
+				
+				.summary-card .card-body {
+					padding: 1.5rem;
+				}
+				
+				.summary-card h4 {
+					font-size: 2rem;
+					font-weight: 700;
+					margin-bottom: 0.5rem;
+				}
+				
+				.summary-card p {
+					font-size: 0.9rem;
+					font-weight: 600;
 					margin-bottom: 0;
 				}
 				
