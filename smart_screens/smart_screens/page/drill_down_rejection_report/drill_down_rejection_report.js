@@ -505,25 +505,101 @@ class DrillDownRejectionReport {
 		// Store data for drill-down functionality
 		this.pivotData = data;
 		this.defectColumns = defectColumns;
+		this.originalPivotData = [...data]; // Store original data for filtering
 		
-		// Create headers for defect types
+		// Create headers for defect types with sorting capabilities
 		const defectHeaders = defectColumns.map(defect => {
-			return `<th class="defect-col text-center" title="${defect}">${defect}</th>`;
+			return `<th class="defect-col text-center sortable-header" data-column="${defect}" title="Click to sort by ${defect}">
+				${defect} <i class="fa fa-sort sort-icon"></i>
+			</th>`;
+		}).join('');
+		
+		// Create defect filter checkboxes
+		const defectFilters = defectColumns.map(defect => {
+			return `
+				<div class="form-check form-check-inline">
+					<input class="form-check-input defect-filter" type="checkbox" id="filter-${defect}" value="${defect}" checked>
+					<label class="form-check-label" for="filter-${defect}">${defect}</label>
+				</div>
+			`;
 		}).join('');
 		
 		tableContainer.innerHTML = `
+			<div class="defect-controls mb-3">
+				<div class="row">
+					<div class="col-md-12">
+						<div class="card">
+							<div class="card-header">
+								<h6 class="mb-0">🔧 Defect Type Controls</h6>
+							</div>
+							<div class="card-body">
+								<div class="row">
+									<div class="col-md-4">
+										<label><strong>Sort by Defect Type:</strong></label>
+										<select class="form-control" id="defect-sort-select">
+											<option value="">No Sorting</option>
+											<option value="rejection_percentage">Rejection %</option>
+											<option value="rejected_qty">Total Rejected</option>
+											<option value="inspected_qty">Total Inspected</option>
+											${defectColumns.map(defect => `<option value="${defect}">${defect}</option>`).join('')}
+										</select>
+									</div>
+									<div class="col-md-2">
+										<label><strong>Sort Order:</strong></label>
+										<select class="form-control" id="sort-order-select">
+											<option value="desc">High to Low</option>
+											<option value="asc">Low to High</option>
+										</select>
+									</div>
+									<div class="col-md-4">
+										<label><strong>Show Only Products With:</strong></label>
+										<select class="form-control" id="defect-presence-filter">
+											<option value="any">Any Defects</option>
+											<option value="none">No Defects</option>
+											<option value="high">High Rejection (>10%)</option>
+											<option value="medium">Medium Rejection (5-10%)</option>
+											<option value="low">Low Rejection (<5%)</option>
+										</select>
+									</div>
+									<div class="col-md-2 d-flex align-items-end">
+										<button class="btn btn-sm btn-primary" onclick="frappe.drill_down_rejection_report.apply_defect_filters()">
+											<i class="fa fa-filter"></i> Apply
+										</button>
+									</div>
+								</div>
+								<div class="row mt-3">
+									<div class="col-md-12">
+										<label><strong>Show Defect Types:</strong></label>
+										<div class="defect-filter-checkboxes" style="max-height: 100px; overflow-y: auto;">
+											${defectFilters}
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
 			<div class="table-responsive">
 				<table class="table table-striped table-hover table-sm" id="hierarchical-pivot-table">
 					<thead class="thead-dark">
 						<tr>
 							<th style="width: 30px;"></th>
-							<th style="width: 250px;">Product / Main Lot / Sublot</th>
+							<th class="sortable-header" data-column="product" style="width: 250px;">
+								Product / Main Lot / Sublot <i class="fa fa-sort sort-icon"></i>
+							</th>
 							<th style="width: 120px;">Lot Number</th>
 							<th style="width: 80px;">Main Lots</th>
 							<th style="width: 80px;">Sublots</th>
-							<th style="width: 100px;">Inspected</th>
-							<th style="width: 100px;">Rejected</th>
-							<th style="width: 80px;">Rejection %</th>
+							<th class="sortable-header" data-column="inspected_qty" style="width: 100px;">
+								Inspected <i class="fa fa-sort sort-icon"></i>
+							</th>
+							<th class="sortable-header" data-column="rejected_qty" style="width: 100px;">
+								Rejected <i class="fa fa-sort sort-icon"></i>
+							</th>
+							<th class="sortable-header" data-column="rejection_percentage" style="width: 80px;">
+								Rejection % <i class="fa fa-sort sort-icon"></i>
+							</th>
 							${defectHeaders}
 						</tr>
 					</thead>
@@ -536,6 +612,12 @@ class DrillDownRejectionReport {
 		
 		// Add event listeners for expand/collapse
 		this.add_drill_down_listeners();
+		
+		// Add sorting functionality
+		this.add_sorting_listeners();
+		
+		// Add defect filter change listeners
+		this.add_defect_filter_listeners();
 	}
 
 	generate_hierarchical_pivot_rows(data, defectColumns) {
@@ -833,6 +915,174 @@ class DrillDownRejectionReport {
 		$('#lotDetailsModal').modal('show');
 	}
 
+	add_sorting_listeners() {
+		// Add click listeners for sortable headers
+		$(document).off('click', '.sortable-header').on('click', '.sortable-header', (e) => {
+			const column = $(e.currentTarget).data('column');
+			if (column) {
+				this.sort_table_by_column(column);
+			}
+		});
+	}
+
+	add_defect_filter_listeners() {
+		// Add change listeners for defect filters
+		$(document).off('change', '.defect-filter').on('change', '.defect-filter', () => {
+			this.apply_defect_filters();
+		});
+	}
+
+	sort_table_by_column(column) {
+		if (!this.originalPivotData) return;
+
+		const sortOrder = $('#sort-order-select').val() || 'desc';
+		const productRows = this.originalPivotData.filter(row => row.type === 'product');
+		
+		// Sort product rows
+		productRows.sort((a, b) => {
+			let aVal = a[column] || 0;
+			let bVal = b[column] || 0;
+			
+			// Handle string sorting for product names
+			if (column === 'product') {
+				aVal = String(aVal).toLowerCase();
+				bVal = String(bVal).toLowerCase();
+				return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+			}
+			
+			// Handle numeric sorting
+			aVal = parseFloat(aVal) || 0;
+			bVal = parseFloat(bVal) || 0;
+			
+			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+		});
+
+		// Rebuild the data array with sorted products and their children
+		const sortedData = [];
+		productRows.forEach(productRow => {
+			sortedData.push(productRow);
+			
+			// Add main lots for this product
+			const mainLots = this.originalPivotData.filter(row => 
+				row.type === 'main_lot' && row.parent_id === productRow.id
+			);
+			mainLots.forEach(mainLotRow => {
+				sortedData.push(mainLotRow);
+				
+				// Add sublots for this main lot
+				const sublots = this.originalPivotData.filter(row => 
+					row.type === 'sublot' && row.parent_id === mainLotRow.id
+				);
+				sortedData.push(...sublots);
+			});
+		});
+
+		// Update the display
+		this.pivotData = sortedData;
+		this.refresh_table_display();
+		this.update_sort_indicators(column, sortOrder);
+	}
+
+	apply_defect_filters() {
+		if (!this.originalPivotData) return;
+
+		// Get selected defect types
+		const selectedDefects = [];
+		$('.defect-filter:checked').each(function() {
+			selectedDefects.push($(this).val());
+		});
+
+		// Get defect presence filter
+		const presenceFilter = $('#defect-presence-filter').val();
+		
+		// Filter data based on selection
+		let filteredData = [...this.originalPivotData];
+
+		if (presenceFilter !== 'any') {
+			filteredData = filteredData.filter(row => {
+				if (row.type !== 'product') return true; // Keep non-product rows for now
+				
+				const rejectionRate = parseFloat(row.rejection_percentage) || 0;
+				
+				switch (presenceFilter) {
+					case 'none':
+						return rejectionRate === 0;
+					case 'high':
+						return rejectionRate > 10;
+					case 'medium':
+						return rejectionRate >= 5 && rejectionRate <= 10;
+					case 'low':
+						return rejectionRate > 0 && rejectionRate < 5;
+					default:
+						return true;
+				}
+			});
+		}
+
+		// Filter out children of filtered products
+		const validProductIds = filteredData.filter(row => row.type === 'product').map(row => row.id);
+		filteredData = filteredData.filter(row => {
+			if (row.type === 'product') return true;
+			if (row.type === 'main_lot') {
+				return validProductIds.includes(row.parent_id);
+			}
+			if (row.type === 'sublot') {
+				const parentMainLot = filteredData.find(r => r.id === row.parent_id);
+				return parentMainLot && validProductIds.includes(parentMainLot.parent_id);
+			}
+			return true;
+		});
+
+		// Update defect columns based on selected filters
+		const filteredDefectColumns = this.defectColumns.filter(defect => 
+			selectedDefects.includes(defect)
+		);
+
+		// Update the display
+		this.pivotData = filteredData;
+		this.defectColumns = filteredDefectColumns;
+		this.refresh_table_display();
+	}
+
+	refresh_table_display() {
+		const tbody = document.getElementById('hierarchical-pivot-tbody');
+		if (tbody) {
+			tbody.innerHTML = this.generate_hierarchical_pivot_rows(this.pivotData, this.defectColumns);
+		}
+		
+		// Update defect headers
+		const table = document.getElementById('hierarchical-pivot-table');
+		if (table) {
+			const defectHeaders = this.defectColumns.map(defect => {
+				return `<th class="defect-col text-center sortable-header" data-column="${defect}" title="Click to sort by ${defect}">
+					${defect} <i class="fa fa-sort sort-icon"></i>
+				</th>`;
+			}).join('');
+			
+			// Update header row
+			const headerRow = table.querySelector('thead tr');
+			if (headerRow) {
+				// Keep first 8 columns, replace defect columns
+				const fixedHeaders = headerRow.querySelectorAll('th');
+				const newHeaderHTML = Array.from(fixedHeaders).slice(0, 8).map(th => th.outerHTML).join('') + defectHeaders;
+				headerRow.innerHTML = newHeaderHTML;
+			}
+		}
+
+		// Re-add event listeners
+		this.add_drill_down_listeners();
+		this.add_sorting_listeners();
+	}
+
+	update_sort_indicators(column, order) {
+		// Reset all sort icons
+		$('.sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
+		
+		// Update the sorted column icon
+		const sortIcon = $(`.sortable-header[data-column="${column}"] .sort-icon`);
+		sortIcon.removeClass('fa-sort').addClass(order === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+	}
+
 	generate_standard_table_rows(data) {
 		return data.map(row => {
 			const rejectionRate = parseFloat(row.rejection_percentage) || 0;
@@ -1018,14 +1268,18 @@ class DrillDownRejectionReport {
 					background-color: #e2e8f0;
 				}
 				
-				/* Defect Columns */
+				/* Defect Columns - Better contrast */
 				.defect-col {
 					min-width: 60px;
 					text-align: center;
-					background-color: #f8f9fa;
-					color: #1a202c;
+					background-color: #2d3748 !important;
+					color: #ffffff !important;
 					font-weight: 600;
-					border: 1px solid #e2e8f0;
+					border: 1px solid #4a5568 !important;
+				}
+				
+				.defect-col:hover {
+					background-color: #1a202c !important;
 				}
 				
 				/* Defect Cell Color Coding - Flat colors */
@@ -1047,14 +1301,14 @@ class DrillDownRejectionReport {
 				
 				.defect-cell-medium {
 					background-color: #fef5e7;
-					color: #d69e2e;
-				}
-				
-				.defect-cell-high {
+					font-weight: 600;
+					border: 1px solid #4a5568;
+					text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+				}defect-cell-high {
 					background-color: #fed7d7;
-					color: #c53030;
-				}
-				
+				/* Defect column hover effect */
+				.defect-col:hover {
+					background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%) !important;
 				.defect-cell-critical {
 					background-color: #fecaca;
 					color: #7f1d1d;
@@ -1071,12 +1325,37 @@ class DrillDownRejectionReport {
 					border: 1px solid #e2e8f0;
 				}
 				
-				/* Header Styling */
+				/* Header Styling - Better contrast */
 				.thead-dark th {
-					background-color: #f8f9fa !important;
-					border-color: #e2e8f0 !important;
-					color: #1a202c !important;
+					background-color: #2d3748 !important;
+					border-color: #4a5568 !important;
+					color: #ffffff !important;
 					font-weight: 600;
+					text-shadow: none;
+				}
+				
+				.thead-dark th:hover {
+					background-color: #1a202c !important;
+				}
+				
+				/* Sortable header styling */
+				.sortable-header {
+					cursor: pointer;
+					user-select: none;
+				}
+				
+				.sortable-header:hover {
+					background-color: #1a202c !important;
+					color: #e2e8f0 !important;
+				}
+				
+				.sort-icon {
+					margin-left: 5px;
+					opacity: 0.7;
+				}
+				
+				.sortable-header:hover .sort-icon {
+					opacity: 1;
 				}
 				
 				/* Rejection Rate Color Coding for Rows - Flat colors */
@@ -1108,6 +1387,59 @@ class DrillDownRejectionReport {
 				
 				.card:hover {
 					border-color: #cbd5e0;
+				}
+				
+				/* Card Headers - Better visibility */
+				.card-header {
+					background-color: #4a5568 !important;
+					color: #ffffff !important;
+					border-bottom: 1px solid #2d3748 !important;
+					font-weight: 600;
+				}
+				
+				.card-header h5, .card-header h6 {
+					color: #ffffff !important;
+					margin-bottom: 0;
+				}
+				
+				/* Form Controls - Better visibility */
+				.card-body label {
+					color: #2d3748 !important;
+					font-weight: 600;
+					margin-bottom: 0.5rem;
+				}
+				
+				.form-control {
+					border: 1px solid #cbd5e0;
+					border-radius: 4px;
+				}
+				
+				.form-control:focus {
+					border-color: #3182ce;
+					box-shadow: 0 0 0 0.2rem rgba(49, 130, 206, 0.25);
+				}
+				
+				.btn-primary {
+					background-color: #3182ce;
+					border-color: #3182ce;
+				}
+				
+				.btn-primary:hover {
+					background-color: #2c5aa0;
+					border-color: #2c5aa0;
+				}
+				
+				/* Defect filter checkboxes */
+				.defect-filter-checkboxes {
+					background-color: #f7fafc;
+					padding: 10px;
+					border-radius: 4px;
+					border: 1px solid #e2e8f0;
+				}
+				
+				.form-check-label {
+					color: #2d3748 !important;
+					font-weight: 500;
 				}
 				
 				/* Mobile Responsiveness */
