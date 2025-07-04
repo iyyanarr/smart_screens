@@ -4,56 +4,75 @@
 
 ### Data Flow Architecture
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Work Planning  │    │ Moulding Prod.  │    │  Stock Entry    │
-│                 │    │     Entry       │    │                 │
-│ • date          │    │ • moulding_date │    │ • posting_date  │
-│ • shift_type    │    │ • item_to_prod. │    │ • item_code     │
-│ • items[]       │    │ • spp_batch_no  │    │ • qty (kg)      │
-│   └─lot_number  │    │ • actual_pieces │    │ • purpose=Mfg   │
-│   └─targets[]   │    │ • weight        │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 ▼
-                    ┌─────────────────────────┐
-                    │   Aggregation Engine    │
-                    │                         │
-                    │ Group by:               │
-                    │ • Item Code             │
-                    │ • Production Date       │
-                    │ • Shift (if available)  │
-                    └─────────────────────────┘
-                                 ▼
-                    ┌─────────────────────────┐
-                    │  Calculated Metrics     │
-                    │                         │
-                    │ • Efficiency %          │
-                    │ • Variance (pieces)     │
-                    │ • Status Classification │
-                    └─────────────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Work Planning  │    │ Add On Work     │    │ Moulding Prod.  │    │  Stock Entry    │
+│                 │    │   Planning      │    │     Entry       │    │                 │
+│ • date          │    │ • date          │    │ • moulding_date │    │ • posting_date  │
+│ • shift_type    │    │ • shift_type    │    │ • item_to_prod. │    │ • item_code     │
+│ • items[]       │    │ • items[]       │    │ • spp_batch_no  │    │ • qty (kg)      │
+│   └─lot_number  │    │   └─lot_number  │    │ • actual_pieces │    │ • purpose=Mfg   │
+│   └─targets[]   │    │   (no targets)  │    │ • weight        │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │                       │
+         └───────────────────────┼───────────────────────┼───────────────────────┘
+                                 │                       │
+                                 ▼                       ▼
+                    ┌─────────────────────────┐    ┌─────────────────────────┐
+                    │   Planning Sources      │    │   Production Sources    │
+                    │   Tracking              │    │   Tracking              │
+                    │                         │    │                         │
+                    │ • Work Planning         │    │ • Moulding Production   │
+                    │ • Add On Work Planning  │    │ • Stock Entry           │
+                    └─────────────────────────┘    └─────────────────────────┘
+                                 │                       │
+                                 └───────────────────────┼───────────────────────
+                                                         ▼
+                                            ┌─────────────────────────┐
+                                            │   Aggregation Engine    │
+                                            │                         │
+                                            │ Group by:               │
+                                            │ • Item Code             │
+                                            │ • Production Date       │
+                                            │ • Shift (if available)  │
+                                            │ • Planning Sources      │
+                                            └─────────────────────────┘
+                                                         ▼
+                                            ┌─────────────────────────┐
+                                            │  Calculated Metrics     │
+                                            │                         │
+                                            │ • Efficiency %          │
+                                            │ • Variance (pieces)     │
+                                            │ • Status Classification │
+                                            │ • Planning Source Info  │
+                                            └─────────────────────────┘
 ```
 
 ## Database Schema Analysis
 
 ### Primary Tables
 1. **`tabWork Planning`** - Master planning document
-2. **`tabWork Plan Item`** - Items planned for production
+2. **`tabWork Plan Item`** - Items planned for production  
 3. **`tabWork Plan Item Target`** - Target quantities per shift
-4. **`tabMoulding Production Entry`** - Actual production records
-5. **`tabStock Entry`** - Final manufacturing output
-6. **`tabStock Entry Detail`** - Stock entry line items
+4. **`tabAdd On Work Planning`** - Additional planning document
+5. **`tabAdd On Work Plan Item`** - Additional planned items (no targets)
+6. **`tabMoulding Production Entry`** - Actual production records
+7. **`tabStock Entry`** - Final manufacturing output
+8. **`tabStock Entry Detail`** - Stock entry line items
 
 ### Key Relationships
 ```sql
 -- Work Planning Hierarchy
 tabWork Planning (1) → tabWork Plan Item (N) → tabWork Plan Item Target (N)
 
+-- Add On Work Planning Hierarchy  
+tabAdd On Work Planning (1) → tabAdd On Work Plan Item (N)
+
 -- Production Chain
 tabMoulding Production Entry.stock_entry_reference → tabStock Entry.name
 
 -- No Direct Link (Problem!)
 tabWork Plan Item.lot_number ≠ tabMoulding Production Entry.spp_batch_number
+tabAdd On Work Plan Item.lot_number ≠ tabMoulding Production Entry.spp_batch_number
 ```
 
 ## Core Algorithms

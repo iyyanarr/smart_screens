@@ -20,12 +20,16 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
     if not to_date:
         to_date = today()
     
+    # Validate date range
+    if getdate(from_date) > getdate(to_date):
+        frappe.throw("From Date cannot be greater than To Date")
+    
     # Build item filter condition
     item_condition = ""
     if item_filter:
         item_condition = f"AND wpi.item LIKE '%{item_filter}%'"
     
-    # Get planned data from Work Planning
+    # Get planned data from Work Planning and Add On Work Planning
     planned_query = f"""
         SELECT 
             wp.date as production_date,
@@ -33,14 +37,32 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
             wpi.lot_number,
             wp.shift_type,
             COALESCE(SUM(COALESCE(wpit.target_qty, 0)), 0) as planned_qty_pieces,
-            COUNT(DISTINCT wpi.name) as planned_lots
+            COUNT(DISTINCT wpi.name) as planned_lots,
+            'Work Planning' as source_type
         FROM `tabWork Planning` wp
         JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
         LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.name = wpit.parent
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         {item_condition}
         GROUP BY wp.date, wpi.item, wp.shift_type
-        ORDER BY wp.date DESC, wpi.item
+        
+        UNION ALL
+        
+        SELECT 
+            awp.date as production_date,
+            awpi.item as item_code,
+            awpi.lot_number,
+            awp.shift_type,
+            0 as planned_qty_pieces,  -- Add-on planning doesn't have target quantities
+            COUNT(DISTINCT awpi.name) as planned_lots,
+            'Add On Work Planning' as source_type
+        FROM `tabAdd On Work Planning` awp
+        JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
+        WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
+        {item_condition.replace('wpi.item', 'awpi.item')}
+        GROUP BY awp.date, awpi.item, awp.shift_type
+        
+        ORDER BY production_date DESC, item_code
     """
     
     planned_data = frappe.db.sql(planned_query, as_dict=True)
@@ -105,11 +127,17 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
                 'stock_entries': 0,
                 'variance_pieces': 0,
                 'variance_percentage': 0,
-                'efficiency': 0
+                'efficiency': 0,
+                'planning_sources': []  # Track which planning types are used
             }
         
         combined_data[key]['planned_qty_pieces'] += flt(row.planned_qty_pieces)
         combined_data[key]['planned_lots'] += cint(row.planned_lots)
+        
+        # Track planning source
+        source = row.get('source_type', 'Work Planning')
+        if source not in combined_data[key]['planning_sources']:
+            combined_data[key]['planning_sources'].append(source)
     
     # Add actual production data (no shift segregation available)
     for row in actual_data:
@@ -130,7 +158,8 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
                 'stock_entries': 0,
                 'variance_pieces': 0,
                 'variance_percentage': 0,
-                'efficiency': 0
+                'efficiency': 0,
+                'planning_sources': []
             }
         
         combined_data[key_all]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
@@ -155,7 +184,8 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
                 'stock_entries': 0,
                 'variance_pieces': 0,
                 'variance_percentage': 0,
-                'efficiency': 0
+                'efficiency': 0,
+                'planning_sources': []
             }
         
         combined_data[key_all]['stock_qty_kg'] += flt(row.stock_qty_kg)
@@ -181,6 +211,9 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
         
         # Format the production date for display
         data['production_date_formatted'] = formatdate(data['production_date'])
+        
+        # Format planning sources for display
+        data['planning_sources_text'] = ', '.join(data['planning_sources']) if data['planning_sources'] else 'No Planning'
         
         final_data.append(data)
     

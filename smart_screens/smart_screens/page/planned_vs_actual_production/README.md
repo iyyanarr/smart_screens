@@ -6,7 +6,8 @@ This page provides a comprehensive comparison between planned production quantit
 ## Key Features
 
 ### 📊 **Data Sources Integration**
-- **Work Planning**: Planned quantities in pieces per shift
+- **Work Planning**: Planned quantities in pieces per shift (with target quantities)
+- **Add On Work Planning**: Additional planned items per shift (no target quantities)
 - **Moulding Production Entry**: Actual pieces produced during moulding
 - **Stock Entry**: Final output quantities in kg from manufacturing
 
