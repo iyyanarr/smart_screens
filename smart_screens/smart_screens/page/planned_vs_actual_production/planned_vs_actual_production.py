@@ -36,12 +36,13 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
             wpi.item as item_code,
             wpi.lot_number,
             wp.shift_type,
-            COALESCE(SUM(COALESCE(wpit.target_qty, 0)), 0) as planned_qty_pieces,
+            -- Note: Work Plan Item Target has broken parent linkage (all parent fields are NULL)
+            -- So we cannot get actual target quantities, showing 0 for now
+            0 as planned_qty_pieces,
             COUNT(DISTINCT wpi.name) as planned_lots,
             'Work Planning' as source_type
         FROM `tabWork Planning` wp
         JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
-        LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.name = wpit.parent
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         {item_condition}
         GROUP BY wp.date, wpi.item, wp.shift_type
