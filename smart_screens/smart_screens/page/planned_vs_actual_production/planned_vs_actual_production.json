@@ -1,0 +1,23 @@
+{
+ "creation": "2025-07-04 10:30:00.000000",
+ "doctype": "Page",
+ "modified": "2025-07-04 10:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "planned-vs-actual-production",
+ "owner": "Administrator",
+ "page_name": "planned-vs-actual-production",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Production User"
+  }
+ ],
+ "standard": "No",
+ "title": "Planned vs Actual Production"
+}

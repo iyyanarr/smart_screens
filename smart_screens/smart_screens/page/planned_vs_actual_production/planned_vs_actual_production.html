@@ -1,0 +1,288 @@
+<div class="planned-vs-actual-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="row">
+            <div class="col-8">
+                <h3>📊 Planned vs Actual Production Report</h3>
+                <p class="text-muted">Compare planned quantities with actual production and stock outputs</p>
+            </div>
+            <div class="col-4 text-right">
+                <button class="btn btn-primary btn-refresh" onclick="refreshData()">
+                    <i class="fa fa-refresh"></i> Refresh
+                </button>
+                <button class="btn btn-secondary" onclick="exportData()">
+                    <i class="fa fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filter-section card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-3">
+                    <label>From Date</label>
+                    <input type="date" id="from_date" class="form-control">
+                </div>
+                <div class="col-3">
+                    <label>To Date</label>
+                    <input type="date" id="to_date" class="form-control">
+                </div>
+                <div class="col-4">
+                    <label>Item Filter</label>
+                    <input type="text" id="item_filter" class="form-control" placeholder="Enter item code...">
+                </div>
+                <div class="col-2">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-success btn-block" onclick="applyFilters()">
+                        <i class="fa fa-filter"></i> Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-section">
+        <div class="row">
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="total-planned" class="text-primary">0</h4>
+                        <small>Total Planned (Pieces)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="total-actual" class="text-success">0</h4>
+                        <small>Total Actual (Pieces)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="total-kg" class="text-info">0</h4>
+                        <small>Total Stock (Kg)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="overall-efficiency" class="text-warning">0%</h4>
+                        <small>Overall Efficiency</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="total-items" class="text-dark">0</h4>
+                        <small>Total Items</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-2">
+                <div class="card summary-card">
+                    <div class="card-body text-center">
+                        <h4 id="avg-efficiency" class="text-secondary">0%</h4>
+                        <small>Avg Efficiency</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="data-section card">
+        <div class="card-header">
+            <h5>📋 Production Comparison Details</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="production-table">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>Date</th>
+                            <th>Item Code</th>
+                            <th>Shift</th>
+                            <th class="text-right">Planned (Pieces)</th>
+                            <th class="text-right">Actual (Pieces)</th>
+                            <th class="text-right">Actual Weight (Kg)</th>
+                            <th class="text-right">Stock (Kg)</th>
+                            <th class="text-right">Variance (Pieces)</th>
+                            <th class="text-right">Efficiency %</th>
+                            <th class="text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="production-table-body">
+                        <!-- Data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-section">
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>📈 Daily Production Trend</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="daily-trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>🎯 Efficiency Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="efficiency-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="loading-indicator" id="loading" style="display: none;">
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p class="mt-2">Loading production data...</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.planned-vs-actual-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+}
+
+.filter-section {
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.summary-section {
+    margin-bottom: 20px;
+}
+
+.summary-card {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: none;
+    transition: transform 0.2s;
+    margin-bottom: 10px;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+}
+
+.data-section {
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.charts-section .card {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.table {
+    font-size: 0.9em;
+}
+
+.table th {
+    font-weight: 600;
+    border-top: none;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.status-over {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-under {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.status-target {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.loading-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255,255,255,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.btn-refresh {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    border: none;
+}
+
+.btn-refresh:hover {
+    background: linear-gradient(45deg, #218838, #1ea98c);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .page-header .col-4 {
+        text-align: left !important;
+        margin-top: 10px;
+    }
+    
+    .filter-section .row .col-3,
+    .filter-section .row .col-4,
+    .filter-section .row .col-2 {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .summary-section .col-2 {
+        width: 50%;
+        margin-bottom: 10px;
+    }
+    
+    .charts-section .col-6 {
+        width: 100%;
+    }
+}
+</style>
