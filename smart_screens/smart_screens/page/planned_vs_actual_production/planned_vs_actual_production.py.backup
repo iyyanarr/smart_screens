@@ -1,6 +1,8 @@
 import frappe
-from frappe.utils import flt, cint, formatdate, today, getdate
-from datetime import timedelta
+from frappe import _
+from frappe.utils import flt, cint, getdate, today, formatdate
+from datetime import datetime, timedelta
+
 
 @frappe.whitelist()
 def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
@@ -149,17 +151,30 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
             'efficiency': 0,
             'planning_sources': list(row['planning_sources'])
         }
-
-    # Add actual production data
-    for row in actual_data:
-        key = f"{row.production_date}|{row.item_code}|All"
-        
+        WHERE se.posting_date BETWEEN '{from_date}' AND '{to_date}'
+        AND se.purpose = 'Manufacture'
+        AND se.docstatus = 1
+        AND sed.t_warehouse IS NOT NULL
+        {item_condition.replace('wpi.item', 'sed.item_code')}
+        GROUP BY DATE(se.posting_date), sed.item_code
+        ORDER BY se.posting_date DESC, sed.item_code
+    """
+    
+    stock_data = frappe.db.sql(stock_query, as_dict=True)
+    
+    # Combine data into a unified structure
+    combined_data = {}
+    
+    # Add planned data
+    for row in planned_data:
+        key = f"{row.production_date}|{row.item_code}|{row.shift_type or 'All'}"
         if key not in combined_data:
             combined_data[key] = {
                 'production_date': row.production_date,
                 'item_code': row.item_code,
-                'shift_type': 'All',
+                'shift_type': row.shift_type or 'All',
                 'planned_qty_pieces': 0,
+                'planned_lots': 0,
                 'actual_qty_pieces': 0,
                 'actual_weight_kg': 0,
                 'stock_qty_kg': 0,
@@ -168,37 +183,93 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
                 'variance_pieces': 0,
                 'variance_percentage': 0,
                 'efficiency': 0,
-                'planning_sources': []
+                'planning_sources': []  # Track which planning types are used
             }
         
-        combined_data[key]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
-        combined_data[key]['actual_weight_kg'] += flt(row.actual_weight_kg)
-        combined_data[key]['production_entries'] += cint(row.production_entries)
-
+        combined_data[key]['planned_qty_pieces'] += flt(row.planned_qty_pieces)
+        combined_data[key]['planned_lots'] += cint(row.planned_lots)
+        
+        # Track planning source
+        source = row.get('source_type', 'Work Planning')
+        if source not in combined_data[key]['planning_sources']:
+            combined_data[key]['planning_sources'].append(source)
+    
+    # Add actual production data (no shift segregation available)
+    for row in actual_data:
+        # For actual data, we need to distribute across all shift types for this item/date
+        item_date_pattern = f"{row.production_date}|{row.item_code}|"
+        
+        # Find all planned records for this item/date combination
+        matching_keys = [key for key in combined_data.keys() if key.startswith(item_date_pattern)]
+        
+        if matching_keys:
+            # Distribute actual data across all matching planned records
+            for key in matching_keys:
+                combined_data[key]['actual_qty_pieces'] += flt(row.actual_qty_pieces) / len(matching_keys)
+                combined_data[key]['actual_weight_kg'] += flt(row.actual_weight_kg) / len(matching_keys)
+                combined_data[key]['production_entries'] += cint(row.production_entries) / len(matching_keys)
+        else:
+            # Create a new record for actual-only data
+            key_all = f"{row.production_date}|{row.item_code}|All"
+            if key_all not in combined_data:
+                combined_data[key_all] = {
+                    'production_date': row.production_date,
+                    'item_code': row.item_code,
+                    'shift_type': 'All',
+                    'planned_qty_pieces': 0,
+                    'planned_lots': 0,
+                    'actual_qty_pieces': 0,
+                    'actual_weight_kg': 0,
+                    'stock_qty_kg': 0,
+                    'production_entries': 0,
+                    'stock_entries': 0,
+                    'variance_pieces': 0,
+                    'variance_percentage': 0,
+                    'efficiency': 0,
+                    'planning_sources': []
+                }
+            
+            combined_data[key_all]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
+            combined_data[key_all]['actual_weight_kg'] += flt(row.actual_weight_kg)
+            combined_data[key_all]['production_entries'] += cint(row.production_entries)
+    
     # Add stock entry data
     for row in stock_data:
-        key = f"{row.production_date}|{row.item_code}|All"
+        # For stock data, we need to distribute across all shift types for this item/date
+        item_date_pattern = f"{row.production_date}|{row.item_code}|"
         
-        if key not in combined_data:
-            combined_data[key] = {
-                'production_date': row.production_date,
-                'item_code': row.item_code,
-                'shift_type': 'All',
-                'planned_qty_pieces': 0,
-                'actual_qty_pieces': 0,
-                'actual_weight_kg': 0,
-                'stock_qty_kg': 0,
-                'production_entries': 0,
-                'stock_entries': 0,
-                'variance_pieces': 0,
-                'variance_percentage': 0,
-                'efficiency': 0,
-                'planning_sources': []
-            }
+        # Find all records (planned or actual) for this item/date combination
+        matching_keys = [key for key in combined_data.keys() if key.startswith(item_date_pattern)]
         
-        combined_data[key]['stock_qty_kg'] += flt(row.stock_qty_kg)
-        combined_data[key]['stock_entries'] += cint(row.stock_entries)
-
+        if matching_keys:
+            # Distribute stock data across all matching records
+            for key in matching_keys:
+                combined_data[key]['stock_qty_kg'] += flt(row.stock_qty_kg) / len(matching_keys)
+                combined_data[key]['stock_entries'] += cint(row.stock_entries) / len(matching_keys)
+        else:
+            # Create a new record for stock-only data
+            key_all = f"{row.production_date}|{row.item_code}|All"
+            if key_all not in combined_data:
+                combined_data[key_all] = {
+                    'production_date': row.production_date,
+                    'item_code': row.item_code,
+                    'shift_type': 'All',
+                    'planned_qty_pieces': 0,
+                    'planned_lots': 0,
+                    'actual_qty_pieces': 0,
+                    'actual_weight_kg': 0,
+                    'stock_qty_kg': 0,
+                    'production_entries': 0,
+                    'stock_entries': 0,
+                    'variance_pieces': 0,
+                    'variance_percentage': 0,
+                    'efficiency': 0,
+                    'planning_sources': []
+                }
+            
+            combined_data[key_all]['stock_qty_kg'] += flt(row.stock_qty_kg)
+            combined_data[key_all]['stock_entries'] += cint(row.stock_entries)
+    
     # Calculate variances and efficiency
     final_data = []
     for key, data in combined_data.items():
@@ -224,7 +295,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
         data['planning_sources_text'] = ', '.join(data['planning_sources']) if data['planning_sources'] else 'No Planning'
         
         final_data.append(data)
-
+    
     # Sort by date desc, then by item
     final_data.sort(key=lambda x: (x['production_date'], x['item_code']), reverse=True)
     
@@ -255,25 +326,17 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None):
     total_actual_kg = sum(row['actual_weight_kg'] for row in data)
     total_stock_kg = sum(row['stock_qty_kg'] for row in data)
     
-    # Calculate overall efficiency
-    if total_planned > 0:
-        overall_efficiency = (total_actual / total_planned) * 100
-    else:
-        overall_efficiency = 0
-    
-    # Calculate average efficiency (only for items with planned quantities)
-    items_with_planned = [row for row in data if row['planned_qty_pieces'] > 0]
-    if items_with_planned:
-        avg_efficiency = sum(row['efficiency'] for row in items_with_planned) / len(items_with_planned)
-    else:
-        avg_efficiency = 0
+    overall_efficiency = (total_actual / total_planned * 100) if total_planned > 0 else 0
     
     unique_items = len(set(row['item_code'] for row in data))
-    unique_dates = len(set(str(row['production_date']) for row in data))
+    unique_dates = len(set(row['production_date'] for row in data))
+    
+    efficiencies = [row['efficiency'] for row in data if row['planned_qty_pieces'] > 0]
+    avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
     
     return {
         'total_planned_pieces': total_planned,
-        'total_actual_pieces': total_actual, 
+        'total_actual_pieces': total_actual,
         'total_actual_kg': total_actual_kg,
         'total_stock_kg': total_stock_kg,
         'overall_efficiency': overall_efficiency,
@@ -281,3 +344,24 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None):
         'total_dates': unique_dates,
         'avg_efficiency': avg_efficiency
     }
+
+
+@frappe.whitelist()
+def get_item_list():
+    """
+    Get list of items that have either planning or production data
+    """
+    query = """
+        SELECT DISTINCT item_code, item_name
+        FROM (
+            SELECT wpi.item as item_code, wpi.item as item_name
+            FROM `tabWork Plan Item` wpi
+            UNION
+            SELECT mpe.item_to_produce as item_code, mpe.item_to_produce as item_name  
+            FROM `tabMoulding Production Entry` mpe
+            WHERE mpe.moulding_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        ) items
+        ORDER BY item_code
+    """
+    
+    return frappe.db.sql(query, as_dict=True)
