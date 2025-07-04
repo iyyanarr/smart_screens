@@ -1,7 +1,7 @@
 // Global variables
 let currentData = [];
-let dailyTrendChart = null;
-let efficiencyChart = null;
+let sortedData = [];
+let currentSort = { column: null, direction: 'asc' };
 
 // Initialize the page
 frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
@@ -16,11 +16,11 @@ frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
     // Initialize date filters with default values (last 7 days)
     initializeDateFilters();
     
+    // Initialize table sorting
+    initializeTableSorting();
+    
     // Load initial data
     loadData();
-    
-    // Initialize charts
-    initializeCharts();
 };
 
 function initializeDateFilters() {
@@ -59,8 +59,8 @@ function loadData() {
         callback: function(r) {
             if (r.message) {
                 currentData = r.message;
-                updateTable(currentData);
-                updateCharts(currentData);
+                sortedData = [...currentData]; // Create a copy for sorting
+                updateTable(sortedData);
             }
         },
         error: function(err) {
@@ -114,6 +114,12 @@ function updateTable(data) {
     const tbody = document.getElementById('production-table-body');
     tbody.innerHTML = '';
     
+    // Update table info
+    const tableInfo = document.getElementById('table-info');
+    if (tableInfo) {
+        tableInfo.textContent = `Total records: ${data ? data.length : 0}`;
+    }
+    
     if (!data || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data found for the selected filters</td></tr>';
         return;
@@ -157,150 +163,106 @@ function updateTable(data) {
     });
 }
 
-function initializeCharts() {
-    // Check if Chart.js is available
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js is not loaded. Loading from CDN...');
+function initializeTableSorting() {
+    // Add click event listeners to sortable headers
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.sortable')) {
+            const header = e.target.closest('.sortable');
+            const column = header.getAttribute('data-column');
+            const type = header.getAttribute('data-type');
+            
+            sortTable(column, type);
+        }
+    });
+}
+
+function sortTable(column, type) {
+    // Determine sort direction
+    let direction = 'asc';
+    if (currentSort.column === column && currentSort.direction === 'asc') {
+        direction = 'desc';
+    }
+    
+    // Update current sort state
+    currentSort = { column, direction };
+    
+    // Remove existing sort classes
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Add sort class to current header
+    const currentHeader = document.querySelector(`[data-column="${column}"]`);
+    currentHeader.classList.add(`sort-${direction}`);
+    
+    // Update sort info display
+    updateSortInfo(column, direction);
+    
+    // Sort the data
+    sortedData = [...currentData].sort((a, b) => {
+        let valueA = a[column];
+        let valueB = b[column];
         
-        // Load Chart.js from CDN
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
-        script.onload = function() {
-            console.log('Chart.js loaded successfully');
-            createCharts();
+        // Handle different data types
+        if (type === 'number') {
+            valueA = parseFloat(valueA) || 0;
+            valueB = parseFloat(valueB) || 0;
+        } else if (type === 'date') {
+            valueA = new Date(a.production_date || a.production_date_formatted);
+            valueB = new Date(b.production_date || b.production_date_formatted);
+        } else if (type === 'text') {
+            valueA = String(valueA || '').toLowerCase();
+            valueB = String(valueB || '').toLowerCase();
+        }
+        
+        // Handle status column specially
+        if (column === 'status') {
+            const statusOrder = { 'over': 3, 'target': 2, 'under': 1 };
+            const statusA = a.efficiency > 100 ? 'over' : a.efficiency < 85 ? 'under' : 'target';
+            const statusB = b.efficiency > 100 ? 'over' : b.efficiency < 85 ? 'under' : 'target';
+            valueA = statusOrder[statusA];
+            valueB = statusOrder[statusB];
+        }
+        
+        // Compare values
+        if (valueA < valueB) {
+            return direction === 'asc' ? -1 : 1;
+        }
+        if (valueA > valueB) {
+            return direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+    
+    // Update the table with sorted data
+    updateTable(sortedData);
+}
+
+function updateSortInfo(column, direction) {
+    const sortInfo = document.getElementById('sort-info');
+    const sortColumn = document.getElementById('sort-column');
+    const sortDirection = document.getElementById('sort-direction');
+    
+    if (sortInfo && sortColumn && sortDirection) {
+        sortInfo.style.display = 'inline';
+        
+        // Convert column names to readable format
+        const columnNames = {
+            'production_date_formatted': 'Date',
+            'item_code': 'Item Code',
+            'shift_type': 'Shift',
+            'planning_sources_text': 'Planning Source',
+            'planned_qty_pieces': 'Planned (Pieces)',
+            'actual_qty_pieces': 'Actual (Pieces)',
+            'actual_weight_kg': 'Actual Weight (Kg)',
+            'stock_qty_kg': 'Stock (Kg)',
+            'variance_pieces': 'Variance (Pieces)',
+            'efficiency': 'Efficiency %',
+            'status': 'Status'
         };
-        script.onerror = function() {
-            console.error('Failed to load Chart.js');
-            hideChartsSection();
-        };
-        document.head.appendChild(script);
-        return;
-    }
-    
-    createCharts();
-}
-
-function createCharts() {
-    try {
-        // Initialize Chart.js charts
-        const dailyCtx = document.getElementById('daily-trend-chart').getContext('2d');
-        const efficiencyCtx = document.getElementById('efficiency-chart').getContext('2d');
         
-        dailyTrendChart = new Chart(dailyCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Planned',
-                    data: [],
-                    borderColor: 'rgb(54, 162, 235)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                    tension: 0.1
-                }, {
-                    label: 'Actual',
-                    data: [],
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                    tension: 0.1
-                }]
-            },
-            options: {                responsive: true,
-                interaction: {
-                    intersect: false,
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Quantity (Pieces)'
-                        }
-                    }
-                }
-            }
-        });
-        
-        efficiencyChart = new Chart(efficiencyCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Over Target (>100%)', 'On Target (85-100%)', 'Under Target (<85%)'],
-                datasets: [{
-                    data: [0, 0, 0],
-                    backgroundColor: ['#28a745', '#ffc107', '#dc3545']
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-        
-    } catch (error) {
-        console.error('Error initializing charts:', error);
-        hideChartsSection();
-    }
-}
-
-function hideChartsSection() {
-    const chartsSection = document.querySelector('.charts-section');
-    if (chartsSection) {
-        chartsSection.style.display = 'none';
-    }
-}
-
-function updateCharts(data) {
-    if (!data || data.length === 0) return;
-    
-    // Check if charts are initialized
-    if (!dailyTrendChart || !efficiencyChart) {
-        console.warn('Charts not initialized, skipping chart update');
-        return;
-    }
-    
-    try {
-        // Update daily trend chart
-        const dailyData = {};
-        data.forEach(row => {
-            const date = row.production_date_formatted;
-            if (!dailyData[date]) {
-                dailyData[date] = { planned: 0, actual: 0 };
-            }
-            dailyData[date].planned += row.planned_qty_pieces;
-            dailyData[date].actual += row.actual_qty_pieces;
-        });
-        
-        const dates = Object.keys(dailyData).sort();
-        const plannedValues = dates.map(date => dailyData[date].planned);
-        const actualValues = dates.map(date => dailyData[date].actual);
-        
-        dailyTrendChart.data.labels = dates;
-        dailyTrendChart.data.datasets[0].data = plannedValues;
-        dailyTrendChart.data.datasets[1].data = actualValues;
-        dailyTrendChart.update();
-        
-        // Update efficiency chart
-        let overTarget = 0, onTarget = 0, underTarget = 0;
-        data.forEach(row => {
-            if (row.planned_qty_pieces > 0) { // Only count rows with planning data
-                if (row.efficiency > 100) {
-                    overTarget++;
-                } else if (row.efficiency >= 85) {
-                    onTarget++;
-                } else {
-                    underTarget++;
-                }
-            }
-        });
-        
-        efficiencyChart.data.datasets[0].data = [overTarget, onTarget, underTarget];
-        efficiencyChart.update();
-        
-    } catch (error) {
-        console.error('Error updating charts:', error);
+        sortColumn.textContent = columnNames[column] || column;
+        sortDirection.textContent = direction === 'asc' ? '↑' : '↓';
     }
 }
 
@@ -326,38 +288,71 @@ function applyFilters() {
         return;
     }
     
+    // Reset sorting when applying new filters
+    resetSorting();
+    
     loadData();
 }
 
+function resetSorting() {
+    currentSort = { column: null, direction: 'asc' };
+    
+    // Remove sort classes from all headers
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Hide sort info
+    const sortInfo = document.getElementById('sort-info');
+    if (sortInfo) {
+        sortInfo.style.display = 'none';
+    }
+}
+
 function refreshData() {
+    // Reset sorting when refreshing data
+    resetSorting();
+    
     loadData();
 }
 
 function exportData() {
-    if (!currentData || currentData.length === 0) {
+    const dataToExport = sortedData.length > 0 ? sortedData : currentData;
+    
+    if (!dataToExport || dataToExport.length === 0) {
         frappe.msgprint('No data to export');
         return;
     }
     
     // Create CSV content
     const headers = [
-        'Date', 'Item Code', 'Shift', 'Planned (Pieces)', 'Actual (Pieces)', 
-        'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Efficiency %'
+        'Date', 'Item Code', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Actual (Pieces)', 
+        'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Efficiency %', 'Status'
     ];
     
     let csvContent = headers.join(',') + '\n';
     
-    currentData.forEach(row => {
+    dataToExport.forEach(row => {
+        // Determine status
+        let status = 'Target';
+        if (row.efficiency > 100) {
+            status = 'Over';
+        } else if (row.efficiency < 85) {
+            status = 'Under';
+        }
+        
         const csvRow = [
             row.production_date_formatted,
             row.item_code,
             row.shift_type,
+            row.planning_sources_text || 'No Planning',
             row.planned_qty_pieces,
             row.actual_qty_pieces,
             row.actual_weight_kg,
             row.stock_qty_kg,
             row.variance_pieces,
-            row.efficiency.toFixed(1)
+            row.efficiency.toFixed(1),
+            status
         ];
         csvContent += csvRow.join(',') + '\n';
     });
