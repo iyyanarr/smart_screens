@@ -3,10 +3,19 @@ from frappe.utils import flt, cint, formatdate, today, getdate
 from datetime import timedelta
 
 @frappe.whitelist()
-def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
+def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, planning_filter=None):
     """
     Get planned vs actual production comparison data
     Uses similar aggregation strategy as Shift Quantity Planned Report
+    
+    Args:
+        from_date: Start date for filtering
+        to_date: End date for filtering  
+        item_filter: Item code filter
+        planning_filter: Filter by planning status
+            - 'all' or None: Show all records
+            - 'planned': Show only records with planned quantities > 0
+            - 'unplanned': Show only records with no planning (planned quantities = 0)
     """
     if not from_date:
         from_date = frappe.utils.today()
@@ -232,11 +241,11 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
 
 
 @frappe.whitelist()
-def get_summary_statistics(from_date=None, to_date=None, item_filter=None):
+def get_summary_statistics(from_date=None, to_date=None, item_filter=None, planning_filter=None):
     """
     Get summary statistics for the planned vs actual report
     """
-    data = get_planned_vs_actual_data(from_date, to_date, item_filter)
+    data = get_planned_vs_actual_data(from_date, to_date, item_filter, planning_filter)
     
     if not data:
         return {

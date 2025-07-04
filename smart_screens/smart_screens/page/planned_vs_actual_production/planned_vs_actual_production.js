@@ -45,6 +45,7 @@ function loadData() {
     const fromDate = document.getElementById('from_date').value;
     const toDate = document.getElementById('to_date').value;
     const itemFilter = document.getElementById('item_filter').value;
+    const planningFilter = document.getElementById('planning_filter').value;
     
     // Load main data
     frappe.call({
@@ -52,7 +53,8 @@ function loadData() {
         args: {
             from_date: fromDate,
             to_date: toDate,
-            item_filter: itemFilter
+            item_filter: itemFilter,
+            planning_filter: planningFilter
         },
         callback: function(r) {
             if (r.message) {
@@ -73,7 +75,8 @@ function loadData() {
         args: {
             from_date: fromDate,
             to_date: toDate,
-            item_filter: itemFilter
+            item_filter: itemFilter,
+            planning_filter: planningFilter
         },
         callback: function(r) {
             if (r.message) {

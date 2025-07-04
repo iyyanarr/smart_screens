@@ -21,17 +21,25 @@
     <div class="filter-section card">
         <div class="card-body">
             <div class="row">
-                <div class="col-3">
+                <div class="col-2">
                     <label>From Date</label>
                     <input type="date" id="from_date" class="form-control">
                 </div>
-                <div class="col-3">
+                <div class="col-2">
                     <label>To Date</label>
                     <input type="date" id="to_date" class="form-control">
                 </div>
-                <div class="col-4">
+                <div class="col-3">
                     <label>Item Filter</label>
                     <input type="text" id="item_filter" class="form-control" placeholder="Enter item code...">
+                </div>
+                <div class="col-3">
+                    <label>Planning Filter</label>
+                    <select id="planning_filter" class="form-control">
+                        <option value="all">All Records</option>
+                        <option value="planned">Planned Only</option>
+                        <option value="unplanned">Unplanned Only</option>
+                    </select>
                 </div>
                 <div class="col-2">
                     <label>&nbsp;</label>
