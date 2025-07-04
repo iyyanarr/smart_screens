@@ -36,13 +36,17 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
             wpi.item as item_code,
             wpi.lot_number,
             wp.shift_type,
-            -- Note: Work Plan Item Target has broken parent linkage (all parent fields are NULL)
-            -- So we cannot get actual target quantities, showing 0 for now
-            0 as planned_qty_pieces,
+            COALESCE(SUM(COALESCE(wpit.target_qty, 0)), 0) as planned_qty_pieces,
             COUNT(DISTINCT wpi.name) as planned_lots,
             'Work Planning' as source_type
         FROM `tabWork Planning` wp
         JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+        LEFT JOIN `tabShift Type` st ON wp.shift_type = st.name
+        LEFT JOIN `tabWork Plan Item Target` wpit ON (
+            (TIME_FORMAT(st.total_time, '%k:%i:%s') = wpit.shift_type 
+             OR TIME_FORMAT(st.total_time, '%H:%i:%s') = wpit.shift_type)
+            AND wpi.item = wpit.item
+        )
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         {item_condition}
         GROUP BY wp.date, wpi.item, wp.shift_type
@@ -142,55 +146,79 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None):
     
     # Add actual production data (no shift segregation available)
     for row in actual_data:
-        # For actual data, we'll map to 'All' shift since MPE doesn't have shift data
-        key_all = f"{row.production_date}|{row.item_code}|All"
+        # For actual data, we need to distribute across all shift types for this item/date
+        item_date_pattern = f"{row.production_date}|{row.item_code}|"
         
-        if key_all not in combined_data:
-            combined_data[key_all] = {
-                'production_date': row.production_date,
-                'item_code': row.item_code,
-                'shift_type': 'All',
-                'planned_qty_pieces': 0,
-                'planned_lots': 0,
-                'actual_qty_pieces': 0,
-                'actual_weight_kg': 0,
-                'stock_qty_kg': 0,
-                'production_entries': 0,
-                'stock_entries': 0,
-                'variance_pieces': 0,
-                'variance_percentage': 0,
-                'efficiency': 0,
-                'planning_sources': []
-            }
+        # Find all planned records for this item/date combination
+        matching_keys = [key for key in combined_data.keys() if key.startswith(item_date_pattern)]
         
-        combined_data[key_all]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
-        combined_data[key_all]['actual_weight_kg'] += flt(row.actual_weight_kg)
-        combined_data[key_all]['production_entries'] += cint(row.production_entries)
+        if matching_keys:
+            # Distribute actual data across all matching planned records
+            for key in matching_keys:
+                combined_data[key]['actual_qty_pieces'] += flt(row.actual_qty_pieces) / len(matching_keys)
+                combined_data[key]['actual_weight_kg'] += flt(row.actual_weight_kg) / len(matching_keys)
+                combined_data[key]['production_entries'] += cint(row.production_entries) / len(matching_keys)
+        else:
+            # Create a new record for actual-only data
+            key_all = f"{row.production_date}|{row.item_code}|All"
+            if key_all not in combined_data:
+                combined_data[key_all] = {
+                    'production_date': row.production_date,
+                    'item_code': row.item_code,
+                    'shift_type': 'All',
+                    'planned_qty_pieces': 0,
+                    'planned_lots': 0,
+                    'actual_qty_pieces': 0,
+                    'actual_weight_kg': 0,
+                    'stock_qty_kg': 0,
+                    'production_entries': 0,
+                    'stock_entries': 0,
+                    'variance_pieces': 0,
+                    'variance_percentage': 0,
+                    'efficiency': 0,
+                    'planning_sources': []
+                }
+            
+            combined_data[key_all]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
+            combined_data[key_all]['actual_weight_kg'] += flt(row.actual_weight_kg)
+            combined_data[key_all]['production_entries'] += cint(row.production_entries)
     
     # Add stock entry data
     for row in stock_data:
-        key_all = f"{row.production_date}|{row.item_code}|All"
+        # For stock data, we need to distribute across all shift types for this item/date
+        item_date_pattern = f"{row.production_date}|{row.item_code}|"
         
-        if key_all not in combined_data:
-            combined_data[key_all] = {
-                'production_date': row.production_date,
-                'item_code': row.item_code,
-                'shift_type': 'All',
-                'planned_qty_pieces': 0,
-                'planned_lots': 0,
-                'actual_qty_pieces': 0,
-                'actual_weight_kg': 0,
-                'stock_qty_kg': 0,
-                'production_entries': 0,
-                'stock_entries': 0,
-                'variance_pieces': 0,
-                'variance_percentage': 0,
-                'efficiency': 0,
-                'planning_sources': []
-            }
+        # Find all records (planned or actual) for this item/date combination
+        matching_keys = [key for key in combined_data.keys() if key.startswith(item_date_pattern)]
         
-        combined_data[key_all]['stock_qty_kg'] += flt(row.stock_qty_kg)
-        combined_data[key_all]['stock_entries'] += cint(row.stock_entries)
+        if matching_keys:
+            # Distribute stock data across all matching records
+            for key in matching_keys:
+                combined_data[key]['stock_qty_kg'] += flt(row.stock_qty_kg) / len(matching_keys)
+                combined_data[key]['stock_entries'] += cint(row.stock_entries) / len(matching_keys)
+        else:
+            # Create a new record for stock-only data
+            key_all = f"{row.production_date}|{row.item_code}|All"
+            if key_all not in combined_data:
+                combined_data[key_all] = {
+                    'production_date': row.production_date,
+                    'item_code': row.item_code,
+                    'shift_type': 'All',
+                    'planned_qty_pieces': 0,
+                    'planned_lots': 0,
+                    'actual_qty_pieces': 0,
+                    'actual_weight_kg': 0,
+                    'stock_qty_kg': 0,
+                    'production_entries': 0,
+                    'stock_entries': 0,
+                    'variance_pieces': 0,
+                    'variance_percentage': 0,
+                    'efficiency': 0,
+                    'planning_sources': []
+                }
+            
+            combined_data[key_all]['stock_qty_kg'] += flt(row.stock_qty_kg)
+            combined_data[key_all]['stock_entries'] += cint(row.stock_entries)
     
     # Calculate variances and efficiency
     final_data = []
