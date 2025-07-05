@@ -3,7 +3,7 @@ from frappe.utils import flt, cint, formatdate, today, getdate
 from datetime import timedelta
 
 @frappe.whitelist()
-def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, planning_filter=None):
+def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, lot_filter=None, planning_filter=None):
     """
     Get planned vs actual production comparison data
     Uses similar aggregation strategy as Shift Quantity Planned Report
@@ -24,6 +24,9 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
     
     # Build item filter condition
     item_condition = ""
+    lot_condition_actual = ""
+    lot_condition_stock = ""
+    
     if item_filter:
         item_condition = f"AND wpi.item LIKE '%{item_filter}%'"
         item_condition_actual = f"AND mpe.item_to_produce LIKE '%{item_filter}%'"
@@ -31,6 +34,10 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
     else:
         item_condition_actual = ""
         item_condition_stock = ""
+    
+    if lot_filter:
+        lot_condition_actual = f"AND (mpe.spp_batch_number LIKE '%{lot_filter}%' OR mpe.batch_no LIKE '%{lot_filter}%')"
+        lot_condition_stock = f"AND (sed.spp_batch_number LIKE '%{lot_filter}%' OR sed.batch_no LIKE '%{lot_filter}%')"
 
     # Get planned data (using successful approach from Shift Quantity Planned Report)
     planned_query = f"""
@@ -83,31 +90,36 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
 
     planned_data = frappe.db.sql(planned_query, as_dict=True)
 
-    # Get actual production data from Moulding Production Entry
+    # Get actual production data from Moulding Production Entry with LOT NUMBER
     actual_query = f"""
         SELECT 
             mpe.moulding_date as production_date,
             mpe.item_to_produce as item_code,
+            COALESCE(mpe.spp_batch_number, mpe.batch_no, 'No Lot') as lot_number,
             SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as actual_qty_pieces,
             SUM(mpe.weight) as actual_weight_kg,
-            COUNT(DISTINCT mpe.name) as production_entries
+            COUNT(DISTINCT mpe.name) as production_entries,
+            GROUP_CONCAT(DISTINCT mpe.name ORDER BY mpe.name) as entry_references
         FROM `tabMoulding Production Entry` mpe
         WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
         AND mpe.docstatus = 1
         {item_condition_actual}
-        GROUP BY mpe.moulding_date, mpe.item_to_produce
-        ORDER BY mpe.moulding_date DESC, mpe.item_to_produce
+        {lot_condition_actual}
+        GROUP BY mpe.moulding_date, mpe.item_to_produce, COALESCE(mpe.spp_batch_number, mpe.batch_no, 'No Lot')
+        ORDER BY mpe.moulding_date DESC, mpe.item_to_produce, lot_number
     """
     
     actual_data = frappe.db.sql(actual_query, as_dict=True)
 
-    # Get stock entry data
+    # Get stock entry data with LOT NUMBER
     stock_query = f"""
         SELECT 
             DATE(se.posting_date) as production_date,
             sed.item_code,
+            COALESCE(sed.spp_batch_number, sed.batch_no, 'No Lot') as lot_number,
             SUM(sed.qty) as stock_qty_kg,
-            COUNT(DISTINCT se.name) as stock_entries
+            COUNT(DISTINCT se.name) as stock_entries,
+            GROUP_CONCAT(DISTINCT se.name ORDER BY se.name) as entry_references
         FROM `tabStock Entry` se
         JOIN `tabStock Entry Detail` sed ON se.name = sed.parent
         WHERE se.posting_date BETWEEN '{from_date}' AND '{to_date}'
@@ -115,8 +127,9 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
         AND se.docstatus = 1
         AND sed.t_warehouse IS NOT NULL
         {item_condition_stock}
-        GROUP BY DATE(se.posting_date), sed.item_code
-        ORDER BY se.posting_date DESC, sed.item_code
+        {lot_condition_stock}
+        GROUP BY DATE(se.posting_date), sed.item_code, COALESCE(sed.spp_batch_number, sed.batch_no, 'No Lot')
+        ORDER BY se.posting_date DESC, sed.item_code, lot_number
     """
     
     stock_data = frappe.db.sql(stock_query, as_dict=True)
@@ -137,17 +150,34 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
         planned_aggregated[key]['planned_qty_pieces'] += flt(row.planned_qty_pieces or 0)
         planned_aggregated[key]['planning_sources'].add(row.source_type)
 
-    # Combine data into a unified structure
+    # Create a comprehensive data structure that handles lot numbers
+    # Key strategy: Include lot number in the key for actual/stock data, but group planned data separately
     combined_data = {}
     
-    # Add planned data
-    for row in planned_aggregated.values():
-        key = f"{row['production_date']}|{row['item_code']}|All"
+    # First, collect all unique combinations of date + item + lot from actual and stock data
+    all_combinations = set()
+    
+    # Add combinations from actual data
+    for row in actual_data:
+        all_combinations.add((row.production_date, row.item_code, row.lot_number))
+    
+    # Add combinations from stock data
+    for row in stock_data:
+        all_combinations.add((row.production_date, row.item_code, row.lot_number))
+    
+    # Add combinations from planned data (with 'Planned' as lot number)
+    for key, row in planned_aggregated.items():
+        all_combinations.add((row['production_date'], row['item_code'], 'Planned'))
+    
+    # Initialize combined data structure for all combinations
+    for production_date, item_code, lot_number in all_combinations:
+        key = f"{production_date}|{item_code}|{lot_number}"
         combined_data[key] = {
-            'production_date': row['production_date'],
-            'item_code': row['item_code'],
+            'production_date': production_date,
+            'item_code': item_code,
+            'lot_number': lot_number,
             'shift_type': 'All',
-            'planned_qty_pieces': row['planned_qty_pieces'],
+            'planned_qty_pieces': 0,
             'actual_qty_pieces': 0,
             'actual_weight_kg': 0,
             'stock_qty_kg': 0,
@@ -156,57 +186,54 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
             'variance_pieces': 0,
             'variance_percentage': 0,
             'efficiency': 0,
-            'planning_sources': list(row['planning_sources'])
+            'planning_sources': [],
+            'entry_references_actual': '',
+            'entry_references_stock': ''
         }
+
+    # Add planned data to all lot numbers for the same item/date combination
+    for planned_key, planned_row in planned_aggregated.items():
+        production_date, item_code = planned_key.split('|')
+        
+        # Find all lot numbers for this item/date and distribute planned quantities
+        matching_lots = [key for key in combined_data.keys() 
+                        if key.startswith(f"{production_date}|{item_code}|")]
+        
+        if matching_lots:
+            # If there are actual/stock lots, don't create a separate 'Planned' entry
+            # Instead, add planned data to the first actual lot or create one entry
+            planned_per_lot = planned_row['planned_qty_pieces'] / len(matching_lots) if len(matching_lots) > 1 else planned_row['planned_qty_pieces']
+            
+            for lot_key in matching_lots:
+                if combined_data[lot_key]['lot_number'] != 'Planned':
+                    combined_data[lot_key]['planned_qty_pieces'] = planned_row['planned_qty_pieces']  # Give full planned qty to first actual lot
+                    combined_data[lot_key]['planning_sources'] = list(planned_row['planning_sources'])
+                    break
+        else:
+            # No actual/stock data, create a planned-only entry
+            key = f"{production_date}|{item_code}|Planned"
+            if key in combined_data:
+                combined_data[key]['planned_qty_pieces'] = planned_row['planned_qty_pieces']
+                combined_data[key]['planning_sources'] = list(planned_row['planning_sources'])
 
     # Add actual production data
     for row in actual_data:
-        key = f"{row.production_date}|{row.item_code}|All"
+        key = f"{row.production_date}|{row.item_code}|{row.lot_number}"
         
-        if key not in combined_data:
-            combined_data[key] = {
-                'production_date': row.production_date,
-                'item_code': row.item_code,
-                'shift_type': 'All',
-                'planned_qty_pieces': 0,
-                'actual_qty_pieces': 0,
-                'actual_weight_kg': 0,
-                'stock_qty_kg': 0,
-                'production_entries': 0,
-                'stock_entries': 0,
-                'variance_pieces': 0,
-                'variance_percentage': 0,
-                'efficiency': 0,
-                'planning_sources': []
-            }
-        
-        combined_data[key]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
-        combined_data[key]['actual_weight_kg'] += flt(row.actual_weight_kg)
-        combined_data[key]['production_entries'] += cint(row.production_entries)
+        if key in combined_data:
+            combined_data[key]['actual_qty_pieces'] += flt(row.actual_qty_pieces)
+            combined_data[key]['actual_weight_kg'] += flt(row.actual_weight_kg)
+            combined_data[key]['production_entries'] += cint(row.production_entries)
+            combined_data[key]['entry_references_actual'] = row.entry_references or ''
 
     # Add stock entry data
     for row in stock_data:
-        key = f"{row.production_date}|{row.item_code}|All"
+        key = f"{row.production_date}|{row.item_code}|{row.lot_number}"
         
-        if key not in combined_data:
-            combined_data[key] = {
-                'production_date': row.production_date,
-                'item_code': row.item_code,
-                'shift_type': 'All',
-                'planned_qty_pieces': 0,
-                'actual_qty_pieces': 0,
-                'actual_weight_kg': 0,
-                'stock_qty_kg': 0,
-                'production_entries': 0,
-                'stock_entries': 0,
-                'variance_pieces': 0,
-                'variance_percentage': 0,
-                'efficiency': 0,
-                'planning_sources': []
-            }
-        
-        combined_data[key]['stock_qty_kg'] += flt(row.stock_qty_kg)
-        combined_data[key]['stock_entries'] += cint(row.stock_entries)
+        if key in combined_data:
+            combined_data[key]['stock_qty_kg'] += flt(row.stock_qty_kg)
+            combined_data[key]['stock_entries'] += cint(row.stock_entries)
+            combined_data[key]['entry_references_stock'] = row.entry_references or ''
 
     # Calculate variances and efficiency
     final_data = []
@@ -241,11 +268,11 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, p
 
 
 @frappe.whitelist()
-def get_summary_statistics(from_date=None, to_date=None, item_filter=None, planning_filter=None):
+def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_filter=None, planning_filter=None):
     """
     Get summary statistics for the planned vs actual report
     """
-    data = get_planned_vs_actual_data(from_date, to_date, item_filter, planning_filter)
+    data = get_planned_vs_actual_data(from_date, to_date, item_filter, lot_filter, planning_filter)
     
     if not data:
         return {

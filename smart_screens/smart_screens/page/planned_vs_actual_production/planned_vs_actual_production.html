@@ -29,11 +29,15 @@
                     <label>To Date</label>
                     <input type="date" id="to_date" class="form-control">
                 </div>
-                <div class="col-3">
+                <div class="col-2">
                     <label>Item Filter</label>
                     <input type="text" id="item_filter" class="form-control" placeholder="Enter item code...">
                 </div>
-                <div class="col-3">
+                <div class="col-2">
+                    <label>Lot Number Filter</label>
+                    <input type="text" id="lot_filter" class="form-control" placeholder="Enter lot number...">
+                </div>
+                <div class="col-2">
                     <label>Planning Filter</label>
                     <select id="planning_filter" class="form-control">
                         <option value="all">All Records</option>
@@ -56,7 +60,7 @@
         <div class="row">
             <div class="col-3">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Sum of all planned quantities from Work Planning and Add On Work Planning. Formula: SUM(Number of Cavities × Target Quantity)">
+                     title="Sum of all planned quantities from Work Planning and Add On Work Planning. Formula: SUM(Number of Cavities * Target Quantity)">
                     <div class="card-body text-center">
                         <h4 id="total-planned" class="text-primary">0</h4>
                         <small>Total Planned (Pieces) <i class="fa fa-info-circle"></i></small>
@@ -65,7 +69,7 @@
             </div>
             <div class="col-3">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Sum of all actual production from Moulding Production Entry. Formula: SUM(Number of Lifts × Running Cavities)">
+                     title="Sum of all actual production from Moulding Production Entry. Formula: SUM(Number of Lifts * Running Cavities)">
                     <div class="card-body text-center">
                         <h4 id="total-actual" class="text-success">0</h4>
                         <small>Total Actual (Pieces) <i class="fa fa-info-circle"></i></small>
@@ -83,7 +87,7 @@
             </div>
             <div class="col-3">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Overall production efficiency calculated as (Total Actual ÷ Total Planned) × 100. Shows how well actual production meets planned targets">
+                     title="Overall production efficiency calculated as (Total Actual / Total Planned) * 100. Shows how well actual production meets planned targets">
                     <div class="card-body text-center">
                         <h4 id="overall-efficiency" class="text-warning">0%</h4>
                         <small>Overall Efficiency <i class="fa fa-info-circle"></i></small>
@@ -119,6 +123,11 @@
                             <th class="sortable" data-column="item_code" data-type="text">
                                 Item Code <i class="fa fa-sort sort-icon"></i>
                             </th>
+                            <th class="sortable" data-column="lot_number" data-type="text"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="SPP Batch Number from production entries. Shows Planned for planned-only records or No Lot when batch number is not specified.">
+                                Lot Number <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                            </th>
                             <th class="sortable" data-column="shift_type" data-type="text">
                                 Shift <i class="fa fa-sort sort-icon"></i>
                             </th>
@@ -127,12 +136,12 @@
                             </th>
                             <th class="text-right sortable" data-column="planned_qty_pieces" data-type="number" 
                                 data-toggle="tooltip" data-placement="top" 
-                                title="Planned quantities from Work Planning and Add On Work Planning. Formula: Number of Cavities × Target Quantity">
+                                title="Planned quantities from Work Planning and Add On Work Planning. Formula: Number of Cavities * Target Quantity">
                                 Planned (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="actual_qty_pieces" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
-                                title="Actual pieces produced from Moulding Production Entry. Formula: Number of Lifts × Number of Running Cavities. Shows total pieces produced on shop floor.">
+                                title="Actual pieces produced from Moulding Production Entry. Formula: Number of Lifts * Number of Running Cavities. Shows total pieces produced on shop floor.">
                                 Actual (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="actual_weight_kg" data-type="number">
@@ -212,6 +221,13 @@
 
 .summary-card:hover .fa-info-circle {
     opacity: 1;
+}
+
+.badge-info {
+    background-color: #17a2b8;
+    color: white;
+    font-size: 0.85em;
+    padding: 0.3em 0.6em;
 }
 
 .data-section {

@@ -48,6 +48,7 @@ function loadData() {
     const fromDate = document.getElementById('from_date').value;
     const toDate = document.getElementById('to_date').value;
     const itemFilter = document.getElementById('item_filter').value;
+    const lotFilter = document.getElementById('lot_filter').value;
     const planningFilter = document.getElementById('planning_filter').value;
     
     // Load main data
@@ -57,6 +58,7 @@ function loadData() {
             from_date: fromDate,
             to_date: toDate,
             item_filter: itemFilter,
+            lot_filter: lotFilter,
             planning_filter: planningFilter
         },
         callback: function(r) {
@@ -79,6 +81,7 @@ function loadData() {
             from_date: fromDate,
             to_date: toDate,
             item_filter: itemFilter,
+            lot_filter: lotFilter,
             planning_filter: planningFilter
         },
         callback: function(r) {
@@ -122,7 +125,7 @@ function updateTable(data) {
     }
     
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No data found for the selected filters</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data found for the selected filters</td></tr>';
         return;
     }
     
@@ -143,6 +146,7 @@ function updateTable(data) {
         tr.innerHTML = `
             <td>${row.production_date_formatted}</td>
             <td><strong>${row.item_code}</strong></td>
+            <td><span class="badge badge-info">${row.lot_number || 'No Lot'}</span></td>
             <td><span class="badge badge-secondary">${row.shift_type}</span></td>
             <td><small class="text-muted">${row.planning_sources_text || 'No Planning'}</small></td>
             <td class="text-right">${formatNumber(row.planned_qty_pieces)}</td>
@@ -324,7 +328,7 @@ function exportData() {
     
     // Create CSV content
     const headers = [
-        'Date', 'Item Code', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Actual (Pieces)', 
+        'Date', 'Item Code', 'Lot Number', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Actual (Pieces)', 
         'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Status'
     ];
     
@@ -342,6 +346,7 @@ function exportData() {
         const csvRow = [
             row.production_date_formatted,
             row.item_code,
+            row.lot_number || 'No Lot',
             row.shift_type,
             row.planning_sources_text || 'No Planning',
             row.planned_qty_pieces,
@@ -381,7 +386,7 @@ function initializeTooltips() {
 
 // Event listeners for Enter key on filter inputs
 document.addEventListener('DOMContentLoaded', function() {
-    ['from_date', 'to_date', 'item_filter'].forEach(id => {
+    ['from_date', 'to_date', 'item_filter', 'lot_filter'].forEach(id => {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('keypress', function(e) {
