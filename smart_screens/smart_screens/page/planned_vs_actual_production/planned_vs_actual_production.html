@@ -54,51 +54,39 @@
     <!-- Summary Cards -->
     <div class="summary-section">
         <div class="row">
-            <div class="col-2">
-                <div class="card summary-card">
+            <div class="col-3">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
+                     title="Sum of all planned quantities from Work Planning and Add On Work Planning. Formula: SUM(Number of Cavities × Target Quantity)">
                     <div class="card-body text-center">
                         <h4 id="total-planned" class="text-primary">0</h4>
-                        <small>Total Planned (Pieces)</small>
+                        <small>Total Planned (Pieces) <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
-            <div class="col-2">
-                <div class="card summary-card">
+            <div class="col-3">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
+                     title="Sum of all actual production from Moulding Production Entry. Formula: SUM(Number of Lifts × Running Cavities)">
                     <div class="card-body text-center">
                         <h4 id="total-actual" class="text-success">0</h4>
-                        <small>Total Actual (Pieces)</small>
+                        <small>Total Actual (Pieces) <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
-            <div class="col-2">
-                <div class="card summary-card">
-                    <div class="card-body text-center">
-                        <h4 id="total-kg" class="text-info">0</h4>
-                        <small>Total Stock (Kg)</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-2">
-                <div class="card summary-card">
-                    <div class="card-body text-center">
-                        <h4 id="overall-efficiency" class="text-warning">0%</h4>
-                        <small>Overall Efficiency</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-2">
-                <div class="card summary-card">
+            <div class="col-3">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
+                     title="Total number of unique items that have planned or actual production data in the selected date range">
                     <div class="card-body text-center">
                         <h4 id="total-items" class="text-dark">0</h4>
-                        <small>Total Items</small>
+                        <small>Total Items <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
-            <div class="col-2">
-                <div class="card summary-card">
+            <div class="col-3">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
+                     title="Overall production efficiency calculated as (Total Actual ÷ Total Planned) × 100. Shows how well actual production meets planned targets">
                     <div class="card-body text-center">
-                        <h4 id="avg-efficiency" class="text-secondary">0%</h4>
-                        <small>Avg Efficiency</small>
+                        <h4 id="overall-efficiency" class="text-warning">0%</h4>
+                        <small>Overall Efficiency <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
@@ -137,23 +125,26 @@
                             <th class="sortable" data-column="planning_sources_text" data-type="text">
                                 Planning Source <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="text-right sortable" data-column="planned_qty_pieces" data-type="number">
-                                Planned (Pieces) <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="planned_qty_pieces" data-type="number" 
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Planned quantities from Work Planning and Add On Work Planning. Formula: Number of Cavities × Target Quantity">
+                                Planned (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
-                            <th class="text-right sortable" data-column="actual_qty_pieces" data-type="number">
-                                Actual (Pieces) <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="actual_qty_pieces" data-type="number"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Actual pieces produced from Moulding Production Entry. Formula: Number of Lifts × Number of Running Cavities. Shows total pieces produced on shop floor.">
+                                Actual (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="actual_weight_kg" data-type="number">
                                 Actual Weight (Kg) <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="text-right sortable" data-column="stock_qty_kg" data-type="number">
-                                Stock (Kg) <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="stock_qty_kg" data-type="number"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Weight of finished goods transferred to warehouse from Stock Entry (Manufacture purpose). Shows actual weight of products moved to inventory after quality control.">
+                                Stock (Kg) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="variance_pieces" data-type="number">
                                 Variance (Pieces) <i class="fa fa-sort sort-icon"></i>
-                            </th>
-                            <th class="text-right sortable" data-column="efficiency" data-type="number">
-                                Efficiency % <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="text-center sortable" data-column="status" data-type="text">
                                 Status <i class="fa fa-sort sort-icon"></i>
@@ -212,6 +203,15 @@
 
 .summary-card:hover {
     transform: translateY(-2px);
+}
+
+.summary-card .fa-info-circle {
+    opacity: 0.6;
+    font-size: 0.8em;
+}
+
+.summary-card:hover .fa-info-circle {
+    opacity: 1;
 }
 
 .data-section {
@@ -318,7 +318,7 @@
         margin-bottom: 10px;
     }
     
-    .summary-section .col-2 {
+    .summary-section .col-3 {
         width: 50%;
         margin-bottom: 10px;
     }

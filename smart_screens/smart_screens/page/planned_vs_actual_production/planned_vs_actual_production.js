@@ -21,6 +21,9 @@ frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
     
     // Load initial data
     loadData();
+    
+    // Initialize Bootstrap tooltips
+    initializeTooltips();
 };
 
 function initializeDateFilters() {
@@ -94,10 +97,8 @@ function loadData() {
 function updateSummaryCards(summary) {
     document.getElementById('total-planned').textContent = formatNumber(summary.total_planned_pieces);
     document.getElementById('total-actual').textContent = formatNumber(summary.total_actual_pieces);
-    document.getElementById('total-kg').textContent = formatNumber(summary.total_stock_kg, 2) + ' kg';
     document.getElementById('overall-efficiency').textContent = formatNumber(summary.overall_efficiency, 1) + '%';
     document.getElementById('total-items').textContent = summary.total_items;
-    document.getElementById('avg-efficiency').textContent = formatNumber(summary.avg_efficiency, 1) + '%';
     
     // Update efficiency color based on performance
     const efficiencyElement = document.getElementById('overall-efficiency');
@@ -121,7 +122,7 @@ function updateTable(data) {
     }
     
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data found for the selected filters</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No data found for the selected filters</td></tr>';
         return;
     }
     
@@ -150,9 +151,6 @@ function updateTable(data) {
             <td class="text-right">${formatNumber(row.stock_qty_kg, 2)}</td>
             <td class="text-right ${row.variance_pieces >= 0 ? 'text-success' : 'text-danger'}">
                 ${row.variance_pieces >= 0 ? '+' : ''}${formatNumber(row.variance_pieces)}
-            </td>
-            <td class="text-right ${row.efficiency >= 95 ? 'text-success' : row.efficiency >= 85 ? 'text-warning' : 'text-danger'}">
-                ${formatNumber(row.efficiency, 1)}%
             </td>
             <td class="text-center">
                 <span class="status-badge ${statusClass}">${status}</span>
@@ -327,7 +325,7 @@ function exportData() {
     // Create CSV content
     const headers = [
         'Date', 'Item Code', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Actual (Pieces)', 
-        'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Efficiency %', 'Status'
+        'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Status'
     ];
     
     let csvContent = headers.join(',') + '\n';
@@ -351,7 +349,6 @@ function exportData() {
             row.actual_weight_kg,
             row.stock_qty_kg,
             row.variance_pieces,
-            row.efficiency.toFixed(1),
             status
         ];
         csvContent += csvRow.join(',') + '\n';
@@ -367,6 +364,19 @@ function exportData() {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+}
+
+function initializeTooltips() {
+    // Initialize Bootstrap tooltips for all elements with data-toggle="tooltip"
+    if (typeof $ !== 'undefined' && $.fn.tooltip) {
+        $('[data-toggle="tooltip"]').tooltip({
+            html: true,
+            delay: { show: 500, hide: 100 }
+        });
+    } else {
+        // Fallback: Use title attribute for basic tooltip behavior
+        console.warn('Bootstrap tooltip not available, using basic title tooltips');
+    }
 }
 
 // Event listeners for Enter key on filter inputs
