@@ -19,6 +19,9 @@ frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
     // Initialize table sorting
     initializeTableSorting();
     
+    // Load shift options
+    loadShiftOptions();
+    
     // Load initial data
     loadData();
     
@@ -49,6 +52,7 @@ function loadData() {
     const toDate = document.getElementById('to_date').value;
     const itemFilter = document.getElementById('item_filter').value;
     const lotFilter = document.getElementById('lot_filter').value;
+    const shiftFilter = document.getElementById('shift_filter').value;
     const planningFilter = document.getElementById('planning_filter').value;
     
     // Load main data
@@ -59,6 +63,7 @@ function loadData() {
             to_date: toDate,
             item_filter: itemFilter,
             lot_filter: lotFilter,
+            shift_filter: shiftFilter,
             planning_filter: planningFilter
         },
         callback: function(r) {
@@ -82,6 +87,7 @@ function loadData() {
             to_date: toDate,
             item_filter: itemFilter,
             lot_filter: lotFilter,
+            shift_filter: shiftFilter,
             planning_filter: planningFilter
         },
         callback: function(r) {
@@ -99,7 +105,7 @@ function loadData() {
 
 function updateSummaryCards(summary) {
     document.getElementById('total-planned').textContent = formatNumber(summary.total_planned_pieces);
-    document.getElementById('total-actual').textContent = formatNumber(summary.total_actual_pieces);
+    document.getElementById('total-actual').textContent = formatNumber(summary.total_produced_pieces);
     document.getElementById('overall-efficiency').textContent = formatNumber(summary.overall_efficiency, 1) + '%';
     document.getElementById('total-items').textContent = summary.total_items;
     
@@ -125,7 +131,7 @@ function updateTable(data) {
     }
     
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No data found for the selected filters</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No data found for the selected filters</td></tr>';
         return;
     }
     
@@ -151,8 +157,6 @@ function updateTable(data) {
             <td><small class="text-muted">${row.planning_sources_text || 'No Planning'}</small></td>
             <td class="text-right">${formatNumber(row.planned_qty_pieces)}</td>
             <td class="text-right">${formatNumber(row.actual_qty_pieces)}</td>
-            <td class="text-right">${formatNumber(row.actual_weight_kg, 2)}</td>
-            <td class="text-right">${formatNumber(row.stock_qty_kg, 2)}</td>
             <td class="text-right ${row.variance_pieces >= 0 ? 'text-success' : 'text-danger'}">
                 ${row.variance_pieces >= 0 ? '+' : ''}${formatNumber(row.variance_pieces)}
             </td>
@@ -257,7 +261,6 @@ function updateSortInfo(column, direction) {
             'planned_qty_pieces': 'Planned (Pieces)',
             'actual_qty_pieces': 'Actual (Pieces)',
             'actual_weight_kg': 'Actual Weight (Kg)',
-            'stock_qty_kg': 'Stock (Kg)',
             'variance_pieces': 'Variance (Pieces)',
             'efficiency': 'Efficiency %',
             'status': 'Status'
@@ -293,6 +296,9 @@ function applyFilters() {
     // Reset sorting when applying new filters
     resetSorting();
     
+    // Reload shift options for new date range
+    loadShiftOptions();
+    
     loadData();
 }
 
@@ -315,6 +321,9 @@ function refreshData() {
     // Reset sorting when refreshing data
     resetSorting();
     
+    // Reload shift options
+    loadShiftOptions();
+    
     loadData();
 }
 
@@ -328,8 +337,8 @@ function exportData() {
     
     // Create CSV content
     const headers = [
-        'Date', 'Item Code', 'Lot Number', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Actual (Pieces)', 
-        'Actual Weight (Kg)', 'Stock (Kg)', 'Variance (Pieces)', 'Status'
+        'Date', 'Item Code', 'Lot Number', 'Shift', 'Planning Source', 'Planned (Pieces)', 'Produced (Pieces)', 
+        'Variance (Pieces)', 'Status'
     ];
     
     let csvContent = headers.join(',') + '\n';
@@ -351,8 +360,6 @@ function exportData() {
             row.planning_sources_text || 'No Planning',
             row.planned_qty_pieces,
             row.actual_qty_pieces,
-            row.actual_weight_kg,
-            row.stock_qty_kg,
             row.variance_pieces,
             status
         ];
@@ -384,9 +391,46 @@ function initializeTooltips() {
     }
 }
 
+function loadShiftOptions() {
+    const fromDate = document.getElementById('from_date').value;
+    const toDate = document.getElementById('to_date').value;
+    
+    console.log('Loading shift options for date range:', fromDate, 'to', toDate);
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.page.planned_vs_actual_production.planned_vs_actual_production.get_shift_options',
+        args: {
+            from_date: fromDate,
+            to_date: toDate
+        },
+        callback: function(r) {
+            if (r.message) {
+                console.log('Received shift options:', r.message);
+                const shiftSelect = document.getElementById('shift_filter');
+                shiftSelect.innerHTML = '';
+                
+                r.message.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option.value;
+                    optionElement.textContent = option.label;
+                    shiftSelect.appendChild(optionElement);
+                });
+            } else {
+                console.warn('No shift options received');
+            }
+        },
+        error: function(err) {
+            console.error('Error loading shift options:', err);
+            // Fallback to default options
+            const shiftSelect = document.getElementById('shift_filter');
+            shiftSelect.innerHTML = '<option value="">All Shifts</option>';
+        }
+    });
+}
+
 // Event listeners for Enter key on filter inputs
 document.addEventListener('DOMContentLoaded', function() {
-    ['from_date', 'to_date', 'item_filter', 'lot_filter'].forEach(id => {
+    ['from_date', 'to_date', 'item_filter', 'lot_filter', 'shift_filter'].forEach(id => {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('keypress', function(e) {
