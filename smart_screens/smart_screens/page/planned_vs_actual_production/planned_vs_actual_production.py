@@ -42,7 +42,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         item_condition_stock = ""
     
     if lot_filter:
-        lot_condition_actual = f"AND (mpe.spp_batch_number LIKE '%{lot_filter}%' OR mpe.batch_no LIKE '%{lot_filter}%')"
+        lot_condition_actual = f"AND (mpe.scan_lot_number LIKE '%{lot_filter}%' OR mpe.batch_no LIKE '%{lot_filter}%')"
         lot_condition_stock = f"AND (sed.spp_batch_number LIKE '%{lot_filter}%' OR sed.batch_no LIKE '%{lot_filter}%')"
     
     if shift_filter:
@@ -109,7 +109,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         SELECT 
             mpe.moulding_date as production_date,
             mpe.item_to_produce as item_code,
-            COALESCE(mpe.spp_batch_number, mpe.batch_no, 'No Lot') as lot_number,
+            COALESCE(mpe.scan_lot_number, mpe.batch_no, 'No Lot') as lot_number,
             SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as actual_qty_pieces,
             SUM(mpe.weight) as actual_weight_kg,
             COUNT(DISTINCT mpe.name) as production_entries,
@@ -119,7 +119,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         AND mpe.docstatus = 1
         {item_condition_actual}
         {lot_condition_actual}
-        GROUP BY mpe.moulding_date, mpe.item_to_produce, COALESCE(mpe.spp_batch_number, mpe.batch_no, 'No Lot')
+        GROUP BY mpe.moulding_date, mpe.item_to_produce, COALESCE(mpe.scan_lot_number, mpe.batch_no, 'No Lot')
         ORDER BY mpe.moulding_date DESC, mpe.item_to_produce, lot_number
     """
     
