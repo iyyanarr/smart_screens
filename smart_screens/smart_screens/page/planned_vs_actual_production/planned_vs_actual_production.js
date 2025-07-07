@@ -3,7 +3,7 @@ let currentData = [];
 let sortedData = [];
 let currentSort = { column: null, direction: 'asc' };
 
-// Initialize the page
+// Initial        tableBody.innerHTML = '<tr><td colspan="15" class="text-center">No data found for the selected criteria</td></tr>';ze the page
 frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
@@ -182,6 +182,7 @@ function updateTable(data) {
             <td>${row.mould_ref || ''}</td>
             <td><span class="badge badge-info">${row.lot_no || ''}</span></td>
             <td class="text-right"><strong>${row.production_lifts || 0}</strong></td>
+            <td class="text-right"><span class="badge badge-warning">${row.target_lifts || 0}</span></td>
             <td class="text-right">${row.no_of_cavities || 0}</td>
             <td class="text-right"><strong>${plannedPieces}</strong></td>
             <td class="text-right"><strong>${producedPieces}</strong></td>

@@ -140,6 +140,11 @@
                                 title="Number of production lifts entered against the lot (submitted values only)">
                                 Production Lifts <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
+                            <th class="text-right sortable" data-column="target_lifts" data-type="number"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Target number of lifts planned for this item from Work Plan Item Target">
+                                Target Lifts <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                            </th>
                             <th class="text-right sortable" data-column="no_of_cavities" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
                                 title="Number of cavities from mould specification list">
@@ -147,7 +152,7 @@
                             </th>
                             <th class="text-right sortable" data-column="planned_pieces" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
-                                title="Planned pieces calculated as Production Lifts × No. of Cavities">
+                                title="Planned pieces calculated as Target Lifts × No. of Cavities (Expected Production Qty)">
                                 Planned Pieces <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="total_pieces_produced" data-type="number"

@@ -67,14 +67,15 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             wpi.mould as mould_ref,
             wpi.lot_number as lot_no,
             0 as production_lifts,
-            0 as target_lifts,
             ms.noof_cavities as no_of_cavities,
+            COALESCE(wpit.target_qty, 0) as target_lifts,
             'Work Planning' as source_type,
             wp.docstatus,
             wpi.creation as lot_creation_time
         FROM `tabWork Planning` wp
         INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
         LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
+        LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         AND wpi.mould IS NOT NULL
         AND wpi.lot_number IS NOT NULL
@@ -94,8 +95,8 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             awpi.mould as mould_ref,
             awpi.lot_number as lot_no,
             0 as production_lifts,
-            0 as target_lifts,
             ms.noof_cavities as no_of_cavities,
+            0 as target_lifts,
             'Add On Work Planning' as source_type,
             awp.docstatus,
             awpi.creation as lot_creation_time
@@ -186,19 +187,24 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         
         if selected_lot:
             # Calculate planned and produced pieces for variance
-            # If this is a Work Planning record with no production, we need to find the target quantity from a different source
-            # For now, use a placeholder approach that sets planned_pieces = produced_pieces for records with production
-            # and planned_pieces = 0 for records without production (this will be updated later with actual target data)
+            # Calculate planned pieces using the correct formula:
+            # Expected Production Qty = Target No. Of Lifts × No. Of Cavities
+            no_of_cavities = flt(selected_lot['no_of_cavities'] or 0)
+            target_lifts = flt(selected_lot.get('target_lifts', 0))
+            production_lifts = flt(selected_lot['production_lifts'] or 0)
             
-            # For produced records, set planned = produced (assumes planned matches actual when produced)
-            # For non-produced records, use a simplified approach for now
-            if selected_lot['has_production'] and flt(selected_lot['production_lifts'] or 0) > 0:
-                # For produced records, use actual production lifts for planning
-                planned_pieces = flt(selected_lot['no_of_cavities'] or 0) * flt(selected_lot['production_lifts'] or 0)
+            # Use target_lifts if available, otherwise fall back to production_lifts or default
+            if target_lifts > 0:
+                # Use target lifts from Work Plan Item Target
+                planned_pieces = no_of_cavities * target_lifts
+            elif production_lifts > 0:
+                # For produced records without target, use actual production lifts
+                planned_pieces = no_of_cavities * production_lifts
             else:
-                # For records without production, we'll need to get target data
-                # For now, use a simplified placeholder
-                planned_pieces = 0  # Will be updated once we have target data
+                # For records without target or production, assume minimum planned quantity
+                # This could be improved by looking at historical data or default planning rules
+                default_planned_lifts = 1  # Minimum assumption
+                planned_pieces = no_of_cavities * default_planned_lifts
             produced_pieces = flt(selected_lot.get('total_pieces_produced', 0))
             
             # Ensure variance calculation is explicit with proper type conversion
@@ -219,6 +225,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'mould_ref': selected_lot['mould_ref'],
                 'lot_no': selected_lot['lot_no'],
                 'production_lifts': selected_lot['production_lifts'],
+                'target_lifts': flt(selected_lot.get('target_lifts', 0)),
                 'no_of_cavities': flt(selected_lot['no_of_cavities'] or 0),
                 'source_type': selected_lot['source_type'],
                 'docstatus': selected_lot['docstatus'],
