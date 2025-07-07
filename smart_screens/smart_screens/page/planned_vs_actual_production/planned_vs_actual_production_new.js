@@ -104,8 +104,8 @@ function loadData() {
 }
 
 function updateSummaryCards(summary) {
-    document.getElementById('total-planned-records').textContent = summary.total_planned_records || 0;
-    document.getElementById('total-produced-records').textContent = summary.total_produced_records || 0;
+    document.getElementById('total-planned-records').textContent = summary.total_planned_pieces || 0;
+    document.getElementById('total-produced-records').textContent = summary.total_pieces_produced || 0;
     document.getElementById('total-production-lifts').textContent = summary.total_production_lifts || 0;
     document.getElementById('production-efficiency').textContent = (summary.production_efficiency_percentage || 0) + '%';
 }

@@ -67,6 +67,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             wpi.mould as mould_ref,
             wpi.lot_number as lot_no,
             0 as production_lifts,
+            0 as target_lifts,
             ms.noof_cavities as no_of_cavities,
             'Work Planning' as source_type,
             wp.docstatus,
@@ -93,6 +94,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             awpi.mould as mould_ref,
             awpi.lot_number as lot_no,
             0 as production_lifts,
+            0 as target_lifts,
             ms.noof_cavities as no_of_cavities,
             'Add On Work Planning' as source_type,
             awp.docstatus,
@@ -184,7 +186,19 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         
         if selected_lot:
             # Calculate planned and produced pieces for variance
-            planned_pieces = flt(selected_lot['no_of_cavities'] or 0) * flt(selected_lot['production_lifts'] or 0) if flt(selected_lot['production_lifts'] or 0) > 0 else 0
+            # If this is a Work Planning record with no production, we need to find the target quantity from a different source
+            # For now, use a placeholder approach that sets planned_pieces = produced_pieces for records with production
+            # and planned_pieces = 0 for records without production (this will be updated later with actual target data)
+            
+            # For produced records, set planned = produced (assumes planned matches actual when produced)
+            # For non-produced records, use a simplified approach for now
+            if selected_lot['has_production'] and flt(selected_lot['production_lifts'] or 0) > 0:
+                # For produced records, use actual production lifts for planning
+                planned_pieces = flt(selected_lot['no_of_cavities'] or 0) * flt(selected_lot['production_lifts'] or 0)
+            else:
+                # For records without production, we'll need to get target data
+                # For now, use a simplified placeholder
+                planned_pieces = 0  # Will be updated once we have target data
             produced_pieces = flt(selected_lot.get('total_pieces_produced', 0))
             
             # Ensure variance calculation is explicit with proper type conversion
