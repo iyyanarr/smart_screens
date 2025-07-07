@@ -305,6 +305,7 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
         total_not_produced_records = total_planned_records - total_produced_records
         total_production_lifts = sum(row['production_lifts'] for row in data)
         total_pieces_produced = sum(row['total_pieces_produced'] for row in data)
+        total_planned_pieces = sum(row['planned_pieces'] for row in data)
         total_unique_items = len(set(row['item_code'] for row in data))
         total_unique_moulds = len(set(row['mould_ref'] for row in data))
         
@@ -319,6 +320,7 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             'total_not_produced_records': total_not_produced_records,
             'total_production_lifts': total_production_lifts,
             'total_pieces_produced': total_pieces_produced,
+            'total_planned_pieces': total_planned_pieces,
             'total_unique_items': total_unique_items,
             'total_unique_moulds': total_unique_moulds,
             'production_efficiency_percentage': production_efficiency_percentage
@@ -332,6 +334,8 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             'total_not_produced_records': 0,
             'total_production_lifts': 0,
             'total_pieces_produced': 0,
+            'total_planned_pieces': 0,
+            'total_planned_pieces': 0,
             'total_unique_items': 0,
             'total_unique_moulds': 0,
             'production_efficiency_percentage': 0,
