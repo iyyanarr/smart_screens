@@ -118,6 +118,28 @@ function updateSummaryCards(summary) {
     } else {
         efficiencyElement.className = 'text-danger';
     }
+    
+    // Add new summary cards for data quality
+    const totalRecords = (summary.job_card_relationships || 0) + (summary.fallback_relationships || 0);
+    const qualityPercentage = totalRecords > 0 ? 
+        ((summary.job_card_relationships || 0) / totalRecords * 100).toFixed(1) : 0;
+    
+    $('#summary-cards').append(`
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Data Quality</h5>
+                    <h3 class="text-info">${qualityPercentage}%</h3>
+                    <p class="card-text">
+                        <small class="text-muted">
+                            ${summary.job_card_relationships || 0} with Job Cards<br>
+                            ${summary.fallback_relationships || 0} fallback matches
+                        </small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    `);
 }
 
 function updateTable(data) {
@@ -149,10 +171,15 @@ function updateTable(data) {
             statusClass = 'status-under';
         }
         
+        // Add visual indicator for matching method
+        const matchingMethodIcon = row.matching_method === 'job_card_relationship' 
+            ? '<i class="fa fa-link text-success" title="Exact Job Card Match"></i>' 
+            : '<i class="fa fa-exclamation-triangle text-warning" title="Date+Item Fallback Match"></i>';
+        
         tr.innerHTML = `
-            <td>${row.production_date_formatted}</td>
+            <td>${row.production_date_formatted} ${matchingMethodIcon}</td>
             <td><strong>${row.item_code}</strong></td>
-            <td><span class="badge badge-info">${row.lot_number || 'No Lot'}</span></td>
+            <td><span class="badge badge-info">${row.lot_number_display || 'No Lot'}</span></td>
             <td><span class="badge badge-secondary">${row.shift_type}</span></td>
             <td><small class="text-muted">${row.planning_sources_text || 'No Planning'}</small></td>
             <td class="text-right">${formatNumber(row.planned_qty_pieces)}</td>
@@ -390,6 +417,12 @@ function initializeTooltips() {
         console.warn('Bootstrap tooltip not available, using basic title tooltips');
     }
 }
+
+// Update tooltip system with data quality explanations
+const columnTooltips = {
+    'production_date': 'Production date with data quality indicator: ✓ = Exact Job Card match, ⚠ = Date+Item fallback match',
+    'data_quality': 'Shows percentage of records with exact Job Card relationships vs fallback matching. Higher percentage indicates better data integrity.'
+};
 
 function loadShiftOptions() {
     const fromDate = document.getElementById('from_date').value;

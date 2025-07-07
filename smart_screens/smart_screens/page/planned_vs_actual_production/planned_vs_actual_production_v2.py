@@ -32,30 +32,18 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
     if not to_date:
         to_date = frappe.utils.today()
 
-    # Get today's date for docstatus filtering
-    today_date = frappe.utils.today()
-    
     # Build filter conditions
     item_condition = ""
     item_condition_actual = ""
-    lot_condition_planned = ""
     lot_condition_actual = ""
     shift_condition = ""
     shift_condition_addon = ""
-    
-    # Docstatus conditions - for past dates, only submitted (docstatus=1)
-    # For future dates, both draft and submitted (docstatus IN (0,1))
-    past_docstatus_condition = "AND wp.docstatus = 1"
-    future_docstatus_condition = "AND wp.docstatus IN (0, 1)"
-    past_docstatus_condition_addon = "AND awp.docstatus = 1"
-    future_docstatus_condition_addon = "AND awp.docstatus IN (0, 1)"
     
     if item_filter:
         item_condition = f"AND wpi.item LIKE '%{item_filter}%'"
         item_condition_actual = f"AND mpe.item_to_produce LIKE '%{item_filter}%'"
     
     if lot_filter:
-        lot_condition_planned = f"AND wpi.lot_number LIKE '%{lot_filter}%'"
         lot_condition_actual = f"AND (mpe.scan_lot_number LIKE '%{lot_filter}%' OR mpe.batch_no LIKE '%{lot_filter}%')"
     
     if shift_filter:
@@ -84,16 +72,12 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
         LEFT JOIN `tabShift Type` st ON wp.shift_type = st.name
         LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item AND TIME(st.total_time) = wpit.shift_type
-        WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
-        AND (
-            (wp.date < '{today_date}' {past_docstatus_condition}) OR
-            (wp.date >= '{today_date}' {future_docstatus_condition})
-        )
+        WHERE wp.docstatus IN (0, 1) 
+        AND wp.date BETWEEN '{from_date}' AND '{to_date}'
         AND wpi.lot_number IS NOT NULL
         AND wpi.job_card IS NOT NULL
         AND wpi.job_card != ''
         {item_condition}
-        {lot_condition_planned}
         {shift_condition}
         
         UNION ALL
@@ -118,16 +102,12 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
         LEFT JOIN `tabShift Type` st2 ON awp.shift_type = st2.name
         LEFT JOIN `tabWork Plan Item Target` wpit ON awpi.item = wpit.item AND TIME(st2.total_time) = wpit.shift_type
-        WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
-        AND (
-            (awp.date < '{today_date}' {past_docstatus_condition_addon}) OR
-            (awp.date >= '{today_date}' {future_docstatus_condition_addon})
-        )
+        WHERE awp.docstatus IN (0, 1) 
+        AND awp.date BETWEEN '{from_date}' AND '{to_date}'
         AND awpi.lot_number IS NOT NULL
         AND awpi.job_card IS NOT NULL
         AND awpi.job_card != ''
         {item_condition.replace('wpi.item', 'awpi.item')}
-        {lot_condition_planned.replace('wpi.lot_number', 'awpi.lot_number')}
         {shift_condition_addon}
     """
 
@@ -137,7 +117,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
             wpi.item as item_code,
             wp.date as production_date,
             wp.shift_type,
-            wpi.lot_number,
+            NULL as lot_number,
             NULL as job_card,
             ms.noof_cavities,
             wpit.target_qty,
@@ -153,14 +133,10 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
         LEFT JOIN `tabShift Type` st ON wp.shift_type = st.name
         LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item AND TIME(st.total_time) = wpit.shift_type
-        WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
-        AND (
-            (wp.date < '{today_date}' {past_docstatus_condition}) OR
-            (wp.date >= '{today_date}' {future_docstatus_condition})
-        )
+        WHERE wp.docstatus IN (0, 1) 
+        AND wp.date BETWEEN '{from_date}' AND '{to_date}'
         AND (wpi.lot_number IS NULL OR wpi.job_card IS NULL OR wpi.job_card = '')
         {item_condition}
-        {lot_condition_planned}
         {shift_condition}
         
         UNION ALL
@@ -169,7 +145,7 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
             awpi.item as item_code,
             awp.date as production_date,
             awp.shift_type,
-            awpi.lot_number,
+            NULL as lot_number,
             NULL as job_card,
             ms.noof_cavities,
             wpit.target_qty,
@@ -185,14 +161,10 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
         LEFT JOIN `tabShift Type` st2 ON awp.shift_type = st2.name
         LEFT JOIN `tabWork Plan Item Target` wpit ON awpi.item = wpit.item AND TIME(st2.total_time) = wpit.shift_type
-        WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
-        AND (
-            (awp.date < '{today_date}' {past_docstatus_condition_addon}) OR
-            (awp.date >= '{today_date}' {future_docstatus_condition_addon})
-        )
+        WHERE awp.docstatus IN (0, 1) 
+        AND awp.date BETWEEN '{from_date}' AND '{to_date}'
         AND (awpi.lot_number IS NULL OR awpi.job_card IS NULL OR awpi.job_card = '')
         {item_condition.replace('wpi.item', 'awpi.item')}
-        {lot_condition_planned.replace('wpi.lot_number', 'awpi.lot_number')}
         {shift_condition_addon}
     """
 
@@ -202,10 +174,6 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
     
     # Combine planned data
     all_planned_data = planned_data_with_relationships + planned_data_fallback
-
-    # Apply planning filter to raw planned data if specified
-    if planning_filter == 'planned':
-        all_planned_data = [row for row in all_planned_data if row['planned_qty_pieces'] > 0]
 
     # ALIGNED QUERY 3: Get actual production data with job_card relationships
     actual_query = f"""
@@ -349,23 +317,6 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
         # Format planning sources for display
         data['planning_sources_text'] = ', '.join(data['planning_sources']) if data['planning_sources'] else 'No Planning'
         
-        # Format lot number for display based on date and production status
-        current_date = frappe.utils.getdate(today_date)
-        if data['production_date'] < current_date:
-            # Past shifts
-            if data['actual_qty_pieces'] > 0:
-                # Has production, use actual lot number
-                data['lot_number_display'] = data['lot_number'] or 'No Lot'
-            else:
-                # No production for past shift
-                data['lot_number_display'] = '(Not Produced)'
-        else:
-            # Future shifts - show planned lot number or 'planned'
-            if data['lot_number'] and data['lot_number'] != 'No Lot':
-                data['lot_number_display'] = data['lot_number']
-            else:
-                data['lot_number_display'] = 'planned'
-        
         # Determine status based on efficiency
         if data['efficiency'] == 100:
             data['status'] = 'Target'
@@ -375,6 +326,10 @@ def get_planned_vs_actual_data(from_date=None, to_date=None, item_filter=None, l
             data['status'] = 'Over'
         
         final_data.append(data)
+
+    # Apply planning filter if specified
+    if planning_filter == 'planned':
+        final_data = [row for row in final_data if row['planned_qty_pieces'] > 0]
 
     # Sort by date desc, then by item (dates are now normalized to date objects)
     final_data.sort(key=lambda x: (x['production_date'], x['item_code']), reverse=True)
@@ -479,37 +434,3 @@ def get_shift_options(from_date=None, to_date=None):
             })
     
     return shift_options
-
-@frappe.whitelist()
-def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_filter=None, shift_filter=None, planning_filter=None):
-    """
-    Get summary statistics for the planned vs actual data.
-    This method fetches the data and calculates summary statistics.
-    """
-    try:
-        # Get the planned vs actual data
-        data = get_planned_vs_actual_data(
-            from_date=from_date,
-            to_date=to_date,
-            item_filter=item_filter,
-            lot_filter=lot_filter,
-            shift_filter=shift_filter,
-            planning_filter=planning_filter
-        )
-        
-        # Calculate and return summary statistics
-        return get_summary(data)
-        
-    except Exception as e:
-        frappe.log_error(f"Error getting summary statistics: {str(e)}")
-        return {
-            'total_planned_pieces': 0,
-            'total_produced_pieces': 0,
-            'overall_efficiency': 0,
-            'total_items': 0,
-            'total_dates': 0,
-            'avg_efficiency': 0,
-            'job_card_relationships': 0,
-            'fallback_relationships': 0,
-            'error': str(e)
-        }
