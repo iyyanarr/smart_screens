@@ -70,16 +70,6 @@ function loadData() {
             if (r.message) {
                 currentData = r.message;
                 sortedData = [...currentData]; // Create a copy for sorting
-                
-                // Debug variance data
-                console.log("Received data:", r.message.length, "records");
-                if (r.message.length > 0) {
-                    console.log("First record:", r.message[0]);
-                    console.log("Planned pieces:", r.message[0].planned_pieces);
-                    console.log("Produced pieces:", r.message[0].total_pieces_produced);
-                    console.log("Variance pieces:", r.message[0].variance_pieces);
-                }
-                
                 updateTable(sortedData);
             }
         },
@@ -125,10 +115,15 @@ function updateTable(data) {
     tableBody.innerHTML = '';
 
     if (!data || data.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="11" class="text-center">No data found for the selected criteria</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="14" class="text-center">No data found for the selected criteria</td></tr>';
         return;
     }
 
+    // Debug first few rows of data
+    if (data.length > 0) {
+        console.log('First record data:', data[0]);
+    }
+    
     data.forEach(row => {
         const tr = document.createElement('tr');
         
@@ -148,18 +143,15 @@ function updateTable(data) {
             sourceBadge = '<span class="badge badge-info">AWP</span>';
         }
         
-        // Calculate variance (Produced - Planned)
+        // Calculate variance (from backend or recalculate if not present)
         const plannedPieces = row.planned_pieces || 0;
         const producedPieces = row.total_pieces_produced || 0;
         
-        // Try to use backend variance first, if not available calculate it
-        let variance = 0;
-        if (row.variance_pieces !== undefined) {
-            variance = row.variance_pieces;
-            console.log("Using backend variance:", variance);
-        } else {
+        // Use backend variance if available, otherwise calculate it here
+        let variance = row.variance_pieces;
+        if (variance === undefined || variance === null) {
             variance = producedPieces - plannedPieces;
-            console.log("Calculated frontend variance:", variance);
+            console.log(`Recalculated variance for ${row.work_plan_no}: ${producedPieces} - ${plannedPieces} = ${variance}`);
         }
         
         // Format variance with color coding
@@ -185,6 +177,8 @@ function updateTable(data) {
             <td class="text-right"><strong>${plannedPieces}</strong></td>
             <td class="text-right"><strong>${producedPieces}</strong></td>
             <td class="text-right">${varianceDisplay}</td>
+            <!-- For debugging - this will show the raw variance value -->
+            <td style="display:none;">${producedPieces - plannedPieces}</td>
             <td class="text-center">${sourceBadge}</td>
             <td class="text-center">${productionBadge}</td>
         `;

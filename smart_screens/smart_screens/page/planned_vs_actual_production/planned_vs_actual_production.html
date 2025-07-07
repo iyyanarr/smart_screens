@@ -3,8 +3,8 @@
     <div class="page-header">
         <div class="row">
             <div class="col-8">
-                <h3>📊 Planned vs Actual Production Report</h3>
-                <p class="text-muted">Compare planned quantities with actual production and stock outputs</p>
+                <h3>📊 Production vs Plan Report</h3>
+                <p class="text-muted">Comprehensive production planning vs actual production analysis</p>
             </div>
             <div class="col-4 text-right">
                 <button class="btn btn-primary btn-refresh" onclick="refreshData()">
@@ -44,11 +44,11 @@
                     </select>
                 </div>
                 <div class="col-md-2 col-sm-6 mb-3">
-                    <label class="form-label">Planning Filter</label>
-                    <select id="planning_filter" class="form-control">
+                    <label class="form-label">Production Filter</label>
+                    <select id="production_filter" class="form-control">
                         <option value="all">All Records</option>
-                        <option value="planned">Planned Only</option>
-                        <option value="unplanned">Unplanned Only</option>
+                        <option value="produced">Produced Only</option>
+                        <option value="not_produced">Planned but not Produced</option>
                     </select>
                 </div>
             </div>
@@ -67,92 +67,101 @@
         <div class="row">
             <div class="col-md-3 col-sm-6">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Sum of all planned quantities from Work Planning and Add On Work Planning. Formula: SUM(Number of Cavities * Target Quantity)">
+                     title="Total number of planned production records in the selected date range">
                     <div class="card-body text-center">
-                        <h4 id="total-planned" class="text-primary">0</h4>
-                        <small>Total Planned (Pieces) <i class="fa fa-info-circle"></i></small>
+                        <h4 id="total-planned-records" class="text-primary">0</h4>
+                        <small>Total Planned Records <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Sum of all produced quantities from Moulding Production Entry. Formula: SUM(Number of Lifts x Running Cavities)">
+                     title="Total number of records with actual production lifts">
                     <div class="card-body text-center">
-                        <h4 id="total-actual" class="text-success">0</h4>
-                        <small>Total Produced (Pieces) <i class="fa fa-info-circle"></i></small>
+                        <h4 id="total-produced-records" class="text-success">0</h4>
+                        <small>Produced Records <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Total number of unique items that have planned or actual production data in the selected date range">
+                     title="Total production lifts executed across all records">
                     <div class="card-body text-center">
-                        <h4 id="total-items" class="text-dark">0</h4>
-                        <small>Total Items <i class="fa fa-info-circle"></i></small>
+                        <h4 id="total-production-lifts" class="text-info">0</h4>
+                        <small>Total Production Lifts <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
                 <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Overall production efficiency calculated as (Total Produced / Total Planned) * 100. Shows how well actual production meets planned targets">
+                     title="Production efficiency calculated as (Produced Records / Total Planned Records) * 100">
                     <div class="card-body text-center">
-                        <h4 id="overall-efficiency" class="text-warning">0%</h4>
-                        <small>Overall Efficiency <i class="fa fa-info-circle"></i></small>
+                        <h4 id="production-efficiency" class="text-warning">0%</h4>
+                        <small>Production Efficiency <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Data Table -->
-    <div class="data-section card">
+    <!-- Data Table Section -->
+    <div class="table-section card">
         <div class="card-header">
-            <div class="row">
-                <div class="col-8">
-                    <h5>📋 Production Comparison Details</h5>
-                </div>
-                <div class="col-4 text-right">
-                    <small class="text-muted">
-                        <span id="table-info">Total records: 0</span>
-                        <span id="sort-info" style="display: none;"> | Sorted by: <span id="sort-column"></span> <span id="sort-direction"></span></span>
-                    </small>
-                </div>
-            </div>
+            <h5 class="mb-0">Production vs Plan Data</h5>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped table-hover" id="production-table">
                     <thead class="thead-dark">
                         <tr>
+                            <th class="sortable" data-column="work_plan_no" data-type="text">
+                                Work Plan No. <i class="fa fa-sort sort-icon"></i>
+                            </th>
+                            <th class="sortable" data-column="work_plan_submission_datetime" data-type="text">
+                                Work Plan Submission Date/Time <i class="fa fa-sort sort-icon"></i>
+                            </th>
                             <th class="sortable" data-column="production_date_formatted" data-type="date">
-                                Date <i class="fa fa-sort sort-icon"></i>
+                                Production Date <i class="fa fa-sort sort-icon"></i>
+                            </th>
+                            <th class="sortable" data-column="shift_type" data-type="text">
+                                Shift Type <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="sortable" data-column="item_code" data-type="text">
                                 Item Code <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="sortable" data-column="lot_number" data-type="text"
+                            <th class="sortable" data-column="mould_ref" data-type="text">
+                                Mould Ref <i class="fa fa-sort sort-icon"></i>
+                            </th>
+                            <th class="sortable" data-column="lot_no" data-type="text">
+                                Lot No. <i class="fa fa-sort sort-icon"></i>
+                            </th>
+                            <th class="text-right sortable" data-column="production_lifts" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
-                                title="SPP Batch Number from production entries. Shows Planned for planned-only records or No Lot when batch number is not specified.">
-                                Lot Number <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                title="Number of production lifts entered against the lot (submitted values only)">
+                                Production Lifts <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
-                            <th class="sortable" data-column="shift_type" data-type="text">
-                                Shift <i class="fa fa-sort sort-icon"></i>
-                            </th>
-                            <th class="sortable" data-column="planning_sources_text" data-type="text">
-                                Planning Source <i class="fa fa-sort sort-icon"></i>
-                            </th>
-                            <th class="text-right sortable" data-column="planned_qty_pieces" data-type="number" 
+                            <th class="text-right sortable" data-column="no_of_cavities" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
-                                title="Planned quantities from Work Planning and Add On Work Planning. Formula: Number of Cavities * Target Quantity">
-                                Planned (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                title="Number of cavities from mould specification list">
+                                No. of Cavities <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
-                            <th class="text-right sortable" data-column="actual_qty_pieces" data-type="number"
+                            <th class="text-right sortable" data-column="planned_pieces" data-type="number"
                                 data-toggle="tooltip" data-placement="top" 
-                                title="Produced pieces from Moulding Production Entry. Formula: Number of Lifts * Number of Running Cavities. Shows total pieces produced on shop floor.">
-                                Produced (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                title="Planned pieces calculated as Production Lifts × No. of Cavities">
+                                Planned Pieces <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
                             </th>
-                            <th class="text-right sortable" data-column="variance_pieces" data-type="number">
-                                Variance (Pieces) <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="total_pieces_produced" data-type="number"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Total pieces produced calculated as Production Lifts × Running Cavities">
+                                Produced Pieces <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                            </th>
+                            <th class="text-right sortable" data-column="variance_pieces" data-type="number"
+                                data-toggle="tooltip" data-placement="top" 
+                                title="Variance calculated as Produced Pieces - Planned Pieces">
+                                Variance (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                            </th>
+                            <th class="text-center sortable" data-column="source_type" data-type="text">
+                                Source <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="text-center sortable" data-column="status" data-type="text">
                                 Status <i class="fa fa-sort sort-icon"></i>
@@ -166,6 +175,177 @@
             </div>
         </div>
     </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p class="mt-2">Loading production data...</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.planned-vs-actual-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.filter-section {
+    margin-bottom: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+.summary-section {
+    margin-bottom: 30px;
+}
+
+.summary-card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+    margin-bottom: 20px;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.table-section {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+.table th {
+    background-color: #343a40;
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 15px 8px;
+}
+
+.table td {
+    padding: 12px 8px;
+    vertical-align: middle;
+}
+
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable:hover {
+    background-color: #495057 !important;
+}
+
+.sort-icon {
+    margin-left: 5px;
+    opacity: 0.6;
+}
+
+.sortable.sorted .sort-icon {
+    opacity: 1;
+}
+
+.badge {
+    font-size: 0.8em;
+    padding: 0.4em 0.6em;
+}
+
+.status-target {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-over {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.status-under {
+    background-color: #dc3545;
+    color: white;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.loading-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.btn-refresh, .btn-secondary {
+    margin-left: 10px;
+}
+
+.form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ea888 100%);
+}
+
+@media (max-width: 768px) {
+    .planned-vs-actual-container {
+        padding: 10px;
+    }
+    
+    .page-header {
+        padding: 15px;
+    }
+    
+    .table-responsive {
+        font-size: 0.9em;
+    }
+    
+    .summary-card h4 {
+        font-size: 1.5rem;
+    }
+}
+</style>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
 
     <!-- Loading Indicator -->
     <div class="loading-indicator" id="loading" style="display: none;">
