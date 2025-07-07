@@ -176,10 +176,22 @@ function updateTable(data) {
             ? '<i class="fa fa-link text-success" title="Exact Job Card Match"></i>' 
             : '<i class="fa fa-exclamation-triangle text-warning" title="Date+Item Fallback Match"></i>';
         
+        // Determine lot number badge color based on content
+        let lotBadgeClass = 'badge-info'; // default blue
+        const lotDisplay = row.lot_number_display || 'No Lot';
+        
+        if (lotDisplay === '(Not Produced)') {
+            lotBadgeClass = 'badge-danger'; // red for not produced
+        } else if (lotDisplay === 'planned') {
+            lotBadgeClass = 'badge-warning'; // yellow/orange for planned
+        } else if (lotDisplay === 'No Lot') {
+            lotBadgeClass = 'badge-secondary'; // gray for no lot
+        }
+        
         tr.innerHTML = `
             <td>${row.production_date_formatted} ${matchingMethodIcon}</td>
             <td><strong>${row.item_code}</strong></td>
-            <td><span class="badge badge-info">${row.lot_number_display || 'No Lot'}</span></td>
+            <td><span class="badge ${lotBadgeClass}">${lotDisplay}</span></td>
             <td><span class="badge badge-secondary">${row.shift_type}</span></td>
             <td><small class="text-muted">${row.planning_sources_text || 'No Planning'}</small></td>
             <td class="text-right">${formatNumber(row.planned_qty_pieces)}</td>
