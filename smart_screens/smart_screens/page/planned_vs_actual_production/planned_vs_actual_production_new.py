@@ -57,78 +57,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         shift_condition = f"AND wp.shift_type = '{shift_filter}'"
 
     # STEP 1: Get Table A - All work planning data with required columns
-    # Expand date range to include work plans up to 90 days before the from_date
-    # This allows for flexible matching where production happens after work planning
-    from datetime import datetime, timedelta
-    expanded_from_date = (datetime.strptime(from_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
-    
-    table_a_query = f"""
-        SELECT 
-            wp.name as work_plan_no,
-            wp.creation as work_plan_submission_datetime,
-            wp.date as production_date,
-            wp.shift_type,
-            wpi.item as item_code,
-            wpi.mould as mould_ref,
-            wpi.lot_number as lot_no,
-            0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
-            COALESCE(wpit.target_qty, 0) as target_lifts,
-            'Work Planning' as source_type,
-            wp.docstatus,
-            wpi.creation as lot_creation_time
-        FROM `tabWork Planning` wp
-        INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
-        LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
-        LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item
-        WHERE wp.date BETWEEN '{expanded_from_date}' AND '{to_date}'
-        AND wpi.mould IS NOT NULL
-        AND wpi.lot_number IS NOT NULL
-        AND wpi.lot_number != ''
-        {item_condition}
-        {lot_condition}
-        {shift_condition}
-        
-        UNION ALL
-        
-        SELECT 
-            awp.name as work_plan_no,
-            awp.creation as work_plan_submission_datetime,
-            awp.date as production_date,
-            awp.shift_type,
-            awpi.item as item_code,
-            awpi.mould as mould_ref,
-            awpi.lot_number as lot_no,
-            0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
-            0 as target_lifts,
-            'Add On Work Planning' as source_type,
-            awp.docstatus,
-            awpi.creation as lot_creation_time
-        FROM `tabAdd On Work Planning` awp
-        INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
-        LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
-        WHERE awp.date BETWEEN '{expanded_from_date}' AND '{to_date}'
-        AND awpi.mould IS NOT NULL
-        AND awpi.lot_number IS NOT NULL
-        AND awpi.lot_number != ''
-        {item_condition.replace('wpi.item', 'awpi.item')}
-        {lot_condition.replace('wpi.lot_number', 'awpi.lot_number')}
-        {shift_condition.replace('wp.shift_type', 'awp.shift_type')}
-        
-        ORDER BY production_date, shift_type, mould_ref, lot_creation_time DESC
-    """
-
-    table_a_data = frappe.db.sql(table_a_query, as_dict=True)
-
-    # Debug logging
-    frappe.logger().info(f"DEBUG: Loaded {len(table_a_data)} work plan records")
-    mld_5001_records = [row for row in table_a_data if row.get('mould_ref') == 'MLD-5001-C' and row.get('lot_no') == '25E31V01']
-    frappe.logger().info(f"DEBUG: Found {len(mld_5001_records)} MLD-5001-C/25E31V01 work plan records")
-    for record in mld_5001_records[:3]:
-        frappe.logger().info(f"DEBUG: Work plan record: {record.get('work_plan_no')} on {record.get('production_date')} with shift {record.get('shift_type')}")
-
-    # STEP 2: Get production lifts data (submitted values only)
+    # STEP 1: First, get all production data for the given date range
     production_lifts_query = f"""
         SELECT 
             mpe.moulding_date as production_date,
@@ -145,102 +74,160 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
         GROUP BY mpe.moulding_date, COALESCE(jc.shift_type, 'Unknown'), mpe.mould_reference, COALESCE(mpe.scan_lot_number, mpe.batch_no)
     """
-
+    
     production_data = frappe.db.sql(production_lifts_query, as_dict=True)
-
-    # Debug logging for production data
-    frappe.logger().info(f"DEBUG: Loaded {len(production_data)} production records")
+    print(f"DEBUG: Loaded {len(production_data)} production records")
+    
+    # Get unique lot numbers from production
+    production_lot_numbers = list(set([prod['lot_no'] for prod in production_data]))
+    print(f"DEBUG: Found {len(production_lot_numbers)} unique production lot numbers")
+    if production_lot_numbers:
+        print(f"DEBUG: First 10 production lots: {production_lot_numbers[:10]}")
+    
+    # STEP 2: Now get work plans that match these specific lot numbers (regardless of date)
+    table_a_data = []
+    if production_lot_numbers:
+        lot_numbers_condition = "'" + "','".join(production_lot_numbers) + "'"
+        
+        work_plan_query = f"""
+            SELECT 
+                wp.name as work_plan_no,
+                wp.creation as work_plan_submission_datetime,
+                wp.date as production_date,
+                wp.shift_type,
+                wpi.item as item_code,
+                wpi.mould as mould_ref,
+                wpi.lot_number as lot_no,
+                ms.noof_cavities as no_of_cavities,
+                COALESCE(wpit.target_qty, 0) as target_lifts,
+                'Work Planning' as source_type,
+                wp.docstatus
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
+            LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item
+            WHERE wpi.lot_number IN ({lot_numbers_condition})
+            AND wpi.mould IS NOT NULL
+            AND wpi.lot_number IS NOT NULL
+            AND wpi.lot_number != ''
+            {item_condition}
+            {lot_condition}
+            {shift_condition}
+        """
+        
+        work_plan_data = frappe.db.sql(work_plan_query, as_dict=True)
+        print(f"DEBUG: Found {len(work_plan_data)} work plans for production lot numbers")
+        
+        # Also check Add On Work Planning
+        addon_work_plan_query = f"""
+            SELECT 
+                awp.name as work_plan_no,
+                awp.creation as work_plan_submission_datetime,
+                awp.date as production_date,
+                awp.shift_type,
+                awpi.item as item_code,
+                awpi.mould as mould_ref,
+                awpi.lot_number as lot_no,
+                ms.noof_cavities as no_of_cavities,
+                0 as target_lifts,
+                'Add On Work Planning' as source_type,
+                awp.docstatus
+            FROM `tabAdd On Work Planning` awp
+            INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
+            LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
+            WHERE awpi.lot_number IN ({lot_numbers_condition})
+            AND awpi.mould IS NOT NULL
+            AND awpi.lot_number IS NOT NULL
+            AND awpi.lot_number != ''
+            {item_condition.replace('wpi.item', 'awpi.item')}
+            {lot_condition.replace('wpi.lot_number', 'awpi.lot_number')}
+            {shift_condition.replace('wp.shift_type', 'awp.shift_type')}
+        """
+        
+        addon_work_plan_data = frappe.db.sql(addon_work_plan_query, as_dict=True)
+        print(f"DEBUG: Found {len(addon_work_plan_data)} add-on work plans for production lot numbers")
+        
+        # Combine both work plan sources
+        table_a_data = work_plan_data + addon_work_plan_data
+        print(f"DEBUG: Total work plans found: {len(table_a_data)}")
+    else:
+        print("DEBUG: No production data found, skipping work plan query")
+    if len(production_data) == 0:
+        # Test a simpler query to see if data exists
+        test_query = f"SELECT COUNT(*) as count FROM `tabMoulding Production Entry` WHERE moulding_date BETWEEN '{from_date}' AND '{to_date}' AND docstatus = 1"
+        test_result = frappe.db.sql(test_query, as_dict=True)
+        frappe.logger().info(f"DEBUG: Total production entries in date range: {test_result[0]['count'] if test_result else 0}")
+        
+        # Check if lot numbers exist
+        lot_query = f"SELECT COUNT(*) as count FROM `tabMoulding Production Entry` WHERE moulding_date BETWEEN '{from_date}' AND '{to_date}' AND docstatus = 1 AND (scan_lot_number IS NOT NULL OR batch_no IS NOT NULL)"
+        lot_result = frappe.db.sql(lot_query, as_dict=True)
+        frappe.logger().info(f"DEBUG: Production entries with lot numbers: {lot_result[0]['count'] if lot_result else 0}")
+    
     mld_5001_prod = [row for row in production_data if row.get('mould_ref') == 'MLD-5001-C' and row.get('lot_no') == '25E31V01']
     frappe.logger().info(f"DEBUG: Found {len(mld_5001_prod)} MLD-5001-C/25E31V01 production records")
     for record in mld_5001_prod[:3]:
         frappe.logger().info(f"DEBUG: Production record: Date: {record.get('production_date')}, Shift: {record.get('shift_type')}, Lifts: {record.get('total_production_lifts')}")
 
-    # Create a simple lookup dictionary for production data
-    production_lookup = {}
+    # Create a simple lookup dictionary for production data by lot number
+    production_by_lot = {}
     for prod in production_data:
-        key = f"{prod.production_date}|{prod.shift_type}|{prod.mould_ref}|{prod.lot_no}"
-        production_lookup[key] = prod
+        lot_no = prod['lot_no']
+        if lot_no not in production_by_lot:
+            production_by_lot[lot_no] = []
+        production_by_lot[lot_no].append(prod)
 
-    # STEP 3: Create a comprehensive dataset with flexible date matching
-    # First, create a flexible lookup for work plans (without date constraint)
-    work_plan_flexible_lookup = {}
-    all_work_plans = {}  # Store all work plans by flexible key for debugging
+    # STEP 3: Create simple lot-based matching (ignoring date/shift/mould)
+    # Create a lookup for work plans by lot number only
+    work_plan_by_lot = {}
     
     for row in table_a_data:
-        # Create flexible key without date: shift|mould|lot
-        flexible_key = f"{row.shift_type}|{row.mould_ref}|{row.lot_no}"
-        if flexible_key not in work_plan_flexible_lookup:
-            work_plan_flexible_lookup[flexible_key] = []
-        work_plan_flexible_lookup[flexible_key].append(row)
-        
-        # Store all work plans for debugging
-        if flexible_key not in all_work_plans:
-            all_work_plans[flexible_key] = []
-        all_work_plans[flexible_key].append({
-            'work_plan_no': row['work_plan_no'],
-            'date': row['production_date'],
-            'shift': row['shift_type'],
-            'mould': row['mould_ref'],
-            'lot': row['lot_no']
-        })
+        lot_no = row['lot_no']
+        if lot_no not in work_plan_by_lot:
+            work_plan_by_lot[lot_no] = []
+        work_plan_by_lot[lot_no].append(row)
+    
+    # SIMPLE DEBUG - show what lot numbers we have
+    frappe.logger().info(f"DEBUG: Production lot numbers: {list(production_by_lot.keys())[:10]}")
+    frappe.logger().info(f"DEBUG: Work plan lot numbers: {list(work_plan_by_lot.keys())[:10]}")
+    
+    # Find common lot numbers
+    common_lots = set(production_by_lot.keys()) & set(work_plan_by_lot.keys())
+    frappe.logger().info(f"DEBUG: Common lot numbers: {list(common_lots)[:10]}")
+    
+    # Debug logging
+    frappe.logger().info(f"DEBUG: Created work plan lookup for {len(work_plan_by_lot)} unique lot numbers")
+    frappe.logger().info(f"DEBUG: Created production lookup for {len(production_by_lot)} unique lot numbers")
+    if '25E31V01' in work_plan_by_lot:
+        frappe.logger().info(f"DEBUG: Found {len(work_plan_by_lot['25E31V01'])} work plans for lot 25E31V01")
+    if '25E31V01' in production_by_lot:
+        frappe.logger().info(f"DEBUG: Found {len(production_by_lot['25E31V01'])} production records for lot 25E31V01")
     
     # Create production-driven results (start with production data, then find matching work plans)
     final_results = []
-    matched_production_keys = set()
+    matched_lots = set()
     
-    # Process each production entry and try to find matching work plans
-    for prod_key, prod_data in production_lookup.items():
-        # Create flexible key for this production
-        flexible_key = f"{prod_data['shift_type']}|{prod_data['mould_ref']}|{prod_data['lot_no']}"
+    # Process each production entry and try to find matching work plans by lot number only
+    for prod_data in production_data:
+        lot_no = prod_data['lot_no']
         
-        # Debug logging for specific case
-        if prod_data['mould_ref'] == 'MLD-5001-C' and prod_data['lot_no'] == '25E31V01':
-            frappe.logger().info(f"DEBUG: Processing production - Date: {prod_data['production_date']}, Key: {flexible_key}")
-            frappe.logger().info(f"DEBUG: Available work plan keys: {list(work_plan_flexible_lookup.keys())[:10]}")
-            frappe.logger().info(f"DEBUG: Key exists: {flexible_key in work_plan_flexible_lookup}")
+        # Debug logging for all production records (not just specific ones)
+        frappe.logger().info(f"DEBUG: Processing production - Lot: {lot_no}, Mould: {prod_data['mould_ref']}, Lifts: {prod_data['total_production_lifts']}, Pieces: {prod_data['total_pieces_produced']}")
+        frappe.logger().info(f"DEBUG: Lot exists in work plans: {lot_no in work_plan_by_lot}")
         
         matched_work_plan = None
-        if flexible_key in work_plan_flexible_lookup:
-            # Find the best matching work plan (prefer recent plans before production date)
-            candidates = work_plan_flexible_lookup[flexible_key]
+        if lot_no in work_plan_by_lot:
+            # Pick the first work plan for this lot (lot-only matching)
+            candidates = work_plan_by_lot[lot_no]
+            matched_work_plan = candidates[0]  # Simple match - just take first one
             
             # Debug logging
-            if prod_data['mould_ref'] == 'MLD-5001-C' and prod_data['lot_no'] == '25E31V01':
-                frappe.logger().info(f"DEBUG: Found {len(candidates)} candidates")
-                for i, candidate in enumerate(candidates):
-                    frappe.logger().info(f"DEBUG: Candidate {i}: {candidate.get('work_plan_no', 'unknown')} on {candidate.get('production_date', 'unknown')}")
-            
-            from datetime import datetime
-            prod_date = getdate(prod_data['production_date'])
-            
-            valid_plans = []
-            for candidate in candidates:
-                plan_date = getdate(candidate['production_date'])  # This is actually the work plan date
-                # Accept plans up to 90 days before production
-                date_diff = (prod_date - plan_date).days
-                
-                # Debug logging
-                if prod_data['mould_ref'] == 'MLD-5001-C' and prod_data['lot_no'] == '25E31V01':
-                    frappe.logger().info(f"DEBUG: Plan date: {plan_date}, Prod date: {prod_date}, Diff: {date_diff}")
-                
-                if 0 <= date_diff <= 90:  # Plan date should be before or same as production, within 90 days
-                    candidate['date_diff'] = date_diff
-                    valid_plans.append(candidate)
-            
-            if valid_plans:
-                # Pick the plan closest to production date
-                matched_work_plan = min(valid_plans, key=lambda x: x['date_diff'])
-                
-                # Debug logging
-                if prod_data['mould_ref'] == 'MLD-5001-C' and prod_data['lot_no'] == '25E31V01':
-                    frappe.logger().info(f"DEBUG: Matched work plan: {matched_work_plan.get('work_plan_no', 'unknown')} with diff {matched_work_plan['date_diff']}")
-            else:
-                # Debug logging
-                if prod_data['mould_ref'] == 'MLD-5001-C' and prod_data['lot_no'] == '25E31V01':
-                    frappe.logger().info(f"DEBUG: No valid plans found")
+            frappe.logger().info(f"DEBUG: MATCHED! Lot {lot_no} with work plan: {matched_work_plan.get('work_plan_no', 'unknown')}")
+            frappe.logger().info(f"DEBUG: Production lifts: {prod_data['total_production_lifts']}, pieces: {prod_data['total_pieces_produced']}")
         
         if matched_work_plan:
             # Create a matched entry using work plan info but production date
+            planned_pieces = flt(matched_work_plan.get('no_of_cavities', 0)) * flt(matched_work_plan.get('target_lifts', 0)) if matched_work_plan.get('target_lifts', 0) > 0 else flt(matched_work_plan.get('no_of_cavities', 0)) * flt(prod_data['total_production_lifts'])
+            
             result = {
                 'work_plan_no': matched_work_plan['work_plan_no'],
                 'work_plan_submission_datetime': str(matched_work_plan['work_plan_submission_datetime']) if matched_work_plan.get('work_plan_submission_datetime') else "",
@@ -258,15 +245,24 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'total_pieces_produced': flt(prod_data['total_pieces_produced']),
                 'has_production': True,
                 # Calculate planned pieces
-                'planned_pieces': flt(matched_work_plan.get('no_of_cavities', 0)) * flt(matched_work_plan.get('target_lifts', 0)) if matched_work_plan.get('target_lifts', 0) > 0 else flt(matched_work_plan.get('no_of_cavities', 0)) * flt(prod_data['total_production_lifts']),
+                'planned_pieces': planned_pieces,
                 'produced_pieces': flt(prod_data['total_pieces_produced']),
-                'variance_pieces': flt(prod_data['total_pieces_produced']) - (flt(matched_work_plan.get('no_of_cavities', 0)) * flt(matched_work_plan.get('target_lifts', 0)) if matched_work_plan.get('target_lifts', 0) > 0 else flt(matched_work_plan.get('no_of_cavities', 0)) * flt(prod_data['total_production_lifts'])),
+                'variance_pieces': flt(prod_data['total_pieces_produced']) - planned_pieces,
                 # Add matching information
-                'match_type': f"flexible_date_diff_{matched_work_plan['date_diff']}",
+                'match_type': 'lot_number_match',
                 'original_plan_date': matched_work_plan['production_date'],
-                'plan_to_production_days': matched_work_plan['date_diff']
+                'plan_to_production_days': (getdate(prod_data['production_date']) - getdate(matched_work_plan['production_date'])).days
             }
-            matched_production_keys.add(prod_key)
+            # Track which lots have been matched with production
+            matched_lots.add(lot_no)
+            
+            # Debug logging for the final result
+            frappe.logger().info(f"DEBUG: Created result for lot {lot_no}:")
+            frappe.logger().info(f"DEBUG: - Work Plan: {result['work_plan_no']}")
+            frappe.logger().info(f"DEBUG: - Production Lifts: {result['production_lifts']}")
+            frappe.logger().info(f"DEBUG: - Produced Pieces: {result['produced_pieces']}")
+            frappe.logger().info(f"DEBUG: - Planned Pieces: {result['planned_pieces']}")
+            frappe.logger().info(f"DEBUG: - Variance: {result['variance_pieces']}")
         else:
             # No matching work plan found
             result = {
@@ -292,24 +288,23 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'original_plan_date': None,
                 'plan_to_production_days': None
             }
+            
+            # Debug logging for no work plan cases
+            frappe.logger().info(f"DEBUG: NO WORK PLAN for lot {prod_data['lot_no']}:")
+            frappe.logger().info(f"DEBUG: - Mould: {prod_data['mould_ref']}")
+            frappe.logger().info(f"DEBUG: - Production Lifts: {prod_data['total_production_lifts']}")
+            frappe.logger().info(f"DEBUG: - Produced Pieces: {prod_data['total_pieces_produced']}")
         
         final_results.append(result)
     
     # Now process work plans that don't have production (planned but not produced)
-    for row in table_a_data:
-        # Check if this work plan was already matched to production
-        found_match = False
-        flexible_key = f"{row['shift_type']}|{row['mould_ref']}|{row['lot_no']}"
-        
-        # Check if any production with this flexible key was already processed
-        for prod_key in matched_production_keys:
-            prod_data = production_lookup[prod_key]
-            if f"{prod_data['shift_type']}|{prod_data['mould_ref']}|{prod_data['lot_no']}" == flexible_key:
-                found_match = True
-                break
-        
-        if not found_match:
-            # This is a work plan without corresponding production
+    # Only include work plans for lots that haven't been matched with production
+    for lot_no, work_plans in work_plan_by_lot.items():
+        if lot_no not in matched_lots:
+            # This lot has work plans but no production
+            # Take the first work plan for this lot
+            row = work_plans[0]
+            
             no_of_cavities = flt(row.get('no_of_cavities', 0))
             target_lifts = flt(row.get('target_lifts', 0))
             planned_pieces = no_of_cavities * target_lifts if target_lifts > 0 else 0
@@ -338,6 +333,20 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'plan_to_production_days': None
             }
             final_results.append(result)
+
+    # Debug logging for final results
+    frappe.logger().info(f"DEBUG: Final results count: {len(final_results)}")
+    
+    # Count different types of results
+    production_results = [r for r in final_results if r['has_production']]
+    work_plan_only_results = [r for r in final_results if not r['has_production']]
+    
+    frappe.logger().info(f"DEBUG: Results with production: {len(production_results)}")
+    frappe.logger().info(f"DEBUG: Work plan only results: {len(work_plan_only_results)}")
+    
+    # Show some examples of production results
+    for result in production_results[:3]:
+        frappe.logger().info(f"DEBUG: Production result - Lot: {result['lot_no']}, Lifts: {result['production_lifts']}, Pieces: {result['produced_pieces']}")
 
     # STEP 4: Apply additional production filter
     if production_filter == 'produced':
