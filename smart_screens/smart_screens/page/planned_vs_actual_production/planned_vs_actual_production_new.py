@@ -47,14 +47,22 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
     lot_condition = ""
     shift_condition = ""
     
+    # Build production-specific filter conditions
+    prod_item_condition = ""
+    prod_lot_condition = ""
+    prod_shift_condition = ""
+    
     if item_filter:
         item_condition = f"AND wpi.item LIKE '%{item_filter}%'"
+        prod_item_condition = f"AND mpe.item_to_produce LIKE '%{item_filter}%'"
     
     if lot_filter:
         lot_condition = f"AND wpi.lot_number LIKE '%{lot_filter}%'"
+        prod_lot_condition = f"AND COALESCE(mpe.scan_lot_number, mpe.batch_no) LIKE '%{lot_filter}%'"
     
     if shift_filter and shift_filter != 'all':
         shift_condition = f"AND wp.shift_type = '{shift_filter}'"
+        prod_shift_condition = f"AND COALESCE(jc.shift_type, 'Unknown') = '{shift_filter}'"
 
     # STEP 1: Get Table A - All work planning data with required columns
     # STEP 1: First, get all production data for the given date range
@@ -64,6 +72,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             COALESCE(jc.shift_type, 'Unknown') as shift_type,
             mpe.mould_reference as mould_ref,
             COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_no,
+            mpe.item_to_produce as item_code,
             SUM(mpe.number_of_lifts) as total_production_lifts,
             SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced
         FROM `tabMoulding Production Entry` mpe
@@ -72,13 +81,55 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         AND mpe.docstatus = 1
         AND COALESCE(mpe.scan_lot_number, mpe.batch_no) IS NOT NULL
         AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
-        GROUP BY mpe.moulding_date, COALESCE(jc.shift_type, 'Unknown'), mpe.mould_reference, COALESCE(mpe.scan_lot_number, mpe.batch_no)
+        {prod_item_condition}
+        {prod_lot_condition}
+        {prod_shift_condition}
+        GROUP BY mpe.moulding_date, COALESCE(jc.shift_type, 'Unknown'), mpe.mould_reference, COALESCE(mpe.scan_lot_number, mpe.batch_no), mpe.item_to_produce
     """
     
     production_data = frappe.db.sql(production_lifts_query, as_dict=True)
     
     # Get unique lot numbers from production
     production_lot_numbers = list(set([prod['lot_no'] for prod in production_data]))
+    
+    # Check for the specific missing case
+    if '25F26X06' in production_lot_numbers:
+        # Check if work plan exists for this lot
+        check_query = f"""
+            SELECT wp.name as work_plan_no, wpi.lot_number, wp.date 
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            WHERE wpi.lot_number = '25F26X06'
+        """
+        check_result = frappe.db.sql(check_query, as_dict=True)
+        
+        # Also check for similar lot numbers
+        similar_query = f"""
+            SELECT wp.name as work_plan_no, wpi.lot_number, wp.date 
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            WHERE wpi.lot_number LIKE '%25F26X06%' OR wpi.lot_number LIKE '%F26X%'
+            LIMIT 5
+        """
+        similar_result = frappe.db.sql(similar_query, as_dict=True)
+        
+        # Check the specific work plan WRKP-02522
+        specific_query = f"""
+            SELECT wp.name as work_plan_no, wpi.lot_number, wp.date 
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            WHERE wp.name = 'WRKP-02522'
+        """
+        specific_result = frappe.db.sql(specific_query, as_dict=True)
+        
+        if check_result:
+            frappe.msgprint(f"Found exact match for 25F26X06: {check_result[0]['work_plan_no']}")
+        elif similar_result:
+            frappe.msgprint(f"Found similar lot numbers: {[r['lot_number'] for r in similar_result]}")
+        elif specific_result:
+            frappe.msgprint(f"WRKP-02522 has lot numbers: {[r['lot_number'] for r in specific_result]}")
+        else:
+            frappe.msgprint(f"No work plan found for 25F26X06 or similar")
     
     # STEP 2: Now get work plans that match these specific lot numbers (regardless of date)
     table_a_data = []
@@ -235,7 +286,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'production_date': prod_data['production_date'],
                 'production_date_formatted': formatdate(prod_data['production_date']),
                 'shift_type': prod_data['shift_type'],
-                'item_code': 'Unknown',
+                'item_code': prod_data.get('item_code', 'Unknown'),
                 'mould_ref': prod_data['mould_ref'],
                 'lot_no': prod_data['lot_no'],
                 'production_lifts': flt(prod_data['total_production_lifts']),
