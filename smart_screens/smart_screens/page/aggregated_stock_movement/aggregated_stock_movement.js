@@ -75,6 +75,7 @@ class AggregatedStockMovement {
 	
 	add_filters() {
 		this.page.add_inner_button(__('Refresh'), () => this.make_report());
+		this.page.add_inner_button(__('Validate Data'), () => this.validate_data());
 		
 		// Add event listeners to filters
 		this.filters.from_date.$input.on('change', () => this.make_report());
@@ -84,6 +85,28 @@ class AggregatedStockMovement {
 		this.filters.item_code_filter.$input.on('input', 
 			frappe.utils.debounce(() => this.apply_filters(), 300)
 		);
+	}
+	
+	validate_data() {
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.validate_aggregation_accuracy',
+			args: {
+				filters: {
+					from_date: this.filters.from_date.get_value(),
+					to_date: this.filters.to_date.get_value()
+				}
+			},
+			callback: (r) => {
+				if (r.message) {
+					console.log('Validation Data:', r.message);
+					frappe.msgprint({
+						title: __('Data Validation'),
+						message: __('Validation completed. Check browser console for detailed comparison.'),
+						indicator: 'blue'
+					});
+				}
+			}
+		});
 	}
 	
 	make_report() {
@@ -291,7 +314,11 @@ class AggregatedStockMovement {
 		html += `
 					</tbody>
 				</table>
-				${this.has_converted_mat_items ? '<div class="mt-2 text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
+				<div class="mt-2">
+					${this.has_converted_mat_items ? '<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
+					<div class="text-info small"><strong>Data Source:</strong> Current stock balances from Bin table + Stock movements within date range</div>
+					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
+				</div>
 			</div>
 		`;
 		
