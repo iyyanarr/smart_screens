@@ -63,6 +63,24 @@ class AggregatedStockMovement {
 					placeholder: 'Filter by item code...'
 				},
 				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Warehouse',
+					fieldtype: 'Link',
+					fieldname: 'warehouse',
+					options: 'Warehouse'
+				},
+				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Warehouse Type',
+					fieldtype: 'Link',
+					fieldname: 'warehouse_type',
+					options: 'Warehouse Type'
+				},
+				{
 					fieldtype: 'Section Break'
 				}
 			],
@@ -80,6 +98,8 @@ class AggregatedStockMovement {
 		// Add event listeners to filters
 		this.filters.from_date.$input.on('change', () => this.make_report());
 		this.filters.to_date.$input.on('change', () => this.make_report());
+		this.filters.warehouse.$input.on('change', () => this.make_report());
+		this.filters.warehouse_type.$input.on('change', () => this.make_report());
 		
 		// Add debounced filter for item code
 		this.filters.item_code_filter.$input.on('input', 
@@ -112,7 +132,9 @@ class AggregatedStockMovement {
 	make_report() {
 		const filters = {
 			from_date: this.filters.from_date.get_value(),
-			to_date: this.filters.to_date.get_value()
+			to_date: this.filters.to_date.get_value(),
+			warehouse: this.filters.warehouse.get_value(),
+			warehouse_type: this.filters.warehouse_type.get_value()
 		};
 		
 		// Clear any previous report
@@ -133,6 +155,7 @@ class AggregatedStockMovement {
 					this.grand_total = r.message.grand_total;
 					this.mat_uom = r.message.mat_uom || "kg";
 					this.has_converted_mat_items = r.message.has_converted_mat_items || false;
+					this.warehouse_filter = r.message.warehouse_filter || "All Warehouses";
 					this.filtered_data = [...this.original_data];
 					this.sort_data();
 					this.render_report();
@@ -316,7 +339,8 @@ class AggregatedStockMovement {
 				</table>
 				<div class="mt-2">
 					${this.has_converted_mat_items ? '<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
-					<div class="text-info small"><strong>Data Source:</strong> Current stock balances from Bin table + Stock movements within date range</div>
+					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext's batch-wise calculation logic</div>
+					<div class="text-info small"><strong>Warehouse Filter:</strong> ${this.warehouse_filter || 'All Warehouses'}</div>
 					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
 				</div>
 			</div>
