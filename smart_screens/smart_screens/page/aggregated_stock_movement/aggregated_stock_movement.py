@@ -154,6 +154,7 @@ def get_aggregated_stock_data(filters=None):
             AND sle.is_cancelled = 0
             AND sle.posting_datetime < %s
             AND (sle.item_code LIKE 'P%%' OR sle.item_code LIKE 'F%%' OR sle.item_code LIKE 'T%%')
+            AND sle.item_code NOT LIKE 't.%%'
             AND i.disabled = 0
             {warehouse_condition}
         ORDER BY sle.item_code, sle.posting_date, sle.posting_time
@@ -261,6 +262,8 @@ def get_aggregated_stock_data(filters=None):
             batch_no = qty_dict.batch_no
             if batch_no in conversion_factors:
                 conversion_factor = conversion_factors[batch_no]['conversion_factor']
+                source = conversion_factors[batch_no].get('source', 'Unknown')
+                
                 if conversion_factor > 0:
                     # Apply conversion from Kg to Nos
                     opening_qty = opening_qty * conversion_factor
@@ -272,7 +275,7 @@ def get_aggregated_stock_data(filters=None):
                     conversion_info = {
                         "batch": batch_no,
                         "factor": conversion_factor,
-                        "source": conversion_factors[batch_no].get('source', 'Unknown'),
+                        "source": source,
                         "blank_wt": conversion_factors[batch_no].get('blank_wt_gms', 0)
                     }
                     conversion_details.append(conversion_info)
@@ -331,7 +334,7 @@ def get_aggregated_stock_data(filters=None):
         "conversion_skipped": conversion_skipped,
         "conversion_sources": conversion_sources,
         "warehouse_filter": warehouse or warehouse_type or "All Warehouses",
-        "conversion_status": f"Mat: {conversion_applied} batches converted to Nos, {conversion_skipped} remain in Kg. F/P items: Already in Nos" if conversion_applied > 0 or conversion_skipped > 0 else "No Mat items found",
+        "conversion_status": f"Mat: {conversion_applied} batches converted to Nos, {conversion_skipped} remain in Kg. Coverage is higher for 2025 production data. F/P items: Already in Nos" if conversion_applied > 0 or conversion_skipped > 0 else "No Mat items found",
         "sle_records_processed": len(sle_data),
         "iwb_combinations": len(iwb_map),
         "note": "F and P items are naturally in Nos. Only T (Mat) items need Kg-to-Nos conversion using Production Batch Weight data."
@@ -343,12 +346,15 @@ def get_mat_kg_to_nos_conversion_factors():
     This doctype contains pre-calculated blank weights based on production traceability:
     Batch -> Stock Entry -> Moulding Production Entry -> Mould Specification
     
+    For historical batches without Production Batch Weight data, use average conversion
+    factors by item code calculated from available Production Batch Weight data.
+    
     Formula: (Kg Weight * 1000) / avg_blank_wt_gms = Number of pieces
     """
     conversion_data = {}
     
     try:
-        # First try to get from Production Batch Weight doctype
+        # First get exact batch matches from Production Batch Weight doctype
         query = """
             SELECT 
                 batch_no,
@@ -370,6 +376,7 @@ def get_mat_kg_to_nos_conversion_factors():
         
         frappe.log_error(f"Found {len(data)} Production Batch Weight records for conversion", "Aggregated Stock Movement")
         
+        # Store exact batch matches
         for row in data:
             batch_no = row.batch_no
             blank_wt_gms = row.blank_wt
@@ -389,7 +396,96 @@ def get_mat_kg_to_nos_conversion_factors():
                     'source': 'Production Batch Weight'
                 }
         
-        # If no data found in Production Batch Weight, fall back to direct query
+        # Calculate average conversion factors by item code for fallback
+        item_averages = {}
+        item_code_query = """
+            SELECT 
+                item_code,
+                AVG(blank_wt) as avg_blank_wt,
+                COUNT(*) as sample_count,
+                MIN(blank_wt) as min_blank_wt,
+                MAX(blank_wt) as max_blank_wt
+            FROM `tabProduction Batch Weight`
+            WHERE blank_wt IS NOT NULL 
+                AND blank_wt > 0
+                AND item_code IS NOT NULL
+                AND item_code != ''
+            GROUP BY item_code
+            HAVING COUNT(*) >= 3  -- Only use items with at least 3 samples
+        """
+        
+        avg_data = frappe.db.sql(item_code_query, as_dict=1)
+        
+        for row in avg_data:
+            item_code = row.item_code
+            avg_blank_wt = row.avg_blank_wt
+            
+            if item_code and avg_blank_wt > 0:
+                avg_conversion_factor = 1000.0 / avg_blank_wt
+                item_averages[item_code] = {
+                    'avg_conversion_factor': avg_conversion_factor,
+                    'avg_blank_wt': avg_blank_wt,
+                    'sample_count': row.sample_count,
+                    'min_blank_wt': row.min_blank_wt,
+                    'max_blank_wt': row.max_blank_wt,
+                    'source': 'Item Average Fallback'
+                }
+        
+        frappe.log_error(f"Calculated {len(item_averages)} item average conversion factors", "Aggregated Stock Movement")
+        
+        # Now get all T item batches from SLE that don't have exact batch matches
+        # and try to apply item average conversion factors
+        missing_batches_query = """
+            SELECT DISTINCT 
+                sle.batch_no,
+                sle.item_code,
+                SUM(sle.actual_qty) as total_qty
+            FROM `tabStock Ledger Entry` sle
+            WHERE sle.item_code LIKE 'T%%'
+                AND sle.item_code NOT LIKE 't.%%'
+                AND sle.batch_no IS NOT NULL
+                AND sle.batch_no != ''
+                AND sle.docstatus < 2
+                AND sle.is_cancelled = 0
+                AND ABS(sle.actual_qty) > 0.001
+                AND sle.batch_no NOT IN (
+                    SELECT DISTINCT batch_no 
+                    FROM `tabProduction Batch Weight` 
+                    WHERE batch_no IS NOT NULL AND batch_no != ''
+                )
+            GROUP BY sle.batch_no, sle.item_code
+            HAVING ABS(SUM(sle.actual_qty)) > 0.001
+        """
+        
+        missing_batches = frappe.db.sql(missing_batches_query, as_dict=1)
+        
+        # Apply item average conversion factors to missing batches
+        fallback_applied = 0
+        for batch_data in missing_batches:
+            batch_no = batch_data.batch_no
+            item_code = batch_data.item_code
+            
+            if item_code in item_averages and batch_no not in conversion_data:
+                avg_data = item_averages[item_code]
+                
+                conversion_data[batch_no] = {
+                    'conversion_factor': avg_data['avg_conversion_factor'],
+                    'scan_lot_no': None,
+                    'mould_reference': None,
+                    'item_code': item_code,
+                    'spp_ref': item_code[1:5] if len(item_code) >= 5 else "",
+                    'blank_wt_gms': avg_data['avg_blank_wt'],
+                    'production_entry': None,
+                    'source': f"Item Average ({avg_data['sample_count']} samples)",
+                    'sample_count': avg_data['sample_count'],
+                    'min_blank_wt': avg_data['min_blank_wt'],
+                    'max_blank_wt': avg_data['max_blank_wt']
+                }
+                fallback_applied += 1
+        
+        frappe.log_error(f"Applied fallback conversion to {fallback_applied} additional batches", "Aggregated Stock Movement")
+        
+        # If still no data found, fall back to direct query with correct T item batch logic
         # But use the CORRECT logic: get T item batch from Stock Entry Detail
         if not conversion_data:
             frappe.log_error("No Production Batch Weight data found, using fallback query", "Aggregated Stock Movement")
