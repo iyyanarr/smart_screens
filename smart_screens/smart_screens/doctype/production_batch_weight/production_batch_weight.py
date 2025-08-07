@@ -180,44 +180,44 @@ def populate_all_batch_weights():
 					continue  # Skip if no T item found
 				
 				t_item = t_item_detail[0]
-			
-			# Get blank weight from Mould Specification using mould_ref and spp_ref (item code)
-			blank_wt = 0
-			spp_ref = None
-			if entry.mould_reference and t_item.item_code:
-				# First try to match both mould_ref and spp_ref (item code)
-				mould_spec = frappe.db.sql("""
-					SELECT avg_blank_wtproduct_gms, spp_ref
-					FROM `tabMould Specification`
-					WHERE mould_ref = %s AND spp_ref = %s
-					AND avg_blank_wtproduct_gms IS NOT NULL 
-					AND avg_blank_wtproduct_gms != ''
-					AND avg_blank_wtproduct_gms != '0'
-					ORDER BY creation DESC
-					LIMIT 1
-				""", (entry.mould_reference, t_item.item_code), as_dict=True)
 				
-				# Fallback: try with mould_ref only if no exact match found
-				if not mould_spec:
+				# Get blank weight from Mould Specification using mould_ref and spp_ref (item code)
+				blank_wt = 0
+				spp_ref = None
+				if entry.mould_reference and t_item.item_code:
+					# First try to match both mould_ref and spp_ref (item code)
 					mould_spec = frappe.db.sql("""
 						SELECT avg_blank_wtproduct_gms, spp_ref
 						FROM `tabMould Specification`
-						WHERE mould_ref = %s 
+						WHERE mould_ref = %s AND spp_ref = %s
 						AND avg_blank_wtproduct_gms IS NOT NULL 
 						AND avg_blank_wtproduct_gms != ''
 						AND avg_blank_wtproduct_gms != '0'
 						ORDER BY creation DESC
 						LIMIT 1
-					""", (entry.mould_reference,), as_dict=True)
+					""", (entry.mould_reference, t_item.item_code), as_dict=True)
+					
+					# Fallback: try with mould_ref only if no exact match found
+					if not mould_spec:
+						mould_spec = frappe.db.sql("""
+							SELECT avg_blank_wtproduct_gms, spp_ref
+							FROM `tabMould Specification`
+							WHERE mould_ref = %s 
+							AND avg_blank_wtproduct_gms IS NOT NULL 
+							AND avg_blank_wtproduct_gms != ''
+							AND avg_blank_wtproduct_gms != '0'
+							ORDER BY creation DESC
+							LIMIT 1
+						""", (entry.mould_reference,), as_dict=True)
+					
+					if mould_spec and mould_spec[0].avg_blank_wtproduct_gms:
+						try:
+							blank_wt = float(mould_spec[0].avg_blank_wtproduct_gms)
+							spp_ref = mould_spec[0].spp_ref
+						except (ValueError, TypeError):
+							blank_wt = 0
+							spp_ref = None
 				
-				if mould_spec and mould_spec[0].avg_blank_wtproduct_gms:
-					try:
-						blank_wt = float(mould_spec[0].avg_blank_wtproduct_gms)
-						spp_ref = mould_spec[0].spp_ref
-					except (ValueError, TypeError):
-						blank_wt = 0
-						spp_ref = None
-			
 				# Create new Production Batch Weight record using T item batch
 				if t_item.batch_no and blank_wt > 0:
 					doc = frappe.get_doc({
