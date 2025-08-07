@@ -137,13 +137,11 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Moulding Production Entry": {
+		"on_submit": "smart_screens.smart_screens.doctype.production_batch_weight.production_batch_weight.auto_create_production_batch_weight"
+	}
+}
 
 # Scheduled Tasks
 # ---------------

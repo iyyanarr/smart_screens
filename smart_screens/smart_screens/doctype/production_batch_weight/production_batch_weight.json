@@ -1,0 +1,119 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:scan_lot_no",
+ "creation": "2025-01-28 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "scan_lot_no",
+  "batch_no",
+  "column_break_1",
+  "blank_wt",
+  "section_break_2",
+  "mould_reference",
+  "column_break_3",
+  "item_code",
+  "spp_ref",
+  "production_entry"
+ ],
+ "fields": [
+  {
+   "fieldname": "scan_lot_no",
+   "fieldtype": "Data",
+   "label": "Scan Lot No",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "blank_wt",
+   "fieldtype": "Float",
+   "label": "Blank Weight (gms)",
+   "precision": 3,
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Reference Information"
+  },
+  {
+   "fieldname": "mould_reference",
+   "fieldtype": "Data",
+   "label": "Mould Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item Code",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "spp_ref",
+   "fieldtype": "Data",
+   "label": "SPP Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "production_entry",
+   "fieldtype": "Data",
+   "label": "Production Entry Reference",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-01-28 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Production Batch Weight",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Manufacturing Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
