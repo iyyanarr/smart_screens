@@ -1,8 +1,9 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "field:scan_lot_no",
- "creation": "2025-01-28 10:00:00.000000",
+ "creation": "2025-01-28 10:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -21,6 +22,7 @@
   {
    "fieldname": "scan_lot_no",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Scan Lot No",
    "reqd": 1,
    "unique": 1
@@ -28,6 +30,7 @@
   {
    "fieldname": "batch_no",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Batch No",
    "options": "Batch",
    "reqd": 1
@@ -39,8 +42,9 @@
   {
    "fieldname": "blank_wt",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Blank Weight (gms)",
-   "precision": 3,
+   "precision": "3",
    "reqd": 1
   },
   {
@@ -51,6 +55,7 @@
   {
    "fieldname": "mould_reference",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Mould Reference",
    "read_only": 1
   },
@@ -68,6 +73,7 @@
   {
    "fieldname": "spp_ref",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "SPP Reference",
    "read_only": 1
   },
@@ -80,7 +86,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-28 10:00:00.000000",
+ "modified": "2025-08-07 11:22:46.389561",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Production Batch Weight",
@@ -112,6 +118,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
