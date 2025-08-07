@@ -145,6 +145,7 @@ def get_aggregated_stock_data(filters=None):
             SUBSTRING(sle.item_code, 2, 4) as common_code,
             LEFT(sle.item_code, 1) as prefix,
             i.stock_uom,
+            i.item_group,
             sle.voucher_type,
             sle.voucher_no
         FROM `tabStock Ledger Entry` sle
@@ -153,7 +154,7 @@ def get_aggregated_stock_data(filters=None):
             sle.docstatus < 2
             AND sle.is_cancelled = 0
             AND sle.posting_datetime < %s
-            AND (sle.item_code LIKE 'P%%' OR sle.item_code LIKE 'F%%' OR sle.item_code LIKE 'T%%')
+            AND (sle.item_code LIKE 'P%%' OR sle.item_code LIKE 'F%%' OR sle.item_code LIKE 'T%%' OR i.item_group IN ('Products', 'Finished Product', 'Mat'))
             AND sle.item_code NOT LIKE 't.%%'
             AND i.disabled = 0
             {warehouse_condition}
@@ -192,7 +193,8 @@ def get_aggregated_stock_data(filters=None):
                 "bal_qty": 0.0,
                 "common_code": d.common_code,
                 "prefix": d.prefix,
-                "stock_uom": d.stock_uom
+                "stock_uom": d.stock_uom,
+                "item_group": d.item_group
             })
         
         qty_dict = iwb_map[key]
@@ -231,10 +233,20 @@ def get_aggregated_stock_data(filters=None):
             
         common_code = qty_dict.common_code
         prefix = qty_dict.prefix
+        item_group = qty_dict.item_group
         
-        # Map prefix to item group
-        prefix_map = {"P": "Products", "F": "Finished Product", "T": "Mat"}
-        group = prefix_map.get(prefix, "Other")
+        # Map item group to report categories
+        # Use actual item_group field first, fallback to prefix mapping
+        if item_group == "Products":
+            group = "Products"
+        elif item_group == "Finished Product" or item_group == "Finished Products":
+            group = "Finished Product"
+        elif item_group == "Mat":
+            group = "Mat"
+        else:
+            # Fallback to prefix mapping for items without proper item_group
+            prefix_map = {"P": "Products", "F": "Finished Product", "T": "Mat"}
+            group = prefix_map.get(prefix, "Other")
         
         if group == "Other":
             continue
@@ -519,10 +531,12 @@ def get_mat_kg_to_nos_conversion_factors():
                 try:
                     # Get T item batch from Stock Entry Detail (CORRECT logic)
                     t_item_data = frappe.db.sql("""
-                        SELECT item_code, batch_no, qty
-                        FROM `tabStock Entry Detail`
-                        WHERE parent = %s AND item_code LIKE 'T%%'
-                        ORDER BY idx
+                        SELECT sed.item_code, sed.batch_no, sed.qty, i.item_group
+                        FROM `tabStock Entry Detail` sed
+                        INNER JOIN `tabItem` i ON sed.item_code = i.name
+                        WHERE sed.parent = %s 
+                            AND (sed.item_code LIKE 'T%%' OR i.item_group = 'Mat')
+                        ORDER BY sed.idx
                         LIMIT 1
                     """, (row.stock_entry_reference,), as_dict=True)
                     
@@ -540,11 +554,11 @@ def get_mat_kg_to_nos_conversion_factors():
                                 'conversion_factor': conversion_factor,
                                 'scan_lot_number': row.scan_lot_number,
                                 'mould_reference': row.mould_reference,
-                                'item_code': t_item_code,  # T item code
+                                'item_code': t_item_code,  # T item code or Mat item
                                 'blank_wt_gms': blank_wt_float,
                                 'spp_ref': row.spp_ref,
                                 'production_entry': row.production_entry,
-                                'source': 'Direct Query (T item batch)'
+                                'source': 'Direct Query (Mat item batch)'
                             }
                             
                 except (ValueError, TypeError, AttributeError) as e:
