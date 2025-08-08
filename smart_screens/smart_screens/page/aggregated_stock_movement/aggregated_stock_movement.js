@@ -350,6 +350,7 @@ class AggregatedStockMovement {
 		
 		this.$report_container.html(html);
 		this.apply_styles();
+		this.enhance_sticky_column();
 		this.bind_events();
 	}
 	
@@ -368,6 +369,31 @@ class AggregatedStockMovement {
 			
 			this.sort_data();
 			this.render_report();
+		});
+	}
+	
+	enhance_sticky_column() {
+		// Ensure sticky column behavior works properly by forcing browser to recognize sticky positioning
+		const $stickyColumns = this.$report_container.find('.sticky-column');
+		
+		// Force repaint for sticky positioning to work correctly
+		$stickyColumns.each(function() {
+			const $col = $(this);
+			// Trigger a reflow to ensure sticky positioning is applied
+			$col[0].offsetHeight;
+			
+			// Ensure background is opaque
+			if (!$col.hasClass('common-code-header') && !$col.hasClass('total-label')) {
+				$col.css('background-color', '#f8f9fa');
+			}
+		});
+		
+		// Ensure table container has proper scrolling behavior
+		const $tableContainer = this.$report_container.find('.table-container');
+		$tableContainer.css({
+			'overflow-x': 'auto',
+			'overflow-y': 'visible',
+			'position': 'relative'
 		});
 	}
 	
@@ -392,12 +418,14 @@ class AggregatedStockMovement {
 					border: 1px solid #dee2e6;
 					border-radius: 0.375rem;
 					box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+					position: relative;
 				}
 				.sticky-table {
 					min-width: 100%;
 					border-collapse: separate;
 					border-spacing: 0;
 					margin: 0;
+					position: relative;
 				}
 				.sticky-column {
 					position: sticky;
@@ -405,9 +433,14 @@ class AggregatedStockMovement {
 					z-index: 10;
 					border-right: 2px solid #adb5bd !important;
 					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+					background-color: inherit !important;
+					min-width: 120px;
+					max-width: 200px;
 				}
 				.sticky-table thead .sticky-column {
 					z-index: 20;
+					background-color: #343a40 !important;
+				}
 				}
 				.stock-movement-report th {
 					font-weight: bold;
@@ -512,11 +545,11 @@ class AggregatedStockMovement {
 				/* Common Styles */
 				.stock-movement-report .item-code {
 					text-align: left;
-					background-color: #f8f9fa;
+					background-color: #f8f9fa !important;
 					font-weight: bold;
 				}
 				.stock-movement-report .sticky-column.item-code {
-					background-color: #f8f9fa;
+					background-color: #f8f9fa !important;
 				}
 				.grand-total-row {
 					border-top: 2px solid #666;
