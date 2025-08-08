@@ -239,9 +239,9 @@ class AggregatedStockMovement {
 								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
 									Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 								</th>
-							<th colspan="4" class="finished-product-header">Finished Product (kg)</th>
+							<th colspan="4" class="finished-product-header">Finished Product</th>
 							<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
-							<th colspan="4" class="products-header">Products (kg)</th>
+							<th colspan="4" class="products-header">Products</th>
 							<th rowspan="2" class="grand-total-header">Total</th>
 						</tr>
 						<tr>
