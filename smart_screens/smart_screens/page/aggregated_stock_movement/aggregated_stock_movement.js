@@ -232,12 +232,13 @@ class AggregatedStockMovement {
 		
 		let html = `
 			<div class="stock-movement-report">
-				<table class="table table-bordered">
-					<thead>
-						<tr>
-							<th rowspan="2" class="common-code-header sortable" data-sort="common_code">
-								Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
-							</th>
+				<div class="table-container">
+					<table class="table table-bordered sticky-table">
+						<thead>
+							<tr>
+								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
+									Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
+								</th>
 							<th colspan="4" class="finished-product-header">Finished Product (kg)</th>
 							<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
 							<th colspan="4" class="products-header">Products (kg)</th>
@@ -290,7 +291,7 @@ class AggregatedStockMovement {
 		data.forEach(item => {
 			html += `
 				<tr>
-					<td class="item-code">${item.common_code}</td>
+					<td class="item-code sticky-column">${item.common_code}</td>
 					
 					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
 					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
@@ -314,7 +315,7 @@ class AggregatedStockMovement {
 		// Add grand total row
 		html += `
 			<tr class="grand-total-row">
-				<td class="total-label"><strong>Grand Total</strong></td>
+				<td class="total-label sticky-column"><strong>Grand Total</strong></td>
 				
 				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
 				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
@@ -337,6 +338,7 @@ class AggregatedStockMovement {
 		html += `
 					</tbody>
 				</table>
+				</div>
 				<div class="mt-2">
 					${this.has_converted_mat_items ? '<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
 					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext's batch-wise calculation logic</div>
@@ -370,21 +372,42 @@ class AggregatedStockMovement {
 	}
 	
 	format_number(value) {
-		return frappe.format(value || 0, {fieldtype: 'Float', precision: 2});
+		// Round to nearest whole number as per requirements
+		return frappe.format(Math.round(value || 0), {fieldtype: 'Int'});
 	}
 	
 	apply_styles() {
-		// Add custom styles for the report with colorful headers
+		// Add custom styles for the report with colorful headers and sticky first column
 		$("<style>")
 			.prop("type", "text/css")
 			.html(`
 				.stock-movement-report {
-					overflow-x: auto;
+					position: relative;
+					width: 100%;
 				}
-				.stock-movement-report table {
-					min-width: 100%;
-					border-collapse: collapse;
+				.table-container {
+					overflow-x: auto;
+					overflow-y: visible;
+					max-width: 100%;
+					border: 1px solid #dee2e6;
+					border-radius: 0.375rem;
 					box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+				}
+				.sticky-table {
+					min-width: 100%;
+					border-collapse: separate;
+					border-spacing: 0;
+					margin: 0;
+				}
+				.sticky-column {
+					position: sticky;
+					left: 0;
+					z-index: 10;
+					border-right: 2px solid #adb5bd !important;
+					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+				}
+				.sticky-table thead .sticky-column {
+					z-index: 20;
 				}
 				.stock-movement-report th {
 					font-weight: bold;
@@ -487,10 +510,13 @@ class AggregatedStockMovement {
 				}
 				
 				/* Common Styles */
-				.stock-movement-report td:first-child {
+				.stock-movement-report .item-code {
 					text-align: left;
 					background-color: #f8f9fa;
 					font-weight: bold;
+				}
+				.stock-movement-report .sticky-column.item-code {
+					background-color: #f8f9fa;
 				}
 				.grand-total-row {
 					border-top: 2px solid #666;
@@ -499,11 +525,38 @@ class AggregatedStockMovement {
 					background-color: #343a40 !important;
 					color: white;
 					font-weight: bold;
+					text-align: left !important;
+				}
+				.stock-movement-report .sticky-column.total-label {
+					background-color: #343a40 !important;
 				}
 				
 				/* Hover effects */
 				.stock-movement-report tbody tr:hover td {
 					box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+				}
+				.stock-movement-report tbody tr:hover .sticky-column {
+					background-color: #e9ecef !important;
+					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+				}
+				.stock-movement-report .grand-total-row:hover .sticky-column.total-label {
+					background-color: #495057 !important;
+				}
+				
+				/* Responsive design */
+				@media (max-width: 768px) {
+					.table-container {
+						font-size: 12px;
+					}
+					.stock-movement-report th,
+					.stock-movement-report td {
+						padding: 4px 6px;
+					}
+					.sticky-column {
+						min-width: 80px;
+						max-width: 120px;
+						font-size: 11px;
+					}
 				}
 			`)
 			.appendTo("head");
