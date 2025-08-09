@@ -293,7 +293,7 @@ class AggregatedStockMovement {
 		data.forEach(item => {
 			html += `
 				<tr>
-					<td class="item-code sticky-column"><a href="#" class="common-code-link" data-code="${item.common_code}" title="View item codes and stock ledger entries">${item.common_code}</a></td>
+					<td class="item-code sticky-column">${item.common_code}</td>
 					
 					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
 					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
@@ -312,10 +312,10 @@ class AggregatedStockMovement {
 					
 					<td class="grand-total-cell">${this.format_number(item["total"].closing_qty)}</td>
 				</tr>`;
-			});
-			
-			// Add grand total row
-			html += `
+		});
+		
+		// Add grand total row
+		html += `
 			<tr class="grand-total-row">
 				<td class="total-label sticky-column"><strong>Grand Total</strong></td>
 				
@@ -372,100 +372,36 @@ class AggregatedStockMovement {
 			this.sort_data();
 			this.render_report();
 		});
-		// Drill-down on common code click
-		this.$report_container.on('click', '.common-code-link', (e) => {
-			e.preventDefault();
-			const code = $(e.currentTarget).data('code');
-			this.show_common_code_details(code);
-		});
 	}
-
-	// Show dialog with real item codes and sample SLE rows for a given common code
-	show_common_code_details(common_code) {
-		if (!common_code) return;
-		const dlg = new frappe.ui.Dialog({
-			title: `Details for ${common_code}`,
-			fields: [
-				{ fieldtype: 'HTML', fieldname: 'items_html' },
-				{ fieldtype: 'HTML', fieldname: 'sle_html' }
-			],
-			primary_action_label: __('Close'),
-			primary_action: () => dlg.hide()
-		});
-
-		dlg.show();
-		dlg.set_message(__('Loading details...'));
-
-		const filters = {
-			from_date: this.filters.from_date.get_value(),
-			to_date: this.filters.to_date.get_value(),
-			warehouse: this.filters.warehouse.get_value(),
-			warehouse_type: this.filters.warehouse_type.get_value()
-		};
-
-		frappe.call({
-			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_common_code_details',
-			args: { common_code, filters },
-			freeze: true,
-			callback: (r) => {
-				const data = r.message || {};
-				const items = data.items || [];
-				const sle = data.sle_samples || [];
-
-				const itemsTable = `
-					<h5 style="margin-top: 0;">Item Codes (${items.length})</h5>
-					<div style="max-height: 220px; overflow:auto; border:1px solid #eee; border-radius:6px;">
-					<table class="table table-bordered table-compact" style="margin:0;">
-						<thead><tr>
-							<th>Item Code</th><th>Item Name</th><th>Prefix</th><th>Item Group</th><th>UOM</th>
-						</tr></thead>
-						<tbody>
-							${items.map(i => `
-								<tr>
-									<td><a href="/app/item/${encodeURIComponent(i.item_code)}" target="_blank">${frappe.utils.escape_html(i.item_code)}</a></td>
-									<td style="text-align:left;">${frappe.utils.escape_html(i.item_name || '')}</td>
-									<td>${frappe.utils.escape_html(i.prefix || '')}</td>
-									<td>${frappe.utils.escape_html(i.item_group || '')}</td>
-									<td>${frappe.utils.escape_html(i.stock_uom || '')}</td>
-								</tr>
-							`).join('')}
-						</tbody>
-					</table>
-					</div>`;
-
-				const sleTable = `
-					<h5 style="margin-top: 12px;">Recent Stock Ledger Entries (${sle.length})</h5>
-					<div style="max-height: 260px; overflow:auto; border:1px solid #eee; border-radius:6px;">
-					<table class="table table-bordered table-compact" style="margin:0;">
-						<thead><tr>
-							<th>Date</th><th>Item</th><th>Warehouse</th><th>Batch</th><th>Qty</th><th>Voucher</th>
-						</tr></thead>
-						<tbody>
-							${sle.map(s => `
-								<tr>
-									<td>${frappe.datetime.str_to_user(s.posting_date)} ${s.posting_time || ''}</td>
-									<td><a href="/app/item/${encodeURIComponent(s.item_code)}" target="_blank">${frappe.utils.escape_html(s.item_code)}</a></td>
-									<td style="text-align:left;">${frappe.utils.escape_html(s.warehouse || '')}</td>
-									<td style="text-align:left;">${frappe.utils.escape_html(s.batch_no || '')}</td>
-									<td style="text-align:right;">${frappe.format(s.actual_qty, {fieldtype:'Float'})}</td>
-									<td><a href="/app/${encodeURIComponent((s.voucher_type||'').toLowerCase().replace(/\s+/g,'-'))}/${encodeURIComponent(s.voucher_no)}" target="_blank">${frappe.utils.escape_html(s.voucher_type || '')} ${frappe.utils.escape_html(s.voucher_no || '')}</a></td>
-								</tr>
-							`).join('')}
-						</tbody>
-					</table>
-					</div>`;
-
-				// Place into dialog
-				dlg.get_field('items_html').$wrapper.html(itemsTable);
-				dlg.get_field('sle_html').$wrapper.html(sleTable);
-				dlg.set_message('');
+	
+	enhance_sticky_column() {
+		// Ensure sticky column behavior works properly by forcing browser to recognize sticky positioning
+		const $stickyColumns = this.$report_container.find('.sticky-column');
+		
+		// Force repaint for sticky positioning to work correctly
+		$stickyColumns.each(function() {
+			const $col = $(this);
+			// Trigger a reflow to ensure sticky positioning is applied
+			$col[0].offsetHeight;
+			
+			// Ensure background is opaque
+			if (!$col.hasClass('common-code-header') && !$col.hasClass('total-label')) {
+				$col.css('background-color', '#f8f9fa');
 			}
 		});
+		
+		// Ensure table container has proper scrolling behavior
+		const $tableContainer = this.$report_container.find('.table-container');
+		$tableContainer.css({
+			'overflow-x': 'auto',
+			'overflow-y': 'visible',
+			'position': 'relative'
+		});
 	}
-
-	// Helper used by table rendering - round and format as Int
+	
 	format_number(value) {
-		return frappe.format(Math.round(value || 0), { fieldtype: 'Int' });
+		// Round to nearest whole number as per requirements
+		return frappe.format(Math.round(value || 0), {fieldtype: 'Int'});
 	}
 
 	// Helper to round numbers without formatting for CSV
@@ -588,7 +524,7 @@ class AggregatedStockMovement {
 			});
 		}
 	}
-
+	
 	apply_styles() {
 		// Add custom styles for the report with colorful headers and sticky first column
 		$("<style>")
