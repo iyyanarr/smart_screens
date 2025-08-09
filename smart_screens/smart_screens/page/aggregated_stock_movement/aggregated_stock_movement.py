@@ -571,3 +571,96 @@ def get_mat_kg_to_nos_conversion_factors():
         return {}
     
     return conversion_data
+
+@frappe.whitelist()
+def get_common_code_details(common_code, filters=None):
+    """
+    Return distinct item codes (with names, prefix, item_group) and a sample of Stock Ledger Entries
+    that contribute to the given common_code, respecting the same filters (date range and warehouse).
+    """
+    if not common_code:
+        return {"items": [], "sle_samples": [], "counts": {"items": 0, "sle": 0}}
+
+    if isinstance(filters, str):
+        filters = json.loads(filters)
+
+    filters = filters or {}
+    from_date = filters.get("from_date") or "1900-01-01"
+    to_date = filters.get("to_date") or frappe.utils.nowdate()
+    warehouse = filters.get("warehouse")
+    warehouse_type = filters.get("warehouse_type")
+
+    posting_datetime = get_datetime(add_to_date(to_date, days=1))
+
+    # Build warehouse condition
+    warehouse_condition = ""
+    warehouse_params = []
+    if warehouse:
+        warehouse_condition = "AND sle.warehouse = %s"
+        warehouse_params.append(warehouse)
+    elif warehouse_type:
+        warehouses = frappe.get_all(
+            "Warehouse", filters={"warehouse_type": warehouse_type, "is_group": 0}, pluck="name"
+        )
+        if warehouses:
+            placeholders = ", ".join(["%s"] * len(warehouses))
+            warehouse_condition = f"AND sle.warehouse IN ({placeholders})"
+            warehouse_params.extend(warehouses)
+
+    # Distinct items participating for this common_code
+    items_query = f"""
+        SELECT DISTINCT
+            i.name AS item_code,
+            i.item_name,
+            LEFT(i.name, 1) AS prefix,
+            i.item_group,
+            i.stock_uom
+        FROM `tabStock Ledger Entry` sle
+        INNER JOIN `tabItem` i ON i.name = sle.item_code
+        WHERE sle.docstatus < 2
+          AND sle.is_cancelled = 0
+          AND sle.posting_datetime < %s
+          AND SUBSTRING(sle.item_code, 2, 4) = %s
+          AND (sle.item_code LIKE 'P%%' OR sle.item_code LIKE 'F%%' OR sle.item_code LIKE 'T%%' OR i.item_group IN ('Products','Finished Product','Mat'))
+          {warehouse_condition}
+        ORDER BY prefix, i.name
+    """
+
+    items_params = [posting_datetime, common_code] + warehouse_params
+    items = frappe.db.sql(items_query, items_params, as_dict=1)
+
+    # Sample SLE rows for context
+    sle_query = f"""
+        SELECT 
+            sle.posting_date,
+            sle.posting_time,
+            sle.item_code,
+            sle.warehouse,
+            sle.batch_no,
+            sle.actual_qty,
+            sle.voucher_type,
+            sle.voucher_no
+        FROM `tabStock Ledger Entry` sle
+        WHERE sle.docstatus < 2
+          AND sle.is_cancelled = 0
+          AND sle.posting_datetime < %s
+          AND SUBSTRING(sle.item_code, 2, 4) = %s
+          {warehouse_condition}
+        ORDER BY sle.posting_date DESC, sle.posting_time DESC
+        LIMIT 100
+    """
+
+    sle_params = [posting_datetime, common_code] + warehouse_params
+    sle_samples = frappe.db.sql(sle_query, sle_params, as_dict=1)
+
+    return {
+        "items": items,
+        "sle_samples": sle_samples,
+        "counts": {"items": len(items), "sle": len(sle_samples)},
+        "applied_filters": {
+            "from_date": from_date,
+            "to_date": to_date,
+            "warehouse": warehouse,
+            "warehouse_type": warehouse_type,
+        },
+    }
