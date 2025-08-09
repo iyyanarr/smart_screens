@@ -463,8 +463,132 @@ class AggregatedStockMovement {
 		});
 	}
 
-	// ...existing code...
-	
+	// Helper used by table rendering - round and format as Int
+	format_number(value) {
+		return frappe.format(Math.round(value || 0), { fieldtype: 'Int' });
+	}
+
+	// Helper to round numbers without formatting for CSV
+	round_number(value) {
+		return Math.round(value || 0);
+	}
+
+	// Sanitize file name parts
+	sanitize_filename(text) {
+		if (!text) return '';
+		return String(text).replace(/[^a-z0-9-_\.]+/gi, '_');
+	}
+
+	// Export current (filtered + sorted) data to CSV
+	export_to_csv() {
+		try {
+			if (!this.filtered_data || !this.grand_total) {
+				frappe.msgprint(__('No data to export. Please run the report.'));
+				return;
+			}
+
+			const matUom = this.has_converted_mat_items ? (this.mat_uom || 'Nos') : 'kg';
+			const header = [
+				'Common Code',
+				'Finished Product Opening',
+				'Finished Product Incoming',
+				'Finished Product Outgoing',
+				'Finished Product End Stock',
+				`Mat Opening (${matUom})`,
+				`Mat Incoming (${matUom})`,
+				`Mat Outgoing (${matUom})`,
+				`Mat End Stock (${matUom})`,
+				'Products Opening',
+				'Products Incoming',
+				'Products Outgoing',
+				'Products End Stock',
+				'Total'
+			];
+
+			const rows = [header];
+
+			this.filtered_data.forEach(item => {
+				const fp = item['Finished Product'] || {};
+				const mat = item['Mat'] || {};
+				const prod = item['Products'] || {};
+				const total = item['total'] || {};
+
+				rows.push([
+					item.common_code || '',
+					this.round_number(fp.opening_qty),
+					this.round_number(fp.incoming_qty),
+					this.round_number(fp.outgoing_qty),
+					this.round_number(fp.closing_qty),
+					this.round_number(mat.opening_qty),
+					this.round_number(mat.incoming_qty),
+					this.round_number(mat.outgoing_qty),
+					this.round_number(mat.closing_qty),
+					this.round_number(prod.opening_qty),
+					this.round_number(prod.incoming_qty),
+					this.round_number(prod.outgoing_qty),
+					this.round_number(prod.closing_qty),
+					this.round_number(total.closing_qty)
+				]);
+			});
+
+			// Grand total row
+			const gt = this.grand_total || {};
+			rows.push([
+				'Grand Total',
+				this.round_number(gt['Finished Product']?.opening_qty),
+				this.round_number(gt['Finished Product']?.incoming_qty),
+				this.round_number(gt['Finished Product']?.outgoing_qty),
+				this.round_number(gt['Finished Product']?.closing_qty),
+				this.round_number(gt['Mat']?.opening_qty),
+				this.round_number(gt['Mat']?.incoming_qty),
+				this.round_number(gt['Mat']?.outgoing_qty),
+				this.round_number(gt['Mat']?.closing_qty),
+				this.round_number(gt['Products']?.opening_qty),
+				this.round_number(gt['Products']?.incoming_qty),
+				this.round_number(gt['Products']?.outgoing_qty),
+				this.round_number(gt['Products']?.closing_qty),
+				this.round_number(gt?.closing_qty)
+			]);
+
+			// Convert to CSV with proper escaping
+			const csv = rows.map(r => r.map(v => {
+				const val = (v === null || v === undefined) ? '' : String(v);
+				const escaped = val.replace(/"/g, '""');
+				return `"${escaped}"`;
+			}).join(',')).join('\n');
+
+			// Prepare filename with filters
+			const from = this.filters?.from_date?.get_value?.() || '';
+			const to = this.filters?.to_date?.get_value?.() || '';
+			const wh = this.warehouse_filter ? this.sanitize_filename(this.warehouse_filter) : 'All_Warehouses';
+			const fname = this.sanitize_filename(`aggregated_stock_movement_${from}_to_${to}_${wh}.csv`);
+
+			// Trigger download (add BOM for Excel compatibility)
+			const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+			if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+				// IE/Edge legacy
+				window.navigator.msSaveOrOpenBlob(blob, fname);
+			} else {
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = fname;
+				a.style.display = 'none';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+		} catch (e) {
+			console.error('CSV export failed', e);
+			frappe.msgprint({
+				title: __('Export Failed'),
+				indicator: 'red',
+				message: __('Could not export to CSV. See console for details.')
+			});
+		}
+	}
+
 	apply_styles() {
 		// Add custom styles for the report with colorful headers and sticky first column
 		$("<style>")
