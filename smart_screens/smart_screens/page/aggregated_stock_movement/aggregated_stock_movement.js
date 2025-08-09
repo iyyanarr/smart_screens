@@ -18,13 +18,12 @@ class AggregatedStockMovement {
 		// Set default date filters
 		const today = frappe.datetime.get_today();
 		const last_month = frappe.datetime.add_months(today, -1);
-		
 		this.filters.from_date.set_value(last_month);
 		this.filters.to_date.set_value(today);
 		
-		// Initialize sorting state
-		this.sort_by = 'common_code';
-		this.sort_order = 'asc';
+		// Initialize sorting state: default to Total (closing) DESC
+		this.sort_by = 'total';
+		this.sort_order = 'desc';
 		
 		this.make_report();
 	}
@@ -186,14 +185,15 @@ class AggregatedStockMovement {
 		this.filtered_data.sort((a, b) => {
 			let val_a, val_b;
 			
-			// Extract values based on sort field
 			if (this.sort_by === 'common_code') {
 				val_a = a.common_code;
 				val_b = b.common_code;
+			} else if (this.sort_by === 'total') {
+				val_a = (a["total"] && a["total"].closing_qty) || 0;
+				val_b = (b["total"] && b["total"].closing_qty) || 0;
 			} else {
 				// Parse sort key into category and field
 				const [category, field] = this.sort_by.split('_');
-				
 				if (category && field && a[category] && b[category]) {
 					val_a = a[category][field + '_qty'] || 0;
 					val_b = b[category][field + '_qty'] || 0;
@@ -203,14 +203,11 @@ class AggregatedStockMovement {
 				}
 			}
 			
-			// Compare based on data type
 			if (typeof val_a === 'string') {
-				// String comparison
 				const comparison = val_a.localeCompare(val_b);
 				return this.sort_order === 'asc' ? comparison : -comparison;
 			} else {
-				// Numeric comparison
-				const comparison = val_a - val_b;
+				const comparison = (val_a - val_b);
 				return this.sort_order === 'asc' ? comparison : -comparison;
 			}
 		});
@@ -241,64 +238,59 @@ class AggregatedStockMovement {
 								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
 									Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 								</th>
-							<th colspan="4" class="finished-product-header">Finished Product</th>
-							<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
-							<th colspan="4" class="products-header">Products</th>
-							<th rowspan="2" class="grand-total-header">Total</th>
-						</tr>
-						<tr>
-							<th class="finished-product-subheader sortable" data-sort="Finished Product_opening">
-								Opening <i class="sort-icon fa ${this.get_sort_icon('Finished Product_opening')}"></i>
-							</th>
-							<th class="finished-product-subheader sortable" data-sort="Finished Product_incoming">
-								Incoming <i class="sort-icon fa ${this.get_sort_icon('Finished Product_incoming')}"></i>
-							</th>
-							<th class="finished-product-subheader sortable" data-sort="Finished Product_outgoing">
-								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Finished Product_outgoing')}"></i>
-							</th>
-							<th class="finished-product-subheader sortable" data-sort="Finished Product_closing">
-								End Stock <i class="sort-icon fa ${this.get_sort_icon('Finished Product_closing')}"></i>
-							</th>
-							
-							<th class="mat-subheader sortable" data-sort="Mat_opening">
-								Opening <i class="sort-icon fa ${this.get_sort_icon('Mat_opening')}"></i>
-							</th>
-							<th class="mat-subheader sortable" data-sort="Mat_incoming">
-								Incoming <i class="sort-icon fa ${this.get_sort_icon('Mat_incoming')}"></i>
-							</th>
-							<th class="mat-subheader sortable" data-sort="Mat_outgoing">
-								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Mat_outgoing')}"></i>
-							</th>
-							<th class="mat-subheader sortable" data-sort="Mat_closing">
-								End Stock <i class="sort-icon fa ${this.get_sort_icon('Mat_closing')}"></i>
-							</th>
-							
-							<th class="products-subheader sortable" data-sort="Products_opening">
-								Opening <i class="sort-icon fa ${this.get_sort_icon('Products_opening')}"></i>
-							</th>
-							<th class="products-subheader sortable" data-sort="Products_incoming">
-								Incoming <i class="sort-icon fa ${this.get_sort_icon('Products_incoming')}"></i>
-							</th>
-							<th class="products-subheader sortable" data-sort="Products_outgoing">
-								Outgoing <i class="sort-icon fa ${this.get_sort_icon('Products_outgoing')}"></i>
-							</th>
-							<th class="products-subheader sortable" data-sort="Products_closing">
-								End Stock <i class="sort-icon fa ${this.get_sort_icon('Products_closing')}"></i>
-							</th>
-						</tr>
-					</thead>
-					<tbody>`;
+								<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
+								<th colspan="4" class="products-header">Products</th>
+								<th colspan="4" class="finished-product-header">Finished Product</th>
+								<th rowspan="2" class="grand-total-header sortable" data-sort="total">Total <i class="sort-icon fa ${this.get_sort_icon('total')}"></i></th>
+							</tr>
+							<tr>
+								<th class="mat-subheader sortable" data-sort="Mat_opening">
+									Opening <i class="sort-icon fa ${this.get_sort_icon('Mat_opening')}"></i>
+								</th>
+								<th class="mat-subheader sortable" data-sort="Mat_incoming">
+									Incoming <i class="sort-icon fa ${this.get_sort_icon('Mat_incoming')}"></i>
+								</th>
+								<th class="mat-subheader sortable" data-sort="Mat_outgoing">
+									Outgoing <i class="sort-icon fa ${this.get_sort_icon('Mat_outgoing')}"></i>
+								</th>
+								<th class="mat-subheader sortable" data-sort="Mat_closing">
+									End Stock <i class="sort-icon fa ${this.get_sort_icon('Mat_closing')}"></i>
+								</th>
+								
+								<th class="products-subheader sortable" data-sort="Products_opening">
+									Opening <i class="sort-icon fa ${this.get_sort_icon('Products_opening')}"></i>
+								</th>
+								<th class="products-subheader sortable" data-sort="Products_incoming">
+									Incoming <i class="sort-icon fa ${this.get_sort_icon('Products_incoming')}"></i>
+								</th>
+								<th class="products-subheader sortable" data-sort="Products_outgoing">
+									Outgoing <i class="sort-icon fa ${this.get_sort_icon('Products_outgoing')}"></i>
+								</th>
+								<th class="products-subheader sortable" data-sort="Products_closing">
+									End Stock <i class="sort-icon fa ${this.get_sort_icon('Products_closing')}"></i>
+								</th>
+								
+								<th class="finished-product-subheader sortable" data-sort="Finished Product_opening">
+									Opening <i class="sort-icon fa ${this.get_sort_icon('Finished Product_opening')}"></i>
+								</th>
+								<th class="finished-product-subheader sortable" data-sort="Finished Product_incoming">
+									Incoming <i class="sort-icon fa ${this.get_sort_icon('Finished Product_incoming')}"></i>
+								</th>
+								<th class="finished-product-subheader sortable" data-sort="Finished Product_outgoing">
+									Outgoing <i class="sort-icon fa ${this.get_sort_icon('Finished Product_outgoing')}"></i>
+								</th>
+								<th class="finished-product-subheader sortable" data-sort="Finished Product_closing">
+									End Stock <i class="sort-icon fa ${this.get_sort_icon('Finished Product_closing')}"></i>
+								</th>
+							</tr>
+						</thead>
+						<tbody>`;
 		
 		// Add rows for each item
 		data.forEach(item => {
 			html += `
 				<tr>
-					<td class="item-code sticky-column">${item.common_code}</td>
-					
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].closing_qty)}</td>
+					<td class="item-code sticky-column"><a href="#" class="common-code-link" data-code="${item.common_code}" title="View item codes and stock ledger entries">${item.common_code}</a></td>
 					
 					<td class="mat-cell">${this.format_number(item["Mat"].opening_qty)}</td>
 					<td class="mat-cell">${this.format_number(item["Mat"].incoming_qty)}</td>
@@ -310,6 +302,11 @@ class AggregatedStockMovement {
 					<td class="products-cell">${this.format_number(item["Products"].outgoing_qty)}</td>
 					<td class="products-cell">${this.format_number(item["Products"].closing_qty)}</td>
 					
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
+					<td class="finished-product-cell">${this.format_number(item["Finished Product"].closing_qty)}</td>
+					
 					<td class="grand-total-cell">${this.format_number(item["total"].closing_qty)}</td>
 				</tr>`;
 		});
@@ -318,11 +315,6 @@ class AggregatedStockMovement {
 		html += `
 			<tr class="grand-total-row">
 				<td class="total-label sticky-column"><strong>Grand Total</strong></td>
-				
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
 				
 				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].opening_qty)}</strong></td>
 				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].incoming_qty)}</strong></td>
@@ -334,6 +326,11 @@ class AggregatedStockMovement {
 				<td class="products-total"><strong>${this.format_number(grand_total["Products"].outgoing_qty)}</strong></td>
 				<td class="products-total"><strong>${this.format_number(grand_total["Products"].closing_qty)}</strong></td>
 				
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
+				
 				<td class="grand-total-total"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
 			</tr>`;
 		
@@ -343,7 +340,7 @@ class AggregatedStockMovement {
 				</div>
 				<div class="mt-2">
 					${this.has_converted_mat_items ? '<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
-					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext's batch-wise calculation logic</div>
+					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext\'s batch-wise calculation logic</div>
 					<div class="text-info small"><strong>Warehouse Filter:</strong> ${this.warehouse_filter || 'All Warehouses'}</div>
 					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
 				</div>
@@ -400,20 +397,16 @@ class AggregatedStockMovement {
 	}
 	
 	format_number(value) {
-		// Round to nearest whole number as per requirements
-		return frappe.format(Math.round(value || 0), {fieldtype: 'Int'});
+		// Round to nearest whole number and format with Indian grouping (e.g., 1,23,456)
+		const num = Math.round(value || 0);
+		return num.toLocaleString('en-IN');
 	}
 
 	// Helper to round numbers without formatting for CSV
-	round_number(value) {
-		return Math.round(value || 0);
-	}
+	round_number(value) { return Math.round(value || 0); }
 
 	// Sanitize file name parts
-	sanitize_filename(text) {
-		if (!text) return '';
-		return String(text).replace(/[^a-z0-9-_\.]+/gi, '_');
-	}
+	sanitize_filename(text) { if (!text) return ''; return String(text).replace(/[^a-z0-9-_\.]+/gi, '_'); }
 
 	// Export current (filtered + sorted) data to CSV
 	export_to_csv() {
@@ -422,106 +415,57 @@ class AggregatedStockMovement {
 				frappe.msgprint(__('No data to export. Please run the report.'));
 				return;
 			}
-
 			const matUom = this.has_converted_mat_items ? (this.mat_uom || 'Nos') : 'kg';
 			const header = [
 				'Common Code',
-				'Finished Product Opening',
-				'Finished Product Incoming',
-				'Finished Product Outgoing',
-				'Finished Product End Stock',
-				`Mat Opening (${matUom})`,
-				`Mat Incoming (${matUom})`,
-				`Mat Outgoing (${matUom})`,
-				`Mat End Stock (${matUom})`,
-				'Products Opening',
-				'Products Incoming',
-				'Products Outgoing',
-				'Products End Stock',
+				`Mat Opening (${matUom})`, `Mat Incoming (${matUom})`, `Mat Outgoing (${matUom})`, `Mat End Stock (${matUom})`,
+				'Products Opening', 'Products Incoming', 'Products Outgoing', 'Products End Stock',
+				'Finished Product Opening', 'Finished Product Incoming', 'Finished Product Outgoing', 'Finished Product End Stock',
 				'Total'
 			];
-
 			const rows = [header];
-
 			this.filtered_data.forEach(item => {
 				const fp = item['Finished Product'] || {};
 				const mat = item['Mat'] || {};
 				const prod = item['Products'] || {};
 				const total = item['total'] || {};
-
 				rows.push([
 					item.common_code || '',
-					this.round_number(fp.opening_qty),
-					this.round_number(fp.incoming_qty),
-					this.round_number(fp.outgoing_qty),
-					this.round_number(fp.closing_qty),
-					this.round_number(mat.opening_qty),
-					this.round_number(mat.incoming_qty),
-					this.round_number(mat.outgoing_qty),
-					this.round_number(mat.closing_qty),
-					this.round_number(prod.opening_qty),
-					this.round_number(prod.incoming_qty),
-					this.round_number(prod.outgoing_qty),
-					this.round_number(prod.closing_qty),
+					this.round_number(mat.opening_qty), this.round_number(mat.incoming_qty), this.round_number(mat.outgoing_qty), this.round_number(mat.closing_qty),
+					this.round_number(prod.opening_qty), this.round_number(prod.incoming_qty), this.round_number(prod.outgoing_qty), this.round_number(prod.closing_qty),
+					this.round_number(fp.opening_qty), this.round_number(fp.incoming_qty), this.round_number(fp.outgoing_qty), this.round_number(fp.closing_qty),
 					this.round_number(total.closing_qty)
 				]);
 			});
-
-			// Grand total row
 			const gt = this.grand_total || {};
 			rows.push([
 				'Grand Total',
-				this.round_number(gt['Finished Product']?.opening_qty),
-				this.round_number(gt['Finished Product']?.incoming_qty),
-				this.round_number(gt['Finished Product']?.outgoing_qty),
-				this.round_number(gt['Finished Product']?.closing_qty),
-				this.round_number(gt['Mat']?.opening_qty),
-				this.round_number(gt['Mat']?.incoming_qty),
-				this.round_number(gt['Mat']?.outgoing_qty),
-				this.round_number(gt['Mat']?.closing_qty),
-				this.round_number(gt['Products']?.opening_qty),
-				this.round_number(gt['Products']?.incoming_qty),
-				this.round_number(gt['Products']?.outgoing_qty),
-				this.round_number(gt['Products']?.closing_qty),
+				this.round_number(gt['Mat']?.opening_qty), this.round_number(gt['Mat']?.incoming_qty), this.round_number(gt['Mat']?.outgoing_qty), this.round_number(gt['Mat']?.closing_qty),
+				this.round_number(gt['Products']?.opening_qty), this.round_number(gt['Products']?.incoming_qty), this.round_number(gt['Products']?.outgoing_qty), this.round_number(gt['Products']?.closing_qty),
+				this.round_number(gt['Finished Product']?.opening_qty), this.round_number(gt['Finished Product']?.incoming_qty), this.round_number(gt['Finished Product']?.outgoing_qty), this.round_number(gt['Finished Product']?.closing_qty),
 				this.round_number(gt?.closing_qty)
 			]);
-
-			// Convert to CSV with proper escaping
 			const csv = rows.map(r => r.map(v => {
 				const val = (v === null || v === undefined) ? '' : String(v);
-				const escaped = val.replace(/"/g, '""');
+				const escaped = val.replace(/\"/g, '""');
 				return `"${escaped}"`;
 			}).join(',')).join('\n');
-
-			// Prepare filename with filters
 			const from = this.filters?.from_date?.get_value?.() || '';
 			const to = this.filters?.to_date?.get_value?.() || '';
 			const wh = this.warehouse_filter ? this.sanitize_filename(this.warehouse_filter) : 'All_Warehouses';
 			const fname = this.sanitize_filename(`aggregated_stock_movement_${from}_to_${to}_${wh}.csv`);
-
-			// Trigger download (add BOM for Excel compatibility)
 			const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
 			if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-				// IE/Edge legacy
 				window.navigator.msSaveOrOpenBlob(blob, fname);
 			} else {
 				const url = URL.createObjectURL(blob);
 				const a = document.createElement('a');
-				a.href = url;
-				a.download = fname;
-				a.style.display = 'none';
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				URL.revokeObjectURL(url);
+				a.href = url; a.download = fname; a.style.display = 'none';
+				document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 			}
 		} catch (e) {
 			console.error('CSV export failed', e);
-			frappe.msgprint({
-				title: __('Export Failed'),
-				indicator: 'red',
-				message: __('Could not export to CSV. See console for details.')
-			});
+			frappe.msgprint({ title: __('Export Failed'), indicator: 'red', message: __('Could not export to CSV. See console for details.') });
 		}
 	}
 	
@@ -549,6 +493,7 @@ class AggregatedStockMovement {
 					border-spacing: 0;
 					margin: 0;
 					position: relative;
+					table-layout: fixed;
 				}
 				.sticky-column {
 					position: sticky;
@@ -558,161 +503,73 @@ class AggregatedStockMovement {
 					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
 					background-color: inherit !important;
 					min-width: 120px;
-					max-width: 200px;
+					max-width: 160px;
 				}
 				.sticky-table thead .sticky-column {
 					z-index: 20;
 					background-color: #343a40 !important;
 				}
-				}
 				.stock-movement-report th {
 					font-weight: bold;
 					text-align: center;
 					vertical-align: middle !important;
-					padding: 8px 10px;
+					padding: 6px 6px; /* tighter to fit page */
 					border: 1px solid #dee2e6;
 					position: relative;
 					white-space: nowrap;
 				}
 				.stock-movement-report td {
 					text-align: right;
-					padding: 6px 10px;
+					padding: 4px 6px; /* tighter to fit page */
 					border: 1px solid #dee2e6;
 				}
-				.sortable {
-					cursor: pointer;
+				/* Fit columns within page */
+				.stock-movement-report th:not(.sticky-column),
+				.stock-movement-report td:not(.sticky-column) {
+					min-width: 80px;
+					max-width: 100px;
 				}
-				.sortable:hover {
-					background-color: rgba(0, 0, 0, 0.05);
-				}
-				.sort-icon {
-					margin-left: 5px;
-				}
+				.sortable { cursor: pointer; }
+				.sortable:hover { background-color: rgba(0, 0, 0, 0.05); }
+				.sort-icon { margin-left: 5px; }
 				
 				/* Header Styling */
-				.common-code-header {
-					background-color: #343a40;
-					color: white;
-					font-weight: bold;
-				}
-				
-				/* Finished Product Header */
-				.finished-product-header {
-					background-color: #3498db;
-					color: white;
-					font-weight: bold;
-				}
-				.finished-product-subheader {
-					background-color: #5dade2;
-					color: white;
-				}
-				.finished-product-cell {
-					background-color: #ebf5fb;
-				}
-				.finished-product-total {
-					background-color: #d6eaf8;
-					font-weight: bold;
-				}
-				
+				.common-code-header { background-color: #343a40; color: white; font-weight: bold; }
 				/* Mat Header */
-				.mat-header {
-					background-color: #e74c3c;
-					color: white;
-					font-weight: bold;
-				}
-				.mat-subheader {
-					background-color: #ec7063;
-					color: white;
-				}
-				.mat-cell {
-					background-color: #fdedec;
-				}
-				.mat-total {
-					background-color: #f5b7b1;
-					font-weight: bold;
-				}
-				
+				.mat-header { background-color: #e74c3c; color: white; font-weight: bold; }
+				.mat-subheader { background-color: #ec7063; color: white; }
+				.mat-cell { background-color: #fdedec; }
+				.mat-total { background-color: #f5b7b1; font-weight: bold; }
 				/* Products Header */
-				.products-header {
-					background-color: #2ecc71;
-					color: white;
-					font-weight: bold;
-				}
-				.products-subheader {
-					background-color: #58d68d;
-					color: white;
-				}
-				.products-cell {
-					background-color: #eafaf1;
-				}
-				.products-total {
-					background-color: #abebc6;
-					font-weight: bold;
-				}
-				
+				.products-header { background-color: #2ecc71; color: white; font-weight: bold; }
+				.products-subheader { background-color: #58d68d; color: white; }
+				.products-cell { background-color: #eafaf1; }
+				.products-total { background-color: #abebc6; font-weight: bold; }
+				/* Finished Product Header */
+				.finished-product-header { background-color: #3498db; color: white; font-weight: bold; }
+				.finished-product-subheader { background-color: #5dade2; color: white; }
+				.finished-product-cell { background-color: #ebf5fb; }
+				.finished-product-total { background-color: #d6eaf8; font-weight: bold; }
 				/* Grand Total Header */
-				.grand-total-header {
-					background-color: #9b59b6;
-					color: white;
-					font-weight: bold;
-				}
-				.grand-total-cell {
-					background-color: #f4ecf7;
-					font-weight: bold;
-				}
-				.grand-total-total {
-					background-color: #d2b4de;
-					font-weight: bold;
-				}
-				
+				.grand-total-header { background-color: #9b59b6; color: white; font-weight: bold; }
+				.grand-total-cell { background-color: #f4ecf7; font-weight: bold; }
+				.grand-total-total { background-color: #d2b4de; font-weight: bold; }
 				/* Common Styles */
-				.stock-movement-report .item-code {
-					text-align: left;
-					background-color: #f8f9fa !important;
-					font-weight: bold;
-				}
-				.stock-movement-report .sticky-column.item-code {
-					background-color: #f8f9fa !important;
-				}
-				.grand-total-row {
-					border-top: 2px solid #666;
-				}
-				.total-label {
-					background-color: #343a40 !important;
-					color: white;
-					font-weight: bold;
-					text-align: left !important;
-				}
-				.stock-movement-report .sticky-column.total-label {
-					background-color: #343a40 !important;
-				}
-				
+				.stock-movement-report .item-code { text-align: left; background-color: #f8f9fa !important; font-weight: bold; }
+				.stock-movement-report .sticky-column.item-code { background-color: #f8f9fa !important; }
+				.grand-total-row { border-top: 2px solid #666; }
+				.total-label { background-color: #343a40 !important; color: white; font-weight: bold; text-align: left !important; }
+				.stock-movement-report .sticky-column.total-label { background-color: #343a40 !important; }
 				/* Hover effects */
-				.stock-movement-report tbody tr:hover td {
-					box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-				}
-				.stock-movement-report tbody tr:hover .sticky-column {
-					background-color: #e9ecef !important;
-					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-				}
-				.stock-movement-report .grand-total-row:hover .sticky-column.total-label {
-					background-color: #495057 !important;
-				}
-				
-				/* Responsive design */
+				.stock-movement-report tbody tr:hover td { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1); }
+				.stock-movement-report tbody tr:hover .sticky-column { background-color: #e9ecef !important; box-shadow: 2px 0 4px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.1); }
+				.stock-movement-report .grand-total-row:hover .sticky-column.total-label { background-color: #495057 !important; }
+				/* Responsive */
 				@media (max-width: 768px) {
-					.table-container {
-						font-size: 12px;
-					}
-					.stock-movement-report th,
-					.stock-movement-report td {
-						padding: 4px 6px;
-					}
-					.sticky-column {
-						min-width: 80px;
-						max-width: 120px;
-						font-size: 11px;
-					}
+					.table-container { font-size: 12px; }
+					.stock-movement-report th, .stock-movement-report td { padding: 4px 6px; }
+					.sticky-column { min-width: 90px; max-width: 120px; font-size: 11px; }
+					.stock-movement-report th:not(.sticky-column), .stock-movement-report td:not(.sticky-column) { min-width: 70px; max-width: 90px; }
 				}
 			`)
 			.appendTo("head");
