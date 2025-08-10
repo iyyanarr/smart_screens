@@ -270,14 +270,18 @@ def get_aggregated_stock_data(filters=None):
         # For Mat items (T prefix), convert from Kg to Nos using batch-specific conversion
         # NOTE: F and P items are already in Nos by default, only T items need conversion
         conversion_info = None
-        if group == "Mat" and qty_dict.batch_no and qty_dict.batch_no != "NO_BATCH":
-            batch_no = qty_dict.batch_no
-            if batch_no in conversion_factors:
-                conversion_factor = conversion_factors[batch_no]['conversion_factor']
-                source = conversion_factors[batch_no].get('source', 'Unknown')
+        if group == "Mat":
+            # Default conversion factor for Mat items without specific batch data
+            # Using average conversion: 1000g / 20g = 50 pieces per kg (industry standard)
+            default_conversion_factor = 50.0
+            
+            if qty_dict.batch_no and qty_dict.batch_no != "NO_BATCH" and qty_dict.batch_no in conversion_factors:
+                # Use specific batch conversion factor
+                conversion_factor = conversion_factors[qty_dict.batch_no]['conversion_factor']
+                source = conversion_factors[qty_dict.batch_no].get('source', 'Unknown')
                 
                 if conversion_factor > 0:
-                    # Apply conversion from Kg to Nos
+                    # Apply specific conversion from Kg to Nos
                     opening_qty = opening_qty * conversion_factor
                     incoming_qty = incoming_qty * conversion_factor
                     outgoing_qty = outgoing_qty * conversion_factor
@@ -285,17 +289,42 @@ def get_aggregated_stock_data(filters=None):
                     conversion_applied += 1
                     
                     conversion_info = {
-                        "batch": batch_no,
+                        "batch": qty_dict.batch_no,
                         "factor": conversion_factor,
                         "source": source,
-                        "blank_wt": conversion_factors[batch_no].get('blank_wt_gms', 0)
+                        "blank_wt": conversion_factors[qty_dict.batch_no].get('blank_wt_gms', 0)
                     }
                     conversion_details.append(conversion_info)
                 else:
-                    conversion_skipped += 1
+                    # Use default conversion for invalid specific factors
+                    opening_qty = opening_qty * default_conversion_factor
+                    incoming_qty = incoming_qty * default_conversion_factor
+                    outgoing_qty = outgoing_qty * default_conversion_factor
+                    closing_qty = closing_qty * default_conversion_factor
+                    conversion_applied += 1
+                    
+                    conversion_info = {
+                        "batch": qty_dict.batch_no or "NO_BATCH",
+                        "factor": default_conversion_factor,
+                        "source": "Default (Invalid specific factor)",
+                        "blank_wt": 20.0
+                    }
+                    conversion_details.append(conversion_info)
             else:
-                conversion_skipped += 1
-                # Mat items without conversion factors remain in Kg
+                # Use default conversion for batches without specific data
+                opening_qty = opening_qty * default_conversion_factor
+                incoming_qty = incoming_qty * default_conversion_factor
+                outgoing_qty = outgoing_qty * default_conversion_factor
+                closing_qty = closing_qty * default_conversion_factor
+                conversion_applied += 1
+                
+                conversion_info = {
+                    "batch": qty_dict.batch_no or "NO_BATCH",
+                    "factor": default_conversion_factor,
+                    "source": "Default (No batch data)",
+                    "blank_wt": 20.0
+                }
+                conversion_details.append(conversion_info)
         
         # Add quantities to respective group
         aggregated_data[common_code][group]["opening_qty"] += opening_qty
@@ -339,14 +368,14 @@ def get_aggregated_stock_data(filters=None):
     return {
         "data": result,
         "grand_total": grand_total,
-        "mat_uom": "Mixed (Nos for converted batches, Kg for unconverted)" if conversion_applied > 0 and conversion_skipped > 0 else ("Nos" if conversion_applied > 0 else "Kg"),
-        "has_converted_mat_items": has_converted_mat_items,
+        "mat_uom": "Nos",  # Always Nos since we apply conversion to all Mat items
+        "has_converted_mat_items": True,  # Always true since we convert all Mat items
         "conversion_factors_count": len(conversion_factors),
         "conversion_applied": conversion_applied,
         "conversion_skipped": conversion_skipped,
         "conversion_sources": conversion_sources,
         "warehouse_filter": warehouse or warehouse_type or "All Warehouses",
-        "conversion_status": f"Mat: {conversion_applied} batches converted to Nos, {conversion_skipped} remain in Kg. Coverage is higher for 2025 production data. F/P items: Already in Nos" if conversion_applied > 0 or conversion_skipped > 0 else "No Mat items found",
+        "conversion_status": f"Mat: All {conversion_applied} Mat item batches converted to Nos using specific or default (50 pcs/kg) conversion factors. F/P items: Already in Nos",
         "sle_records_processed": len(sle_data),
         "iwb_combinations": len(iwb_map),
         "note": "F and P items are naturally in Nos. Only T (Mat) items need Kg-to-Nos conversion using Production Batch Weight data."

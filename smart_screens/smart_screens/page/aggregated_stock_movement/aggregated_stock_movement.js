@@ -143,9 +143,7 @@ class AggregatedStockMovement {
 		
 		// Add container for the report
 		this.$report_container = $('<div class="report-container">').appendTo(this.page.main);
-		this.$report_container.html(`<div class="text-muted">Loading report...</div>`);
-		
-		frappe.call({
+		this.$report_container.html(`<div class="text-muted">Loading report...</div>`);				frappe.call({
 			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_aggregated_stock_data',
 			args: {
 				filters: filters
@@ -154,8 +152,8 @@ class AggregatedStockMovement {
 				if (r.message && r.message.data) {
 					this.original_data = r.message.data;
 					this.grand_total = r.message.grand_total;
-					this.mat_uom = r.message.mat_uom || "kg";
-					this.has_converted_mat_items = r.message.has_converted_mat_items || false;
+					this.mat_uom = "Nos";  // Always Nos since we apply conversion to all Mat items
+					this.has_converted_mat_items = true;  // Always true since we convert all Mat items
 					this.warehouse_filter = r.message.warehouse_filter || "All Warehouses";
 					this.filtered_data = [...this.original_data];
 					this.sort_data();
@@ -225,6 +223,7 @@ class AggregatedStockMovement {
 		const grand_total = this.grand_total;
 		
 		if (!data || data.length === 0) {
+			
 			this.$report_container.html(`<div class="text-muted">No data found</div>`);
 			return;
 		}
@@ -238,7 +237,7 @@ class AggregatedStockMovement {
 								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
 									Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 								</th>
-								<th colspan="4" class="mat-header">Mat (${this.has_converted_mat_items ? this.mat_uom : 'kg'})</th>
+								<th colspan="4" class="mat-header">Mat (Nos)</th>
 								<th colspan="4" class="products-header">Products</th>
 								<th colspan="4" class="finished-product-header">Finished Product</th>
 								<th rowspan="2" class="grand-total-header sortable" data-sort="total">Total <i class="sort-icon fa ${this.get_sort_icon('total')}"></i></th>
@@ -339,9 +338,9 @@ class AggregatedStockMovement {
 				</table>
 				</div>
 				<div class="mt-2">
-					${this.has_converted_mat_items ? '<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos) instead of kg based on UOM conversion factors</div>' : ''}
 					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext\'s batch-wise calculation logic</div>
 					<div class="text-info small"><strong>Warehouse Filter:</strong> ${this.warehouse_filter || 'All Warehouses'}</div>
+					<div class="text-info small"><strong>Mat Conversion:</strong> All Mat items converted from Kg to Nos using specific batch data or default 50 pcs/kg factor</div>
 					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
 				</div>
 			</div>
@@ -368,6 +367,13 @@ class AggregatedStockMovement {
 			
 			this.sort_data();
 			this.render_report();
+		});
+		
+		// Bind common code drill-down events
+		this.$report_container.find('.common-code-link').on('click', (e) => {
+			e.preventDefault();
+			const common_code = $(e.currentTarget).data('code');
+			this.show_common_code_details(common_code);
 		});
 	}
 	
@@ -415,7 +421,7 @@ class AggregatedStockMovement {
 				frappe.msgprint(__('No data to export. Please run the report.'));
 				return;
 			}
-			const matUom = this.has_converted_mat_items ? (this.mat_uom || 'Nos') : 'kg';
+			const matUom = 'Nos';  // Always Nos since we convert all Mat items
 			const header = [
 				'Common Code',
 				`Mat Opening (${matUom})`, `Mat Incoming (${matUom})`, `Mat Outgoing (${matUom})`, `Mat End Stock (${matUom})`,
@@ -573,5 +579,109 @@ class AggregatedStockMovement {
 				}
 			`)
 			.appendTo("head");
+	}
+	
+	show_common_code_details(common_code) {
+		if (!common_code) return;
+		
+		const filters = {
+			from_date: this.filters.from_date.get_value(),
+			to_date: this.filters.to_date.get_value(),
+			warehouse: this.filters.warehouse.get_value(),
+			warehouse_type: this.filters.warehouse_type.get_value()
+		};
+		
+		// Call backend to get details
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_common_code_details',
+			args: {
+				common_code: common_code,
+				filters: filters
+			},
+			callback: (r) => {
+				if (r.message) {
+					this.render_common_code_dialog(common_code, r.message);
+				}
+			}
+		});
+	}
+	
+	render_common_code_dialog(common_code, data) {
+		const items = data.items || [];
+		const sle_samples = data.sle_samples || [];
+		const counts = data.counts || {items: 0, sle: 0};
+		
+		// Build items table
+		let items_html = '<table class="table table-bordered table-sm"><thead><tr><th>Item Code</th><th>Item Name</th><th>Prefix</th><th>Item Group</th><th>UOM</th></tr></thead><tbody>';
+		
+		if (items.length > 0) {
+			items.forEach(item => {
+				items_html += `<tr>
+					<td><strong>${item.item_code}</strong></td>
+					<td>${item.item_name || ''}</td>
+					<td><span class="badge badge-${item.prefix === 'P' ? 'success' : item.prefix === 'F' ? 'info' : 'warning'}">${item.prefix}</span></td>
+					<td>${item.item_group || ''}</td>
+					<td>${item.stock_uom || ''}</td>
+				</tr>`;
+			});
+		} else {
+			items_html += '<tr><td colspan="5" class="text-muted text-center">No items found</td></tr>';
+		}
+		items_html += '</tbody></table>';
+		
+		// Build SLE samples table
+		let sle_html = '<table class="table table-bordered table-sm"><thead><tr><th>Date</th><th>Item Code</th><th>Warehouse</th><th>Batch</th><th>Qty</th><th>Voucher</th></tr></thead><tbody>';
+		
+		if (sle_samples.length > 0) {
+			sle_samples.forEach(sle => {
+				const qty_class = sle.actual_qty > 0 ? 'text-success' : 'text-danger';
+				sle_html += `<tr>
+					<td>${sle.posting_date}</td>
+					<td><code>${sle.item_code}</code></td>
+					<td>${sle.warehouse}</td>
+					<td>${sle.batch_no || '-'}</td>
+					<td class="${qty_class}">${sle.actual_qty}</td>
+					<td><small>${sle.voucher_type}: ${sle.voucher_no}</small></td>
+				</tr>`;
+			});
+		} else {
+			sle_html += '<tr><td colspan="6" class="text-muted text-center">No stock ledger entries found</td></tr>';
+		}
+		sle_html += '</tbody></table>';
+		
+		// Create dialog content
+		const content = `
+			<div class="common-code-details">
+				<div class="row">
+					<div class="col-md-6">
+						<h5>Item Codes (${counts.items})</h5>
+						<div style="max-height: 300px; overflow-y: auto;">
+							${items_html}
+						</div>
+					</div>
+					<div class="col-md-6">
+						<h5>Recent Stock Ledger Entries (${Math.min(counts.sle, 100)})</h5>
+						<div style="max-height: 300px; overflow-y: auto;">
+							${sle_html}
+						</div>
+					</div>
+				</div>
+			</div>
+		`;
+		
+		// Show dialog
+		const dialog = new frappe.ui.Dialog({
+			title: `Common Code: ${common_code}`,
+			size: 'extra-large',
+			fields: [
+				{
+					fieldtype: 'HTML',
+					fieldname: 'details_html',
+					options: content
+				}
+			]
+		});
+		
+		dialog.show();
 	}
 }
