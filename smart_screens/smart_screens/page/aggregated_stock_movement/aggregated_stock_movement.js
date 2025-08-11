@@ -585,82 +585,82 @@ class AggregatedStockMovement {
 				}
 				
 				.sortable { cursor: pointer; transition: background-color 0.2s ease; }
-				.sortable:hover { background-color: rgba(0, 0, 0, 0.06); }
+				.sortable:hover { background-color: rgba(44, 62, 80, 0.08); }
 				.sort-icon { margin-left: 4px; opacity: 0.7; }
 				
-				/* Professional header styling with subtle colors */
+				/* Professional header styling with monochromatic blue-gray theme */
 				.common-code-header { 
 					background-color: #2c3e50; 
 					color: white; 
 					font-weight: 600; 
 				}
 				
-				/* Mat columns - subtle blue-gray theme */
+				/* Mat columns - darkest tone */
 				.mat-header { 
-					background: linear-gradient(135deg, #4a6741 0%, #5d7c56 100%); 
+					background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); 
 					color: white; 
 					font-weight: 600; 
 				}
 				.mat-subheader { 
-					background: linear-gradient(135deg, #6b8566 0%, #7a9575 100%); 
+					background: linear-gradient(135deg, #5d6d7e 0%, #566573 100%); 
 					color: white; 
 					font-weight: 500; 
 				}
 				.mat-cell { 
-					background-color: #f8faf8; 
-					border-left: 3px solid #e8f2e8;
+					background-color: #fafbfc; 
+					border-left: 3px solid #ecf0f1;
 				}
 				.mat-total { 
-					background-color: #e8f2e8; 
+					background-color: #ecf0f1; 
 					font-weight: 600; 
-					border-left: 3px solid #c8e6c8;
+					border-left: 3px solid #d5dbdb;
 				}
 				
-				/* Products columns - subtle green theme */
+				/* Products columns - medium tone */
 				.products-header { 
-					background: linear-gradient(135deg, #2980b9 0%, #3498db 100%); 
+					background: linear-gradient(135deg, #5d6d7e 0%, #566573 100%); 
 					color: white; 
 					font-weight: 600; 
 				}
 				.products-subheader { 
-					background: linear-gradient(135deg, #5dade2 0%, #7fb3d3 100%); 
+					background: linear-gradient(135deg, #85929e 0%, #7d8a97 100%); 
 					color: white; 
 					font-weight: 500; 
 				}
 				.products-cell { 
-					background-color: #f8fafb; 
-					border-left: 3px solid #e8f4f8;
+					background-color: #fbfcfc; 
+					border-left: 3px solid #eef2f3;
 				}
 				.products-total { 
-					background-color: #e8f4f8; 
+					background-color: #eef2f3; 
 					font-weight: 600; 
-					border-left: 3px solid #c8e8f0;
+					border-left: 3px solid #d8e2e3;
 				}
 				
-				/* Finished Product columns - subtle orange theme */
+				/* Finished Product columns - lighter tone */
 				.finished-product-header { 
-					background: linear-gradient(135deg, #8e44ad 0%, #a569bd 100%); 
+					background: linear-gradient(135deg, #85929e 0%, #7d8a97 100%); 
 					color: white; 
 					font-weight: 600; 
 				}
 				.finished-product-subheader { 
-					background: linear-gradient(135deg, #bb8fce 0%, #c39bd3 100%); 
+					background: linear-gradient(135deg, #aab7b8 0%, #a3b1b2 100%); 
 					color: white; 
 					font-weight: 500; 
 				}
 				.finished-product-cell { 
-					background-color: #faf9fb; 
-					border-left: 3px solid #f0ebf3;
+					background-color: #fcfdfd; 
+					border-left: 3px solid #f4f6f6;
 				}
 				.finished-product-total { 
-					background-color: #f0ebf3; 
+					background-color: #f4f6f6; 
 					font-weight: 600; 
-					border-left: 3px solid #e0d6e6;
+					border-left: 3px solid #e5ebec;
 				}
 				
-				/* Grand Total column */
+				/* Grand Total column - accent tone */
 				.grand-total-header { 
-					background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); 
+					background: linear-gradient(135deg, #2c3e50 0%, #1b2631 100%); 
 					color: white; 
 					font-weight: 600; 
 				}
@@ -672,7 +672,7 @@ class AggregatedStockMovement {
 				.grand-total-total { 
 					background-color: #e9ecef; 
 					font-weight: 700; 
-					border-left: 3px solid #dee2e6;
+					border-left: 3px solid #d1d7dd;
 					color: #2c3e50;
 				}
 				
@@ -709,20 +709,20 @@ class AggregatedStockMovement {
 					background-color: #2c3e50 !important; 
 				}
 				
-				/* Enhanced hover effects */
+				/* Enhanced hover effects with consistent color theme */
 				.stock-movement-report tbody tr:hover td { 
-					background-color: rgba(52, 73, 94, 0.05) !important;
+					background-color: rgba(44, 62, 80, 0.04) !important;
 					transition: background-color 0.2s ease;
 				}
 				.stock-movement-report tbody tr:hover .sticky-column { 
-					background-color: rgba(52, 73, 94, 0.08) !important; 
-					box-shadow: 2px 0 8px rgba(0, 0, 0, 0.12);
+					background-color: rgba(44, 62, 80, 0.06) !important; 
+					box-shadow: 2px 0 8px rgba(44, 62, 80, 0.12);
 				}
 				.stock-movement-report .grand-total-row:hover .sticky-column.total-label { 
 					background-color: #34495e !important; 
 				}
 				
-				/* Link styling */
+				/* Link styling with consistent theme */
 				.common-code-link {
 					color: #2c3e50;
 					text-decoration: none;
@@ -730,7 +730,7 @@ class AggregatedStockMovement {
 					transition: color 0.2s ease;
 				}
 				.common-code-link:hover {
-					color: #3498db;
+					color: #34495e;
 					text-decoration: underline;
 				}
 				
