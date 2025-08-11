@@ -231,6 +231,9 @@ class AggregatedStockMovement {
 			return;
 		}
 		
+		// Calculate value ranges for color coding
+		this.value_ranges = this.calculate_value_ranges(data);
+		
 		let html = `
 			<div class="stock-movement-report">
 				<div class="table-container">
@@ -294,22 +297,22 @@ class AggregatedStockMovement {
 				<tr>
 					<td class="item-code sticky-column"><a href="#" class="common-code-link" data-code="${item.common_code}" title="View item codes and stock ledger entries">${item.common_code}</a></td>
 					
-					<td class="mat-cell">${this.format_number(item["Mat"].opening_qty)}</td>
-					<td class="mat-cell">${this.format_number(item["Mat"].incoming_qty)}</td>
-					<td class="mat-cell">${this.format_number(item["Mat"].outgoing_qty)}</td>
-					<td class="mat-cell">${this.format_number(item["Mat"].closing_qty)}</td>
+					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].opening_qty, this.value_ranges.mat.opening.min, this.value_ranges.mat.opening.max, 'mat')}">${this.format_number(item["Mat"].opening_qty)}</td>
+					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].incoming_qty, this.value_ranges.mat.incoming.min, this.value_ranges.mat.incoming.max, 'mat')}">${this.format_number(item["Mat"].incoming_qty)}</td>
+					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].outgoing_qty, this.value_ranges.mat.outgoing.min, this.value_ranges.mat.outgoing.max, 'mat')}">${this.format_number(item["Mat"].outgoing_qty)}</td>
+					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].closing_qty, this.value_ranges.mat.closing.min, this.value_ranges.mat.closing.max, 'mat')}">${this.format_number(item["Mat"].closing_qty)}</td>
 					
-					<td class="products-cell">${this.format_number(item["Products"].opening_qty)}</td>
-					<td class="products-cell">${this.format_number(item["Products"].incoming_qty)}</td>
-					<td class="products-cell">${this.format_number(item["Products"].outgoing_qty)}</td>
-					<td class="products-cell">${this.format_number(item["Products"].closing_qty)}</td>
+					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].opening_qty, this.value_ranges.products.opening.min, this.value_ranges.products.opening.max, 'products')}">${this.format_number(item["Products"].opening_qty)}</td>
+					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].incoming_qty, this.value_ranges.products.incoming.min, this.value_ranges.products.incoming.max, 'products')}">${this.format_number(item["Products"].incoming_qty)}</td>
+					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].outgoing_qty, this.value_ranges.products.outgoing.min, this.value_ranges.products.outgoing.max, 'products')}">${this.format_number(item["Products"].outgoing_qty)}</td>
+					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].closing_qty, this.value_ranges.products.closing.min, this.value_ranges.products.closing.max, 'products')}">${this.format_number(item["Products"].closing_qty)}</td>
 					
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].opening_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].incoming_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
-					<td class="finished-product-cell">${this.format_number(item["Finished Product"].closing_qty)}</td>
+					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].opening_qty, this.value_ranges.finished_product.opening.min, this.value_ranges.finished_product.opening.max, 'finished_product')}">${this.format_number(item["Finished Product"].opening_qty)}</td>
+					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].incoming_qty, this.value_ranges.finished_product.incoming.min, this.value_ranges.finished_product.incoming.max, 'finished_product')}">${this.format_number(item["Finished Product"].incoming_qty)}</td>
+					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].outgoing_qty, this.value_ranges.finished_product.outgoing.min, this.value_ranges.finished_product.outgoing.max, 'finished_product')}">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
+					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}">${this.format_number(item["Finished Product"].closing_qty)}</td>
 					
-					<td class="grand-total-cell">${this.format_number(item["total"].closing_qty)}</td>
+					<td class="grand-total-cell" style="background-color: ${this.get_color_intensity(item["total"].closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}">${this.format_number(item["total"].closing_qty)}</td>
 				</tr>`;
 		});
 		
@@ -318,22 +321,22 @@ class AggregatedStockMovement {
 			<tr class="grand-total-row">
 				<td class="total-label sticky-column"><strong>Grand Total</strong></td>
 				
-				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].opening_qty)}</strong></td>
-				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].incoming_qty)}</strong></td>
-				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].outgoing_qty)}</strong></td>
-				<td class="mat-total"><strong>${this.format_number(grand_total["Mat"].closing_qty)}</strong></td>
+				<td class="mat-total" style="background-color: ${this.get_color_intensity(grand_total["Mat"].opening_qty, this.value_ranges.mat.opening.min, this.value_ranges.mat.opening.max, 'mat')}"><strong>${this.format_number(grand_total["Mat"].opening_qty)}</strong></td>
+				<td class="mat-total" style="background-color: ${this.get_color_intensity(grand_total["Mat"].incoming_qty, this.value_ranges.mat.incoming.min, this.value_ranges.mat.incoming.max, 'mat')}"><strong>${this.format_number(grand_total["Mat"].incoming_qty)}</strong></td>
+				<td class="mat-total" style="background-color: ${this.get_color_intensity(grand_total["Mat"].outgoing_qty, this.value_ranges.mat.outgoing.min, this.value_ranges.mat.outgoing.max, 'mat')}"><strong>${this.format_number(grand_total["Mat"].outgoing_qty)}</strong></td>
+				<td class="mat-total" style="background-color: ${this.get_color_intensity(grand_total["Mat"].closing_qty, this.value_ranges.mat.closing.min, this.value_ranges.mat.closing.max, 'mat')}"><strong>${this.format_number(grand_total["Mat"].closing_qty)}</strong></td>
 				
-				<td class="products-total"><strong>${this.format_number(grand_total["Products"].opening_qty)}</strong></td>
-				<td class="products-total"><strong>${this.format_number(grand_total["Products"].incoming_qty)}</strong></td>
-				<td class="products-total"><strong>${this.format_number(grand_total["Products"].outgoing_qty)}</strong></td>
-				<td class="products-total"><strong>${this.format_number(grand_total["Products"].closing_qty)}</strong></td>
+				<td class="products-total" style="background-color: ${this.get_color_intensity(grand_total["Products"].opening_qty, this.value_ranges.products.opening.min, this.value_ranges.products.opening.max, 'products')}"><strong>${this.format_number(grand_total["Products"].opening_qty)}</strong></td>
+				<td class="products-total" style="background-color: ${this.get_color_intensity(grand_total["Products"].incoming_qty, this.value_ranges.products.incoming.min, this.value_ranges.products.incoming.max, 'products')}"><strong>${this.format_number(grand_total["Products"].incoming_qty)}</strong></td>
+				<td class="products-total" style="background-color: ${this.get_color_intensity(grand_total["Products"].outgoing_qty, this.value_ranges.products.outgoing.min, this.value_ranges.products.outgoing.max, 'products')}"><strong>${this.format_number(grand_total["Products"].outgoing_qty)}</strong></td>
+				<td class="products-total" style="background-color: ${this.get_color_intensity(grand_total["Products"].closing_qty, this.value_ranges.products.closing.min, this.value_ranges.products.closing.max, 'products')}"><strong>${this.format_number(grand_total["Products"].closing_qty)}</strong></td>
 				
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
-				<td class="finished-product-total"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
+				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].opening_qty, this.value_ranges.finished_product.opening.min, this.value_ranges.finished_product.opening.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].opening_qty)}</strong></td>
+				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].incoming_qty, this.value_ranges.finished_product.incoming.min, this.value_ranges.finished_product.incoming.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
+				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].outgoing_qty, this.value_ranges.finished_product.outgoing.min, this.value_ranges.finished_product.outgoing.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
+				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
 				
-				<td class="grand-total-total"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
+				<td class="grand-total-total" style="background-color: ${this.get_color_intensity(grand_total.closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
 			</tr>`;
 		
 		html += `
@@ -468,6 +471,79 @@ class AggregatedStockMovement {
 			console.error('CSV export failed', e);
 			frappe.msgprint({ title: __('Export Failed'), indicator: 'red', message: __('Could not export to CSV. See console for details.') });
 		}
+	}
+
+	// Calculate min/max values for each column to determine color intensity ranges
+	calculate_value_ranges(data) {
+		const ranges = {
+			mat: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
+			products: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
+			finished_product: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
+			total: { closing: {min: 0, max: 0} }
+		};
+		
+		if (!data || data.length === 0) return ranges;
+		
+		// Extract all values for each column
+		const mat_opening = data.map(item => item["Mat"].opening_qty || 0);
+		const mat_incoming = data.map(item => item["Mat"].incoming_qty || 0);
+		const mat_outgoing = data.map(item => item["Mat"].outgoing_qty || 0);
+		const mat_closing = data.map(item => item["Mat"].closing_qty || 0);
+		
+		const products_opening = data.map(item => item["Products"].opening_qty || 0);
+		const products_incoming = data.map(item => item["Products"].incoming_qty || 0);
+		const products_outgoing = data.map(item => item["Products"].outgoing_qty || 0);
+		const products_closing = data.map(item => item["Products"].closing_qty || 0);
+		
+		const fp_opening = data.map(item => item["Finished Product"].opening_qty || 0);
+		const fp_incoming = data.map(item => item["Finished Product"].incoming_qty || 0);
+		const fp_outgoing = data.map(item => item["Finished Product"].outgoing_qty || 0);
+		const fp_closing = data.map(item => item["Finished Product"].closing_qty || 0);
+		
+		const total_closing = data.map(item => item["total"].closing_qty || 0);
+		
+		// Calculate min/max for each column
+		ranges.mat.opening = { min: Math.min(...mat_opening), max: Math.max(...mat_opening) };
+		ranges.mat.incoming = { min: Math.min(...mat_incoming), max: Math.max(...mat_incoming) };
+		ranges.mat.outgoing = { min: Math.min(...mat_outgoing), max: Math.max(...mat_outgoing) };
+		ranges.mat.closing = { min: Math.min(...mat_closing), max: Math.max(...mat_closing) };
+		
+		ranges.products.opening = { min: Math.min(...products_opening), max: Math.max(...products_opening) };
+		ranges.products.incoming = { min: Math.min(...products_incoming), max: Math.max(...products_incoming) };
+		ranges.products.outgoing = { min: Math.min(...products_outgoing), max: Math.max(...products_outgoing) };
+		ranges.products.closing = { min: Math.min(...products_closing), max: Math.max(...products_closing) };
+		
+		ranges.finished_product.opening = { min: Math.min(...fp_opening), max: Math.max(...fp_opening) };
+		ranges.finished_product.incoming = { min: Math.min(...fp_incoming), max: Math.max(...fp_incoming) };
+		ranges.finished_product.outgoing = { min: Math.min(...fp_outgoing), max: Math.max(...fp_outgoing) };
+		ranges.finished_product.closing = { min: Math.min(...fp_closing), max: Math.max(...fp_closing) };
+		
+		ranges.total.closing = { min: Math.min(...total_closing), max: Math.max(...total_closing) };
+		
+		return ranges;
+	}
+
+	// Generate background color intensity based on value and range
+	get_color_intensity(value, min_val, max_val, base_color) {
+		if (max_val === min_val) return 'rgba(248, 249, 250, 0.3)'; // Default light color if no range
+		
+		// Normalize value to 0-1 range
+		const normalized = Math.max(0, Math.min(1, (value - min_val) / (max_val - min_val)));
+		
+		// Define color intensities based on column type
+		const color_configs = {
+			mat: { r: 96, g: 125, b: 139 },        // Blue-gray for Mat
+			products: { r: 84, g: 110, b: 122 },   // Slightly different blue-gray for Products  
+			finished_product: { r: 69, g: 90, b: 100 }, // Darker blue-gray for Finished Product
+			total: { r: 44, g: 62, b: 80 }         // Darkest blue-gray for Total
+		};
+		
+		const config = color_configs[base_color] || color_configs.mat;
+		
+		// Calculate opacity based on normalized value (0.1 to 0.8 range)
+		const opacity = 0.1 + (normalized * 0.7);
+		
+		return `rgba(${config.r}, ${config.g}, ${config.b}, ${opacity})`;
 	}
 
 	// Utility: numeric formatting with smart decimals and lakh separators
@@ -607,13 +683,13 @@ class AggregatedStockMovement {
 					font-weight: 500; 
 				}
 				.mat-cell { 
-					background-color: #fafbfc; 
 					border-left: 3px solid #ecf0f1;
+					/* Background color applied dynamically via inline styles */
 				}
 				.mat-total { 
-					background-color: #ecf0f1; 
 					font-weight: 600; 
 					border-left: 3px solid #d5dbdb;
+					/* Background color applied dynamically via inline styles */
 				}
 				
 				/* Products columns - medium tone */
@@ -628,13 +704,13 @@ class AggregatedStockMovement {
 					font-weight: 500; 
 				}
 				.products-cell { 
-					background-color: #fbfcfc; 
 					border-left: 3px solid #eef2f3;
+					/* Background color applied dynamically via inline styles */
 				}
 				.products-total { 
-					background-color: #eef2f3; 
 					font-weight: 600; 
 					border-left: 3px solid #d8e2e3;
+					/* Background color applied dynamically via inline styles */
 				}
 				
 				/* Finished Product columns - lighter tone */
@@ -649,13 +725,13 @@ class AggregatedStockMovement {
 					font-weight: 500; 
 				}
 				.finished-product-cell { 
-					background-color: #fcfdfd; 
 					border-left: 3px solid #f4f6f6;
+					/* Background color applied dynamically via inline styles */
 				}
 				.finished-product-total { 
-					background-color: #f4f6f6; 
 					font-weight: 600; 
 					border-left: 3px solid #e5ebec;
+					/* Background color applied dynamically via inline styles */
 				}
 				
 				/* Grand Total column - accent tone */
@@ -676,10 +752,7 @@ class AggregatedStockMovement {
 					color: #2c3e50;
 				}
 				
-				/* Alternating row colors for better readability */
-				.stock-movement-report tbody tr:nth-child(even) td:not(.sticky-column) {
-					background-color: rgba(248, 249, 250, 0.5);
-				}
+				/* Alternating row colors removed - using dynamic value-based colors instead */
 				
 				/* Item code column styling */
 				.stock-movement-report .item-code { 
