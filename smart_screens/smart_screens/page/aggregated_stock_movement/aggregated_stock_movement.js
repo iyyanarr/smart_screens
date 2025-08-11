@@ -341,7 +341,7 @@ class AggregatedStockMovement {
 				</table>
 				</div>
 				<div class="mt-2">
-					<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos). Batch-wise conversion applied where possible.</div>
+					<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos). Large numbers formatted in Indian system (K=Thousands, L=Lakhs, Cr=Crores). Batch-wise conversion applied where possible.</div>
 					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext\'s batch-wise calculation logic</div>
 					<div class="text-info small"><strong>Warehouse Filter:</strong> ${this.warehouse_filter || 'All Warehouses'}</div>
 					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
@@ -470,13 +470,23 @@ class AggregatedStockMovement {
 		}
 	}
 
-	// Utility: numeric formatting with smart decimals
+	// Utility: numeric formatting with smart decimals and lakh separators
 	format_number(value) {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return '0';
 		const abs = Math.abs(n);
-		const decimals = abs === 0 || Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
-		return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+		
+		// Format in Indian number system (lakhs/crores)
+		if (abs >= 10000000) { // 1 crore
+			return (n / 10000000).toFixed(2) + ' Cr';
+		} else if (abs >= 100000) { // 1 lakh
+			return (n / 100000).toFixed(2) + ' L';
+		} else if (abs >= 1000) { // 1 thousand
+			return (n / 1000).toFixed(1) + 'K';
+		} else {
+			const decimals = abs === 0 || Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
+			return n.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+		}
 	}
 
 	// Utility: round for CSV/raw values
@@ -503,22 +513,24 @@ class AggregatedStockMovement {
 	}
 	
 	apply_styles() {
-		// Add custom styles for the report with colorful headers and sticky first column
+		// Add modern, professional styles with improved readability
 		$("<style>")
 			.prop("type", "text/css")
 			.html(`
 				.stock-movement-report {
 					position: relative;
 					width: 100%;
+					font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 				}
 				.table-container {
 					overflow-x: auto;
 					overflow-y: visible;
 					max-width: 100%;
-					border: 1px solid #dee2e6;
-					border-radius: 0.375rem;
-					box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+					border: 1px solid #e1e5e9;
+					border-radius: 8px;
+					box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 					position: relative;
+					background: white;
 				}
 				.sticky-table {
 					min-width: 100%;
@@ -527,90 +539,247 @@ class AggregatedStockMovement {
 					margin: 0;
 					position: relative;
 					table-layout: fixed;
+					font-size: 13px;
 				}
 				.sticky-column {
 					position: sticky;
 					left: 0;
 					z-index: 10;
-					border-right: 2px solid #adb5bd !important;
-					box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+					border-right: 2px solid #d1d9e0 !important;
+					box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
 					background-color: inherit !important;
 					min-width: 120px;
-					max-width: 160px;
+					max-width: 140px;
 				}
 				.sticky-table thead .sticky-column {
 					z-index: 20;
-					background-color: #343a40 !important;
+					background-color: #2c3e50 !important;
 				}
+				
+				/* Enhanced cell spacing and typography */
 				.stock-movement-report th {
-					font-weight: bold;
+					font-weight: 600;
 					text-align: center;
 					vertical-align: middle !important;
-					padding: 6px 6px; /* tighter to fit page */
-					border: 1px solid #dee2e6;
+					padding: 12px 8px;
+					border: 1px solid #e1e5e9;
 					position: relative;
 					white-space: nowrap;
+					font-size: 12px;
+					letter-spacing: 0.3px;
 				}
 				.stock-movement-report td {
 					text-align: right;
-					padding: 4px 6px; /* tighter to fit page */
-					border: 1px solid #dee2e6;
+					padding: 10px 8px;
+					border: 1px solid #f1f3f5;
+					font-size: 12px;
+					font-weight: 500;
+					line-height: 1.4;
 				}
-				/* Fit columns within page */
+				
+				/* Improved column widths for number readability */
 				.stock-movement-report th:not(.sticky-column),
 				.stock-movement-report td:not(.sticky-column) {
-					min-width: 80px;
-					max-width: 100px;
+					min-width: 95px;
+					max-width: 110px;
 				}
-				.sortable { cursor: pointer; }
-				.sortable:hover { background-color: rgba(0, 0, 0, 0.05); }
-				.sort-icon { margin-left: 5px; }
 				
-				/* Header Styling */
-				.common-code-header { background-color: #343a40; color: white; font-weight: bold; }
-				/* Mat Header */
-				.mat-header { background-color: #e74c3c; color: white; font-weight: bold; }
-				.mat-subheader { background-color: #ec7063; color: white; }
-				.mat-cell { background-color: #fdedec; }
-				.mat-total { background-color: #f5b7b1; font-weight: bold; }
-				/* Products Header */
-				.products-header { background-color: #2ecc71; color: white; font-weight: bold; }
-				.products-subheader { background-color: #58d68d; color: white; }
-				.products-cell { background-color: #eafaf1; }
-				.products-total { background-color: #abebc6; font-weight: bold; }
-				/* Finished Product Header */
-				.finished-product-header { background-color: #3498db; color: white; font-weight: bold; }
-				.finished-product-subheader { background-color: #5dade2; color: white; }
-				.finished-product-cell { background-color: #ebf5fb; }
-				.finished-product-total { background-color: #d6eaf8; font-weight: bold; }
-				/* Grand Total Header */
-				.grand-total-header { background-color: #9b59b6; color: white; font-weight: bold; }
-				.grand-total-cell { background-color: #f4ecf7; font-weight: bold; }
-				.grand-total-total { background-color: #d2b4de; font-weight: bold; }
-				/* Common Styles */
-				.stock-movement-report .item-code { text-align: left; background-color: #f8f9fa !important; font-weight: bold; }
-				.stock-movement-report .sticky-column.item-code { background-color: #f8f9fa !important; }
-				.grand-total-row { border-top: 2px solid #666; }
-				.total-label { background-color: #343a40 !important; color: white; font-weight: bold; text-align: left !important; }
-				.stock-movement-report .sticky-column.total-label { background-color: #343a40 !important; }
-				/* Hover effects */
-				.stock-movement-report tbody tr:hover td { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1); }
-				.stock-movement-report tbody tr:hover .sticky-column { background-color: #e9ecef !important; box-shadow: 2px 0 4px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.1); }
-				.stock-movement-report .grand-total-row:hover .sticky-column.total-label { background-color: #495057 !important; }
-				/* Responsive */
+				.sortable { cursor: pointer; transition: background-color 0.2s ease; }
+				.sortable:hover { background-color: rgba(0, 0, 0, 0.06); }
+				.sort-icon { margin-left: 4px; opacity: 0.7; }
+				
+				/* Professional header styling with subtle colors */
+				.common-code-header { 
+					background-color: #2c3e50; 
+					color: white; 
+					font-weight: 600; 
+				}
+				
+				/* Mat columns - subtle blue-gray theme */
+				.mat-header { 
+					background: linear-gradient(135deg, #4a6741 0%, #5d7c56 100%); 
+					color: white; 
+					font-weight: 600; 
+				}
+				.mat-subheader { 
+					background: linear-gradient(135deg, #6b8566 0%, #7a9575 100%); 
+					color: white; 
+					font-weight: 500; 
+				}
+				.mat-cell { 
+					background-color: #f8faf8; 
+					border-left: 3px solid #e8f2e8;
+				}
+				.mat-total { 
+					background-color: #e8f2e8; 
+					font-weight: 600; 
+					border-left: 3px solid #c8e6c8;
+				}
+				
+				/* Products columns - subtle green theme */
+				.products-header { 
+					background: linear-gradient(135deg, #2980b9 0%, #3498db 100%); 
+					color: white; 
+					font-weight: 600; 
+				}
+				.products-subheader { 
+					background: linear-gradient(135deg, #5dade2 0%, #7fb3d3 100%); 
+					color: white; 
+					font-weight: 500; 
+				}
+				.products-cell { 
+					background-color: #f8fafb; 
+					border-left: 3px solid #e8f4f8;
+				}
+				.products-total { 
+					background-color: #e8f4f8; 
+					font-weight: 600; 
+					border-left: 3px solid #c8e8f0;
+				}
+				
+				/* Finished Product columns - subtle orange theme */
+				.finished-product-header { 
+					background: linear-gradient(135deg, #8e44ad 0%, #a569bd 100%); 
+					color: white; 
+					font-weight: 600; 
+				}
+				.finished-product-subheader { 
+					background: linear-gradient(135deg, #bb8fce 0%, #c39bd3 100%); 
+					color: white; 
+					font-weight: 500; 
+				}
+				.finished-product-cell { 
+					background-color: #faf9fb; 
+					border-left: 3px solid #f0ebf3;
+				}
+				.finished-product-total { 
+					background-color: #f0ebf3; 
+					font-weight: 600; 
+					border-left: 3px solid #e0d6e6;
+				}
+				
+				/* Grand Total column */
+				.grand-total-header { 
+					background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); 
+					color: white; 
+					font-weight: 600; 
+				}
+				.grand-total-cell { 
+					background-color: #f8f9fa; 
+					font-weight: 600; 
+					border-left: 3px solid #e9ecef;
+				}
+				.grand-total-total { 
+					background-color: #e9ecef; 
+					font-weight: 700; 
+					border-left: 3px solid #dee2e6;
+					color: #2c3e50;
+				}
+				
+				/* Alternating row colors for better readability */
+				.stock-movement-report tbody tr:nth-child(even) td:not(.sticky-column) {
+					background-color: rgba(248, 249, 250, 0.5);
+				}
+				
+				/* Item code column styling */
+				.stock-movement-report .item-code { 
+					text-align: left; 
+					background-color: #f8f9fa !important; 
+					font-weight: 600; 
+					font-family: 'Courier New', monospace;
+					color: #2c3e50;
+				}
+				.stock-movement-report .sticky-column.item-code { 
+					background-color: #f8f9fa !important; 
+				}
+				
+				/* Grand total row */
+				.grand-total-row { 
+					border-top: 3px solid #2c3e50; 
+					background-color: #f8f9fa;
+				}
+				.total-label { 
+					background-color: #2c3e50 !important; 
+					color: white; 
+					font-weight: 700; 
+					text-align: left !important; 
+					font-size: 13px;
+				}
+				.stock-movement-report .sticky-column.total-label { 
+					background-color: #2c3e50 !important; 
+				}
+				
+				/* Enhanced hover effects */
+				.stock-movement-report tbody tr:hover td { 
+					background-color: rgba(52, 73, 94, 0.05) !important;
+					transition: background-color 0.2s ease;
+				}
+				.stock-movement-report tbody tr:hover .sticky-column { 
+					background-color: rgba(52, 73, 94, 0.08) !important; 
+					box-shadow: 2px 0 8px rgba(0, 0, 0, 0.12);
+				}
+				.stock-movement-report .grand-total-row:hover .sticky-column.total-label { 
+					background-color: #34495e !important; 
+				}
+				
+				/* Link styling */
+				.common-code-link {
+					color: #2c3e50;
+					text-decoration: none;
+					font-weight: 600;
+					transition: color 0.2s ease;
+				}
+				.common-code-link:hover {
+					color: #3498db;
+					text-decoration: underline;
+				}
+				
+				/* Responsive design */
 				@media (max-width: 768px) {
-					.table-container { font-size: 12px; }
-					.stock-movement-report th, .stock-movement-report td { padding: 4px 6px; }
-					.sticky-column { min-width: 90px; max-width: 120px; font-size: 11px; }
-					.stock-movement-report th:not(.sticky-column), .stock-movement-report td:not(.sticky-column) { min-width: 70px; max-width: 90px; }
+					.table-container { font-size: 11px; }
+					.stock-movement-report th, .stock-movement-report td { 
+						padding: 8px 6px; 
+						font-size: 11px;
+					}
+					.sticky-column { 
+						min-width: 100px; 
+						max-width: 120px; 
+					}
+					.stock-movement-report th:not(.sticky-column), 
+					.stock-movement-report td:not(.sticky-column) { 
+						min-width: 85px; 
+						max-width: 95px; 
+					}
 				}
 
-				/* Skeleton loader */
-				@keyframes shimmer { 0% { background-position: -450px 0; } 100% { background-position: 450px 0; } }
-				.skeleton { position: relative; overflow: hidden; }
-				.skeleton::after { content: ''; position: absolute; top:0; left:0; right:0; bottom:0; background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,.5) 50%, rgba(255,255,255,0) 100%); background-size: 450px 100%; animation: shimmer 1.2s infinite; }
-				.skeleton-cell { background-color: #f1f3f5; color: transparent; }
-				.skeleton-header { background-color: #dee2e6; color: transparent; }
+				/* Skeleton loader with improved animation */
+				@keyframes shimmer { 
+					0% { background-position: -450px 0; } 
+					100% { background-position: 450px 0; } 
+				}
+				.skeleton { 
+					position: relative; 
+					overflow: hidden; 
+				}
+				.skeleton::after { 
+					content: ''; 
+					position: absolute; 
+					top: 0; left: 0; right: 0; bottom: 0; 
+					background-image: linear-gradient(90deg, 
+						rgba(255,255,255,0) 0%, 
+						rgba(255,255,255,0.6) 50%, 
+						rgba(255,255,255,0) 100%); 
+					background-size: 450px 100%; 
+					animation: shimmer 1.5s ease-in-out infinite; 
+				}
+				.skeleton-cell { 
+					background-color: #f1f3f5; 
+					color: transparent; 
+				}
+				.skeleton-header { 
+					background-color: #dee2e6; 
+					color: transparent; 
+				}
 			`)
 			.appendTo("head");
 	}
