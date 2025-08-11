@@ -143,12 +143,14 @@ class AggregatedStockMovement {
 		
 		// Add container for the report
 		this.$report_container = $('<div class="report-container">').appendTo(this.page.main);
-		this.$report_container.html(`<div class="text-muted">Loading report...</div>`);				frappe.call({
+		this.show_loading();
+		frappe.call({
 			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_aggregated_stock_data',
 			args: {
 				filters: filters
 			},
 			callback: (r) => {
+				this.hide_loading();
 				if (r.message && r.message.data) {
 					this.original_data = r.message.data;
 					this.grand_total = r.message.grand_total;
@@ -158,6 +160,8 @@ class AggregatedStockMovement {
 					this.filtered_data = [...this.original_data];
 					this.sort_data();
 					this.render_report();
+				} else {
+					this.$report_container.html('<div class="text-muted">No data found</div>');
 				}
 			}
 		});
@@ -223,7 +227,6 @@ class AggregatedStockMovement {
 		const grand_total = this.grand_total;
 		
 		if (!data || data.length === 0) {
-			
 			this.$report_container.html(`<div class="text-muted">No data found</div>`);
 			return;
 		}
@@ -235,7 +238,7 @@ class AggregatedStockMovement {
 						<thead>
 							<tr>
 								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
-									Common Code <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
+									Item Name <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 								</th>
 								<th colspan="4" class="mat-header">Mat (Nos)</th>
 								<th colspan="4" class="products-header">Products</th>
@@ -338,9 +341,9 @@ class AggregatedStockMovement {
 				</table>
 				</div>
 				<div class="mt-2">
+					<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos). Batch-wise conversion applied where possible.</div>
 					<div class="text-info small"><strong>Data Source:</strong> Stock Ledger Entries processed using ERPNext\'s batch-wise calculation logic</div>
 					<div class="text-info small"><strong>Warehouse Filter:</strong> ${this.warehouse_filter || 'All Warehouses'}</div>
-					<div class="text-info small"><strong>Mat Conversion:</strong> All Mat items converted from Kg to Nos using specific batch data or default 50 pcs/kg factor</div>
 					<div class="text-muted small"><strong>Last Updated:</strong> ${frappe.datetime.get_datetime_as_string()}</div>
 				</div>
 			</div>
@@ -368,63 +371,55 @@ class AggregatedStockMovement {
 			this.sort_data();
 			this.render_report();
 		});
-		
-		// Bind common code drill-down events
-		this.$report_container.find('.common-code-link').on('click', (e) => {
+
+		// Bind drill-down click on item name links
+		this.$report_container.on('click', '.common-code-link', (e) => {
 			e.preventDefault();
-			const common_code = $(e.currentTarget).data('code');
-			this.show_common_code_details(common_code);
+			const code = $(e.currentTarget).data('code');
+			this.show_common_code_details(code);
 		});
 	}
-	
-	enhance_sticky_column() {
-		// Ensure sticky column behavior works properly by forcing browser to recognize sticky positioning
-		const $stickyColumns = this.$report_container.find('.sticky-column');
-		
-		// Force repaint for sticky positioning to work correctly
-		$stickyColumns.each(function() {
-			const $col = $(this);
-			// Trigger a reflow to ensure sticky positioning is applied
-			$col[0].offsetHeight;
-			
-			// Ensure background is opaque
-			if (!$col.hasClass('common-code-header') && !$col.hasClass('total-label')) {
-				$col.css('background-color', '#f8f9fa');
+
+	show_common_code_details(common_code) {
+		const filters = {
+			from_date: this.filters.from_date.get_value(),
+			to_date: this.filters.to_date.get_value(),
+			warehouse: this.filters.warehouse.get_value(),
+			warehouse_type: this.filters.warehouse_type.get_value()
+		};
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_common_code_details',
+			args: { common_code, filters },
+			callback: (r) => {
+				if (!r.message) { frappe.msgprint(__('No details found')); return; }
+				const { items = [], sle_samples = [], counts = {} } = r.message;
+				const d = new frappe.ui.Dialog({
+					title: `Details for ${common_code}`,
+					size: 'large'
+				});
+				let html = '<div style="max-height:60vh; overflow:auto;">';
+				html += '<h5>Items</h5>';
+				html += '<ul>' + items.map(it => `<li><strong>${frappe.utils.escape_html(it.item_code)}</strong> (${frappe.utils.escape_html(it.item_group)} | ${frappe.utils.escape_html(it.prefix)})</li>`).join('') + '</ul>';
+				html += '<h5>Recent Stock Ledger Entries</h5>';
+				html += '<table class="table table-bordered"><thead><tr><th>Date</th><th>Item</th><th>Warehouse</th><th>Batch</th><th>Qty</th><th>Voucher</th></tr></thead><tbody>' +
+					sle_samples.map(s => `<tr><td>${frappe.datetime.str_to_user(s.posting_date)} ${s.posting_time || ''}</td><td>${frappe.utils.escape_html(s.item_code)}</td><td>${frappe.utils.escape_html(s.warehouse || '')}</td><td>${frappe.utils.escape_html(s.batch_no || '')}</td><td style="text-align:right;">${this.format_number(s.actual_qty)}</td><td>${frappe.utils.escape_html(s.voucher_type || '')} ${frappe.utils.escape_html(s.voucher_no || '')}</td></tr>`).join('') +
+					'</tbody></table>';
+				html += '</div>';
+				d.$body.html(html);
+				d.show();
 			}
 		});
-		
-		// Ensure table container has proper scrolling behavior
-		const $tableContainer = this.$report_container.find('.table-container');
-		$tableContainer.css({
-			'overflow-x': 'auto',
-			'overflow-y': 'visible',
-			'position': 'relative'
-		});
-	}
-	
-	format_number(value) {
-		// Round to nearest whole number and format with Indian grouping (e.g., 1,23,456)
-		const num = Math.round(value || 0);
-		return num.toLocaleString('en-IN');
 	}
 
-	// Helper to round numbers without formatting for CSV
-	round_number(value) { return Math.round(value || 0); }
-
-	// Sanitize file name parts
-	sanitize_filename(text) { if (!text) return ''; return String(text).replace(/[^a-z0-9-_\.]+/gi, '_'); }
-
-	// Export current (filtered + sorted) data to CSV
 	export_to_csv() {
 		try {
 			if (!this.filtered_data || !this.grand_total) {
 				frappe.msgprint(__('No data to export. Please run the report.'));
 				return;
 			}
-			const matUom = 'Nos';  // Always Nos since we convert all Mat items
 			const header = [
-				'Common Code',
-				`Mat Opening (${matUom})`, `Mat Incoming (${matUom})`, `Mat Outgoing (${matUom})`, `Mat End Stock (${matUom})`,
+				'Item Name',
+				'Mat Opening (Nos)', 'Mat Incoming (Nos)', 'Mat Outgoing (Nos)', 'Mat End Stock (Nos)',
 				'Products Opening', 'Products Incoming', 'Products Outgoing', 'Products End Stock',
 				'Finished Product Opening', 'Finished Product Incoming', 'Finished Product Outgoing', 'Finished Product End Stock',
 				'Total'
@@ -472,6 +467,38 @@ class AggregatedStockMovement {
 		} catch (e) {
 			console.error('CSV export failed', e);
 			frappe.msgprint({ title: __('Export Failed'), indicator: 'red', message: __('Could not export to CSV. See console for details.') });
+		}
+	}
+
+	// Utility: numeric formatting with smart decimals
+	format_number(value) {
+		const n = Number(value || 0);
+		if (!isFinite(n)) return '0';
+		const abs = Math.abs(n);
+		const decimals = abs === 0 || Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
+		return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+	}
+
+	// Utility: round for CSV/raw values
+	round_number(value, decimals = 2) {
+		const n = Number(value || 0);
+		if (!isFinite(n)) return 0;
+		const factor = Math.pow(10, decimals);
+		return Math.round(n * factor) / factor;
+	}
+
+	// Utility: safe filenames
+	sanitize_filename(name) {
+		return String(name || '').replace(/[^a-z0-9\-_\.]+/gi, '_');
+	}
+
+	// Enhance sticky column behavior (no-op placeholder with minor fix)
+	enhance_sticky_column() {
+		// Ensure sticky column has explicit width to avoid jitter
+		const $firstCol = this.$report_container.find('table.sticky-table td.sticky-column, table.sticky-table th.sticky-column');
+		if ($firstCol.length) {
+			const w = $firstCol.first().outerWidth();
+			$firstCol.css('min-width', w).css('max-width', w);
 		}
 	}
 	
@@ -577,6 +604,13 @@ class AggregatedStockMovement {
 					.sticky-column { min-width: 90px; max-width: 120px; font-size: 11px; }
 					.stock-movement-report th:not(.sticky-column), .stock-movement-report td:not(.sticky-column) { min-width: 70px; max-width: 90px; }
 				}
+
+				/* Skeleton loader */
+				@keyframes shimmer { 0% { background-position: -450px 0; } 100% { background-position: 450px 0; } }
+				.skeleton { position: relative; overflow: hidden; }
+				.skeleton::after { content: ''; position: absolute; top:0; left:0; right:0; bottom:0; background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,.5) 50%, rgba(255,255,255,0) 100%); background-size: 450px 100%; animation: shimmer 1.2s infinite; }
+				.skeleton-cell { background-color: #f1f3f5; color: transparent; }
+				.skeleton-header { background-color: #dee2e6; color: transparent; }
 			`)
 			.appendTo("head");
 	}
@@ -684,4 +718,60 @@ class AggregatedStockMovement {
 		
 		dialog.show();
 	}
+
+	// Loading skeleton UI
+	show_loading() {
+		const skeletonRows = 6;
+		let bodyRows = '';
+		for (let i = 0; i < skeletonRows; i++) {
+			bodyRows += `
+				<tr>
+					<td class="sticky-column skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+					<td class="skeleton skeleton-cell">&nbsp;</td>
+				</tr>`;
+		}
+		const html = `
+			<div class="stock-movement-report">
+				<div class="table-container">
+					<table class="table table-bordered sticky-table">
+						<thead>
+							<tr>
+								<th class="sticky-column common-code-header skeleton skeleton-header">&nbsp;</th>
+								<th colspan="4" class="mat-header skeleton skeleton-header">&nbsp;</th>
+								<th colspan="4" class="products-header skeleton skeleton-header">&nbsp;</th>
+								<th colspan="4" class="finished-product-header skeleton skeleton-header">&nbsp;</th>
+								<th class="grand-total-header skeleton skeleton-header">&nbsp;</th>
+							</tr>
+							<tr>
+								<th class="sticky-column skeleton skeleton-header">&nbsp;</th>
+								${'<th class="skeleton skeleton-header">&nbsp;</th>'.repeat(13)}
+							</tr>
+						</thead>
+						<tbody>
+							${bodyRows}
+						</tbody>
+					</table>
+				</div>
+				<div class="mt-2 text-muted small">Loading data…</div>
+			</div>`;
+		this.$report_container.html(html);
+	}
+
+	hide_loading() {
+		// No-op; next render will replace content. Kept for symmetry and future enhancements.
+	}
 }
+
+//# sourceMappingURL=aggregated_stock_movement.js.map

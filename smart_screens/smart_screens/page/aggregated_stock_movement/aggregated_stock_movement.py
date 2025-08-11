@@ -18,6 +18,7 @@ def debug_aggregation_data(filters=None):
     debug_query = """
         SELECT 
             sle.item_code,
+            i.item_name,
             SUBSTRING(sle.item_code, 2, 4) as common_code,
             LEFT(sle.item_code, 1) as prefix,
             sle.batch_no,
@@ -38,10 +39,10 @@ def debug_aggregation_data(filters=None):
     posting_datetime = get_datetime(add_to_date(to_date, days=1))
     debug_data = frappe.db.sql(debug_query, (posting_datetime,), as_dict=1)
     
-    # Group by common code and calculate totals
+    # Group by item_name (new common code definition)
     totals = {}
     for d in debug_data:
-        code = d.common_code
+        code = d.item_name
         if code not in totals:
             totals[code] = {"total_qty": 0, "count": 0, "items": []}
         
@@ -67,6 +68,7 @@ def validate_aggregation_accuracy(filters=None):
     sle_query = """
         SELECT 
             sle.item_code,
+            i.item_name,
             sle.posting_date,
             SUM(sle.actual_qty) as actual_qty,
             SUBSTRING(sle.item_code, 2, 4) as common_code,
@@ -88,11 +90,11 @@ def validate_aggregation_accuracy(filters=None):
 @frappe.whitelist()
 def get_aggregated_stock_data(filters=None):
     """
-    Get aggregated stock movement data grouped by item prefix and common code
+    Get aggregated stock movement data grouped by item_name (acts as common code)
     - P items = Products
     - F items = Finished Product  
     - T items = Mat
-    Same item code (e.g., 1101) in different stages (P1101, F1101, T1101)
+    Same item name appears in different stages (P*, F*, T* with same Item.item_name)
     """
     if isinstance(filters, str):
         filters = json.loads(filters)
@@ -138,6 +140,7 @@ def get_aggregated_stock_data(filters=None):
     sle_query = """
         SELECT 
             sle.item_code,
+            i.item_name,
             sle.warehouse,
             sle.batch_no,
             sle.posting_date,
@@ -176,7 +179,12 @@ def get_aggregated_stock_data(filters=None):
     iwb_map = {}
     
     for d in sle_data:
-        if not d.common_code:
+        # Use item_name as the grouping key (new common code)
+        group_key = d.item_name
+        if not group_key:
+            # Fallback to substring-based common code if somehow item_name missing
+            group_key = d.common_code
+        if not group_key:
             continue
             
         # Create unique key for item-warehouse-batch combination
@@ -185,13 +193,14 @@ def get_aggregated_stock_data(filters=None):
         if key not in iwb_map:
             iwb_map[key] = frappe._dict({
                 "item_code": d.item_code,
+                "item_name": d.item_name,
                 "warehouse": d.warehouse,
                 "batch_no": d.batch_no,
                 "opening_qty": 0.0, 
                 "in_qty": 0.0, 
                 "out_qty": 0.0, 
                 "bal_qty": 0.0,
-                "common_code": d.common_code,
+                "common_code": group_key,  # store item_name here
                 "prefix": d.prefix,
                 "stock_uom": d.stock_uom,
                 "item_group": d.item_group
@@ -213,7 +222,7 @@ def get_aggregated_stock_data(filters=None):
         # Balance quantity is cumulative
         qty_dict.bal_qty += actual_qty
     
-    # Step 4: Aggregate by common code and prefix
+    # Step 4: Aggregate by item_name (in qty_dict.common_code)
     aggregated_data = {}
     grand_total = {
         "Finished Product": {"opening_qty": 0, "incoming_qty": 0, "outgoing_qty": 0, "closing_qty": 0},
@@ -231,12 +240,11 @@ def get_aggregated_stock_data(filters=None):
         if not qty_dict.common_code or not qty_dict.prefix:
             continue
             
-        common_code = qty_dict.common_code
+        common_code = qty_dict.common_code  # this is item_name now
         prefix = qty_dict.prefix
         item_group = qty_dict.item_group
         
         # Map item group to report categories
-        # Use actual item_group field first, fallback to prefix mapping
         if item_group == "Products":
             group = "Products"
         elif item_group == "Finished Product" or item_group == "Finished Products":
@@ -268,20 +276,14 @@ def get_aggregated_stock_data(filters=None):
         closing_qty = qty_dict.bal_qty
         
         # For Mat items (T prefix), convert from Kg to Nos using batch-specific conversion
-        # NOTE: F and P items are already in Nos by default, only T items need conversion
         conversion_info = None
-        if group == "Mat":
-            # Default conversion factor for Mat items without specific batch data
-            # Using average conversion: 1000g / 20g = 50 pieces per kg (industry standard)
-            default_conversion_factor = 50.0
-            
-            if qty_dict.batch_no and qty_dict.batch_no != "NO_BATCH" and qty_dict.batch_no in conversion_factors:
-                # Use specific batch conversion factor
-                conversion_factor = conversion_factors[qty_dict.batch_no]['conversion_factor']
-                source = conversion_factors[qty_dict.batch_no].get('source', 'Unknown')
+        if group == "Mat" and qty_dict.batch_no and qty_dict.batch_no != "NO_BATCH":
+            batch_no = qty_dict.batch_no
+            if batch_no in conversion_factors:
+                conversion_factor = conversion_factors[batch_no]['conversion_factor']
+                source = conversion_factors[batch_no].get('source', 'Unknown')
                 
                 if conversion_factor > 0:
-                    # Apply specific conversion from Kg to Nos
                     opening_qty = opening_qty * conversion_factor
                     incoming_qty = incoming_qty * conversion_factor
                     outgoing_qty = outgoing_qty * conversion_factor
@@ -289,42 +291,17 @@ def get_aggregated_stock_data(filters=None):
                     conversion_applied += 1
                     
                     conversion_info = {
-                        "batch": qty_dict.batch_no,
+                        "batch": batch_no,
                         "factor": conversion_factor,
                         "source": source,
-                        "blank_wt": conversion_factors[qty_dict.batch_no].get('blank_wt_gms', 0)
+                        "blank_wt": conversion_factors[batch_no].get('blank_wt_gms', 0)
                     }
                     conversion_details.append(conversion_info)
                 else:
-                    # Use default conversion for invalid specific factors
-                    opening_qty = opening_qty * default_conversion_factor
-                    incoming_qty = incoming_qty * default_conversion_factor
-                    outgoing_qty = outgoing_qty * default_conversion_factor
-                    closing_qty = closing_qty * default_conversion_factor
-                    conversion_applied += 1
-                    
-                    conversion_info = {
-                        "batch": qty_dict.batch_no or "NO_BATCH",
-                        "factor": default_conversion_factor,
-                        "source": "Default (Invalid specific factor)",
-                        "blank_wt": 20.0
-                    }
-                    conversion_details.append(conversion_info)
+                    conversion_skipped += 1
             else:
-                # Use default conversion for batches without specific data
-                opening_qty = opening_qty * default_conversion_factor
-                incoming_qty = incoming_qty * default_conversion_factor
-                outgoing_qty = outgoing_qty * default_conversion_factor
-                closing_qty = closing_qty * default_conversion_factor
-                conversion_applied += 1
-                
-                conversion_info = {
-                    "batch": qty_dict.batch_no or "NO_BATCH",
-                    "factor": default_conversion_factor,
-                    "source": "Default (No batch data)",
-                    "blank_wt": 20.0
-                }
-                conversion_details.append(conversion_info)
+                # No factor found for batch. Optional: leave as-is or apply global default.
+                conversion_skipped += 1
         
         # Add quantities to respective group
         aggregated_data[common_code][group]["opening_qty"] += opening_qty
@@ -368,29 +345,23 @@ def get_aggregated_stock_data(filters=None):
     return {
         "data": result,
         "grand_total": grand_total,
-        "mat_uom": "Nos",  # Always Nos since we apply conversion to all Mat items
-        "has_converted_mat_items": True,  # Always true since we convert all Mat items
+        # Force Nos label for Mat in UI
+        "mat_uom": "Nos",
+        "has_converted_mat_items": True,
         "conversion_factors_count": len(conversion_factors),
         "conversion_applied": conversion_applied,
         "conversion_skipped": conversion_skipped,
         "conversion_sources": conversion_sources,
         "warehouse_filter": warehouse or warehouse_type or "All Warehouses",
-        "conversion_status": f"Mat: All {conversion_applied} Mat item batches converted to Nos using specific or default (50 pcs/kg) conversion factors. F/P items: Already in Nos",
+        "conversion_status": "Mat displayed in Nos. Batch-wise conversion applied where available.",
         "sle_records_processed": len(sle_data),
         "iwb_combinations": len(iwb_map),
-        "note": "F and P items are naturally in Nos. Only T (Mat) items need Kg-to-Nos conversion using Production Batch Weight data."
+        "note": "Grouping by Item Name. F and P items are in Nos. T (Mat) converted to Nos where possible."
     }
 
 def get_mat_kg_to_nos_conversion_factors():
     """
     Get conversion factors for Mat items using Production Batch Weight doctype.
-    This doctype contains pre-calculated blank weights based on production traceability:
-    Batch -> Stock Entry -> Moulding Production Entry -> Mould Specification
-    
-    For historical batches without Production Batch Weight data, use average conversion
-    factors by item code calculated from available Production Batch Weight data.
-    
-    Formula: (Kg Weight * 1000) / avg_blank_wt_gms = Number of pieces
     """
     conversion_data = {}
     
@@ -423,7 +394,6 @@ def get_mat_kg_to_nos_conversion_factors():
             blank_wt_gms = row.blank_wt
             
             if batch_no and blank_wt_gms > 0:
-                # Formula: (Batch Wt. in Kgs * 1000) / avg_blank_wt_gms = Number of pieces
                 conversion_factor = 1000.0 / blank_wt_gms
                 
                 conversion_data[batch_no] = {
@@ -452,7 +422,7 @@ def get_mat_kg_to_nos_conversion_factors():
                 AND item_code IS NOT NULL
                 AND item_code != ''
             GROUP BY item_code
-            HAVING COUNT(*) >= 3  -- Only use items with at least 3 samples
+            HAVING COUNT(*) >= 3
         """
         
         avg_data = frappe.db.sql(item_code_query, as_dict=1)
@@ -475,7 +445,6 @@ def get_mat_kg_to_nos_conversion_factors():
         frappe.log_error(f"Calculated {len(item_averages)} item average conversion factors", "Aggregated Stock Movement")
         
         # Now get all T item batches from SLE that don't have exact batch matches
-        # and try to apply item average conversion factors
         missing_batches_query = """
             SELECT DISTINCT 
                 sle.batch_no,
@@ -526,74 +495,7 @@ def get_mat_kg_to_nos_conversion_factors():
         
         frappe.log_error(f"Applied fallback conversion to {fallback_applied} additional batches", "Aggregated Stock Movement")
         
-        # If still no data found, fall back to direct query with correct T item batch logic
-        # But use the CORRECT logic: get T item batch from Stock Entry Detail
-        if not conversion_data:
-            frappe.log_error("No Production Batch Weight data found, using fallback query", "Aggregated Stock Movement")
-            
-            # Get submitted Moulding Production Entries and extract T item batches
-            fallback_query = """
-                SELECT 
-                    mpe.name as production_entry,
-                    mpe.scan_lot_number,
-                    mpe.mould_reference,
-                    mpe.stock_entry_reference,
-                    ms.avg_blank_wtproduct_gms,
-                    ms.spp_ref
-                FROM `tabMoulding Production Entry` mpe
-                LEFT JOIN `tabMould Specification` ms ON mpe.mould_reference = ms.mould_ref
-                WHERE mpe.docstatus = 1
-                    AND mpe.stock_entry_reference IS NOT NULL 
-                    AND mpe.mould_reference IS NOT NULL 
-                    AND mpe.mould_reference != ''
-                    AND ms.avg_blank_wtproduct_gms IS NOT NULL
-                    AND ms.avg_blank_wtproduct_gms != ''
-                    AND ms.avg_blank_wtproduct_gms != '0'
-                    AND mpe.creation >= '2025-01-01 00:00:00'
-                ORDER BY mpe.creation DESC
-                LIMIT 1000
-            """
-            
-            fallback_data = frappe.db.sql(fallback_query, as_dict=1)
-            
-            for row in fallback_data:
-                try:
-                    # Get T item batch from Stock Entry Detail (CORRECT logic)
-                    t_item_data = frappe.db.sql("""
-                        SELECT sed.item_code, sed.batch_no, sed.qty, i.item_group
-                        FROM `tabStock Entry Detail` sed
-                        INNER JOIN `tabItem` i ON sed.item_code = i.name
-                        WHERE sed.parent = %s 
-                            AND (sed.item_code LIKE 'T%%' OR i.item_group = 'Mat')
-                        ORDER BY sed.idx
-                        LIMIT 1
-                    """, (row.stock_entry_reference,), as_dict=True)
-                    
-                    if t_item_data:
-                        t_item = t_item_data[0]
-                        t_batch_no = t_item.batch_no
-                        t_item_code = t_item.item_code
-                        
-                        # Validate blank weight
-                        blank_wt_float = float(row.avg_blank_wtproduct_gms)
-                        if blank_wt_float > 0 and t_batch_no:
-                            conversion_factor = 1000.0 / blank_wt_float
-                            
-                            conversion_data[t_batch_no] = {
-                                'conversion_factor': conversion_factor,
-                                'scan_lot_number': row.scan_lot_number,
-                                'mould_reference': row.mould_reference,
-                                'item_code': t_item_code,  # T item code or Mat item
-                                'blank_wt_gms': blank_wt_float,
-                                'spp_ref': row.spp_ref,
-                                'production_entry': row.production_entry,
-                                'source': 'Direct Query (Mat item batch)'
-                            }
-                            
-                except (ValueError, TypeError, AttributeError) as e:
-                    # Skip invalid entries
-                    frappe.log_error(f"Error processing fallback entry {row.get('production_entry', 'Unknown')}: {str(e)}", "Aggregated Stock Movement")
-                    continue
+        # Optional: could add a global default conversion factor here if strictly needed
     
     except Exception as e:
         frappe.log_error(f"Error in get_mat_kg_to_nos_conversion_factors: {str(e)}")
@@ -604,8 +506,8 @@ def get_mat_kg_to_nos_conversion_factors():
 @frappe.whitelist()
 def get_common_code_details(common_code, filters=None):
     """
-    Return distinct item codes (with names, prefix, item_group) and a sample of Stock Ledger Entries
-    that contribute to the given common_code, respecting the same filters (date range and warehouse).
+    Return distinct item codes and SLE samples for the given grouping key.
+    Now the grouping key is Item.item_name (common_code parameter carries the item_name).
     """
     if not common_code:
         return {"items": [], "sle_samples": [], "counts": {"items": 0, "sle": 0}}
@@ -636,7 +538,7 @@ def get_common_code_details(common_code, filters=None):
             warehouse_condition = f"AND sle.warehouse IN ({placeholders})"
             warehouse_params.extend(warehouses)
 
-    # Distinct items participating for this common_code
+    # Distinct items participating for this item_name
     items_query = f"""
         SELECT DISTINCT
             i.name AS item_code,
@@ -649,7 +551,7 @@ def get_common_code_details(common_code, filters=None):
         WHERE sle.docstatus < 2
           AND sle.is_cancelled = 0
           AND sle.posting_datetime < %s
-          AND SUBSTRING(sle.item_code, 2, 4) = %s
+          AND i.item_name = %s
           AND (sle.item_code LIKE 'P%%' OR sle.item_code LIKE 'F%%' OR sle.item_code LIKE 'T%%' OR i.item_group IN ('Products','Finished Product','Mat'))
           {warehouse_condition}
         ORDER BY prefix, i.name
@@ -658,22 +560,24 @@ def get_common_code_details(common_code, filters=None):
     items_params = [posting_datetime, common_code] + warehouse_params
     items = frappe.db.sql(items_query, items_params, as_dict=1)
 
-    # Sample SLE rows for context
+    # Sample SLE rows for context (join Item to filter by item_name)
     sle_query = f"""
         SELECT 
             sle.posting_date,
             sle.posting_time,
             sle.item_code,
+            i.item_name,
             sle.warehouse,
             sle.batch_no,
             sle.actual_qty,
             sle.voucher_type,
             sle.voucher_no
         FROM `tabStock Ledger Entry` sle
+        INNER JOIN `tabItem` i ON i.name = sle.item_code
         WHERE sle.docstatus < 2
           AND sle.is_cancelled = 0
           AND sle.posting_datetime < %s
-          AND SUBSTRING(sle.item_code, 2, 4) = %s
+          AND i.item_name = %s
           {warehouse_condition}
         ORDER BY sle.posting_date DESC, sle.posting_time DESC
         LIMIT 100
