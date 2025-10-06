@@ -1,0 +1,171 @@
+.mixing-log-container {
+    padding: 15px;
+    width: 100%;
+    max-width: none;
+}
+
+.mixing-log-container .row {
+    margin-left: -15px;
+    margin-right: -15px;
+}
+
+.mixing-log-container .col-md-6 {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.mixing-log-container .card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 100%;
+}
+
+.mixing-log-container .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #ddd;
+    padding: 15px 20px;
+    border-radius: 8px 8px 0 0;
+}
+
+.mixing-log-container .card-body {
+    padding: 20px;
+    overflow-x: auto;
+}
+
+.mixing-log-container .form-group label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.mixing-log-container #batch-scanner {
+    font-size: 16px;
+    height: 45px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 15px;
+}
+
+.mixing-log-container #batch-scanner:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    outline: none;
+}
+
+.mixing-log-container #manual-entry-btn {
+    height: 45px;
+    border-radius: 0 4px 4px 0;
+    font-weight: 600;
+}
+
+.mixing-log-container .scan-result .table td {
+    padding: 8px 12px;
+    border: none;
+}
+
+.mixing-log-container .scan-result .table td:first-child {
+    width: 140px;
+    font-weight: 600;
+}
+
+.mixing-log-container .alert {
+    margin-bottom: 0;
+    border-radius: 6px;
+}
+
+.mixing-log-container .alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.mixing-log-container .alert-danger {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+.mixing-log-container .alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+}
+
+.mixing-log-container #recent-logs .table {
+    margin-bottom: 0;
+    font-size: 14px;
+}
+
+.mixing-log-container #recent-logs .table-condensed th,
+.mixing-log-container #recent-logs .table-condensed td {
+    padding: 8px 12px;
+}
+
+.mixing-log-container #recent-logs .table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-top: none;
+    white-space: nowrap;
+}
+
+.mixing-log-container #recent-logs .table td {
+    vertical-align: middle;
+    word-wrap: break-word;
+    max-width: 150px;
+}
+
+.mixing-log-container .text-muted {
+    color: #6c757d !important;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.mixing-log-container .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure full width utilization */
+.page-container .page-content {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .mixing-log-container {
+        padding: 10px;
+    }
+    
+    .mixing-log-container .col-md-6 {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    
+    .mixing-log-container .card-body {
+        padding: 15px;
+    }
+    
+    .mixing-log-container #batch-scanner {
+        font-size: 14px;
+        height: 40px;
+    }
+    
+    .mixing-log-container #manual-entry-btn {
+        height: 40px;
+        font-size: 14px;
+    }
+
+    .mixing-log-container #recent-logs .table {
+        font-size: 12px;
+    }
+
+    .mixing-log-container #recent-logs .table th,
+    .mixing-log-container #recent-logs .table td {
+        padding: 6px 8px;
+    }
+}
