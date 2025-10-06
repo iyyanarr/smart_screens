@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "format:{mould_ref}-{service_date}",
  "creation": "2025-10-06 10:21:05.169611",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -36,10 +37,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-06 10:22:51.389368",
+ "modified": "2025-10-06 12:05:39.293766",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Mould Service Record",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
