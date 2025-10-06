@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-10-06 10:21:05.169611",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "service_date",
+  "service_type",
+  "mould_ref",
+  "service_details"
+ ],
+ "fields": [
+  {
+   "fieldname": "service_date",
+   "fieldtype": "Date",
+   "label": "Service Date"
+  },
+  {
+   "fieldname": "service_type",
+   "fieldtype": "Select",
+   "label": "Service Type"
+  },
+  {
+   "fieldname": "mould_ref",
+   "fieldtype": "Link",
+   "label": "Mould Ref",
+   "options": "Mould Specification"
+  },
+  {
+   "fieldname": "service_details",
+   "fieldtype": "Small Text",
+   "label": "Service Details"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-10-06 10:22:51.389368",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Mould Service Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
