@@ -154,32 +154,32 @@ class DeflashReconciliationReport {
 			total_scrap_actual += flt(row.scrap_actual_kg);
 		});
 
-		// Render summary
+		// Render summary - all in one line
 		let summary_html = `
-			<div class="row" style="background: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-				<div class="col-sm-2">
-					<small class="text-muted">Total Sent (Kg)</small>
-					<h4>${total_sent_kg.toFixed(3)}</h4>
+			<div class="row" style="background: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-wrap: nowrap;">
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Sent (Kg)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_sent_kg.toFixed(3)}</h4>
 				</div>
-				<div class="col-sm-2">
-					<small class="text-muted">Total Received (Kg)</small>
-					<h4>${total_received_kg.toFixed(3)}</h4>
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Received (Kg)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_received_kg.toFixed(3)}</h4>
 				</div>
-				<div class="col-sm-2">
-					<small class="text-muted">Total Sent (Nos)</small>
-					<h4>${total_sent_nos}</h4>
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Sent (Nos)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_sent_nos}</h4>
 				</div>
-				<div class="col-sm-2">
-					<small class="text-muted">Total Received (Nos)</small>
-					<h4>${total_received_nos}</h4>
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Received (Nos)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_received_nos}</h4>
 				</div>
-				<div class="col-sm-2">
-					<small class="text-muted">Expected Scrap (Kg)</small>
-					<h4>${total_scrap_expected.toFixed(3)}</h4>
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Expected Scrap (Kg)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_scrap_expected.toFixed(3)}</h4>
 				</div>
-				<div class="col-sm-2">
-					<small class="text-muted">Actual Scrap (Kg)</small>
-					<h4>${total_scrap_actual.toFixed(3)}</h4>
+				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
+					<small class="text-muted" style="display: block; margin-bottom: 5px;">Actual Scrap (Kg)</small>
+					<h4 style="margin: 0; font-size: 18px;">${total_scrap_actual.toFixed(3)}</h4>
 				</div>
 			</div>
 		`;
