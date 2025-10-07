@@ -20,7 +20,10 @@
   {
    "fieldname": "service_type",
    "fieldtype": "Select",
-   "label": "Service Type"
+   "in_list_view": 1,
+   "label": "Service Type",
+   "options": "Preventive Maintenance\nBreakdown Maintenance\nOver Hauling Maintenance\nGeneral Maintenance",
+   "reqd": 1
   },
   {
    "fieldname": "mould_ref",
