@@ -784,51 +784,31 @@ class MouldPerformanceReport {
         }
 
         
-        // Create dialog content
+        // Create dialog content - SIMPLIFIED VERSION with only relevant fields
         const dialogContent = `
             <div class="mould-detail-dialog">
                 <div class="mould-spec-section">
                     <h4>Mould Specification</h4>
                     <table class="table table-bordered table-condensed spec-table">
                         <tr>
-                            <th width="20%">Mould Reference</th>
-                            <td width="30%">${formatSpecValue(mouldRef)}</td>
-                            <th width="20%">SPP Ref</th>
-                            <td width="30%">${formatSpecValue(mouldSpec.spp_ref)}</td>
+                            <th width="25%">Mould Reference</th>
+                            <td width="25%">${formatSpecValue(mouldRef)}</td>
+                            <th width="25%">SPP Ref</th>
+                            <td width="25%">${formatSpecValue(mouldSpec.spp_ref)}</td>
                         </tr>
                         <tr>
-                            <th>Part Number</th>
-                            <td>${formatSpecValue(mouldSpec.part_no)}</td>
                             <th>Compound Code</th>
-                            <td>${formatSpecValue(mouldSpec.compound_code)}</td>
+                            <td colspan="3">${formatSpecValue(mouldSpec.compound_code)}</td>
                         </tr>
                         <tr>
-                            <th>Mould Status</th>
-                            <td><span class="badge badge-primary">${formatSpecValue(mouldSpec.mould_status)}</span></td>
                             <th>No. of Cavities</th>
                             <td>${formatSpecValue(mouldSpec.noof_cavities, '0')}</td>
+                            <th>Shell Weight (Gms)</th>
+                            <td>${formatSpecValue(mouldSpec.shell_weight, '0')}</td>
                         </tr>
                         <tr>
-                            <th>Cavities per Blank</th>
-                            <td>${formatSpecValue(mouldSpec.no_of_cavity_per_blank, '0')}</td>
-                            <th>No. of Pieces</th>
-                            <td>${formatSpecValue(mouldSpec.no_of_piece, '0')}</td>
-                        </tr>
-                        <tr>
-                            <th>Piece Weight (Min/Avg/Max)</th>
-                            <td>${formatSpecValue(mouldSpec.wtpiece_min_gms, '0')} / ${formatSpecValue(mouldSpec.wtpiece_avg_gms, '0')} / ${formatSpecValue(mouldSpec.wtpiece_max_gms, '0')} gms</td>
-                            <th>Lift Weight (Avg)</th>
-                            <td>${formatSpecValue(mouldSpec.wtlift_avg_gms, '0')} gms</td>
-                        </tr>
-                        <tr>
-                            <th>Shell Weight</th>
-                            <td>${formatSpecValue(mouldSpec.shell_weight, '0')} gms</td>
-                            <th>Blank Type</th>
-                            <td>${formatSpecValue(mouldSpec.blank_type)}</td>
-                        </tr>
-                        <tr>
-                            <th>Blank Dimensions (L x W x T)</th>
-                            <td colspan="3">${formatSpecValue(mouldSpec.blank_length, '0')} x ${formatSpecValue(mouldSpec.blank_width, '0')} x ${formatSpecValue(mouldSpec.blank_thickness, '0')}</td>
+                            <th>Wt/Piece (Avg) (Gms)</th>
+                            <td colspan="3">${formatSpecValue(mouldSpec.wtpiece_avg_gms, '0')}</td>
                         </tr>
                     </table>
                 </div>
