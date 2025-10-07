@@ -127,6 +127,49 @@ class MouldPerformanceReport {
         
         // Show loading message with spinner
         this.$report_area.html(`
+                /* Fix for Mould Reference autocomplete dropdown */
+                .awesomplete {
+                    z-index: 9999 !important;
+                }
+                
+                .awesomplete > ul {
+                    z-index: 9999 !important;
+                    position: absolute !important;
+                    background: white !important;
+                    border: 1px solid #d1d8dd !important;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+                    max-height: 300px !important;
+                    overflow-y: auto !important;
+                    margin-top: 2px !important;
+                }
+                
+                .awesomplete > ul > li {
+                    padding: 8px 12px !important;
+                    cursor: pointer !important;
+                    border-bottom: 1px solid #f0f0f0 !important;
+                    list-style: none !important;
+                }
+                
+                .awesomplete > ul > li:hover,
+                .awesomplete > ul > li[aria-selected="true"] {
+                    background-color: #f0f4f7 !important;
+                    color: #2490ef !important;
+                }
+                
+                /* Fix for Link field input container */
+                .frappe-control[data-fieldtype="Link"] {
+                    position: relative !important;
+                }
+                
+                .frappe-control[data-fieldtype="Link"] input {
+                    position: relative !important;
+                    z-index: 1 !important;
+                }
+                
+                .frappe-control[data-fieldtype="Link"] .link-field {
+                    position: relative !important;
+                }
+                
             <div class="text-center" style="padding: 50px;">
                 <i class="fa fa-spinner fa-spin fa-3x text-muted"></i>
                 <p class="text-muted" style="margin-top: 20px;">Loading report data...</p>
