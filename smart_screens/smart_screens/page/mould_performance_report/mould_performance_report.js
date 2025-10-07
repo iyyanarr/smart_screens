@@ -129,11 +129,11 @@ class MouldPerformanceReport {
         this.$report_area.html(`
                 /* Fix for Mould Reference autocomplete dropdown */
                 .awesomplete {
-                    z-index: 9999 !important;
+                    z-index: 10001 !important;
                 }
                 
                 .awesomplete > ul {
-                    z-index: 9999 !important;
+                    z-index: 10001 !important;
                     position: absolute !important;
                     background: white !important;
                     border: 1px solid #d1d8dd !important;
@@ -170,7 +170,14 @@ class MouldPerformanceReport {
                     position: relative !important;
                 }
                 
-            <div class="text-center" style="padding: 50px;">
+            
+                /* Ensure page header and filters have higher z-index than table */
+                .page-head, .page-form {
+                    position: relative !important;
+                    z-index: 10 !important;
+                }
+                
+<div class="text-center" style="padding: 50px;">
                 <i class="fa fa-spinner fa-spin fa-3x text-muted"></i>
                 <p class="text-muted" style="margin-top: 20px;">Loading report data...</p>
             </div>
@@ -495,7 +502,7 @@ class MouldPerformanceReport {
             'color': '#ffffff',
             'position': 'sticky',
             'top': '0',
-            'z-index': '5'
+            'z-index': '1'
         });
     }
     
