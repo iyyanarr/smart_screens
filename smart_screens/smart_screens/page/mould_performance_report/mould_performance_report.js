@@ -800,16 +800,6 @@ class MouldPerformanceReport {
                             <th>Compound Code</th>
                             <td colspan="3">${formatSpecValue(mouldSpec.compound_code)}</td>
                         </tr>
-                        <tr>
-                            <th>No. of Cavities</th>
-                            <td>${formatSpecValue(mouldSpec.noof_cavities, '0')}</td>
-                            <th>Shell Weight (Gms)</th>
-                            <td>${formatSpecValue(mouldSpec.shell_weight, '0')}</td>
-                        </tr>
-                        <tr>
-                            <th>Wt/Piece (Avg) (Gms)</th>
-                            <td colspan="3">${formatSpecValue(mouldSpec.wtpiece_avg_gms, '0')}</td>
-                        </tr>
                     </table>
                 </div>
                 
