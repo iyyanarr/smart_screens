@@ -154,92 +154,95 @@ class DeflashReconciliationReport {
 			total_scrap_actual += flt(row.scrap_actual_kg);
 		});
 
-		// Render summary - all in one line
+		// Render summary - Clean white background with colorful cards
 		let summary_html = `
-			<div class="row" style="background: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-wrap: nowrap;">
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Sent (Kg)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_sent_kg.toFixed(3)}</h4>
-				</div>
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Received (Kg)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_received_kg.toFixed(3)}</h4>
-				</div>
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Sent (Nos)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_sent_nos}</h4>
-				</div>
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Total Received (Nos)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_received_nos}</h4>
-				</div>
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Expected Scrap (Kg)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_scrap_expected.toFixed(3)}</h4>
-				</div>
-				<div class="col-sm-2" style="text-align: center; padding: 0 10px;">
-					<small class="text-muted" style="display: block; margin-bottom: 5px;">Actual Scrap (Kg)</small>
-					<h4 style="margin: 0; font-size: 18px;">${total_scrap_actual.toFixed(3)}</h4>
+			<div style="background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; border: 1px solid #e2e8f0;">
+				<div style="display: flex; justify-content: space-around; gap: 15px; flex-wrap: nowrap; overflow-x: auto;">
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15); border-left: 4px solid #667eea;">
+						<small style="color: #667eea; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Total Sent (Kg)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_sent_kg.toFixed(3)}</h4>
+					</div>
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(72, 187, 120, 0.15); border-left: 4px solid #48bb78;">
+						<small style="color: #48bb78; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Total Received (Kg)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_received_kg.toFixed(3)}</h4>
+					</div>
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(66, 153, 225, 0.15); border-left: 4px solid #4299e1;">
+						<small style="color: #4299e1; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Total Sent (Nos)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_sent_nos}</h4>
+					</div>
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(56, 178, 172, 0.15); border-left: 4px solid #38b2ac;">
+						<small style="color: #38b2ac; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Total Received (Nos)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_received_nos}</h4>
+					</div>
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(237, 137, 54, 0.15); border-left: 4px solid #ed8936;">
+						<small style="color: #ed8936; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Expected Scrap (Kg)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_scrap_expected.toFixed(3)}</h4>
+					</div>
+					<div style="text-align: center; min-width: 140px; display: flex; flex-direction: column; align-items: center; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(245, 101, 101, 0.15); border-left: 4px solid #f56565;">
+						<small style="color: #f56565; margin-bottom: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; height: 28px; display: flex; align-items: center; justify-content: center;">Actual Scrap (Kg)</small>
+						<h4 style="margin: 0; font-size: 20px; font-weight: 700; color: #2d3748;">${total_scrap_actual.toFixed(3)}</h4>
+					</div>
 				</div>
 			</div>
 		`;
 		this.result_area.find('.report-summary').html(summary_html);
 
-		// Render table
+		// Render table with clean white styling
 		let table_html = `
-			<div class="table-responsive">
-				<table class="table table-bordered table-hover" style="font-size: 12px;">
-					<thead style="background: #f5f7fa;">
-						<tr>
-							<th rowspan="2">Item</th>
-							<th rowspan="2">Lot No</th>
-							<th rowspan="2">Date Sent</th>
-							<th rowspan="2">Date Received</th>
-							<th rowspan="2">Deflash Person</th>
-							<th rowspan="2">Receiving Person</th>
-							<th colspan="2" class="text-center">Qty Sent</th>
-							<th colspan="2" class="text-center">Qty Received</th>
-							<th colspan="2" class="text-center">Difference</th>
-							<th colspan="4" class="text-center">Scrap</th>
+			<div class="table-responsive" style="border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+				<table class="table table-bordered table-hover" style="font-size: 12px; margin-bottom: 0; background: #ffffff;">
+					<thead>
+						<tr style="background: #ffffff; border-bottom: 2px solid #e2e8f0;">
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Item</th>
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Lot No</th>
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Date Sent</th>
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Date Received</th>
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Deflash Person</th>
+							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Receiving Person</th>
+							<th colspan="2" style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Qty Sent</th>
+							<th colspan="2" style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Qty Received</th>
+							<th colspan="2" style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Difference</th>
+							<th colspan="4" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Scrap</th>
 						</tr>
-						<tr>
-							<th>Kg</th>
-							<th>Nos</th>
-							<th>Kg</th>
-							<th>Nos</th>
-							<th>Nos</th>
-							<th>%</th>
-							<th>Expected</th>
-							<th>Actual</th>
-							<th>Diff Kg</th>
-							<th>Diff %</th>
+						<tr style="background: #fafbfc;">
+							<th style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Kg</th>
+							<th style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
+							<th style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Kg</th>
+							<th style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
+							<th style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
+							<th style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">%</th>
+							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Expected</th>
+							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Actual</th>
+							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Diff Kg</th>
+							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Diff %</th>
 						</tr>
 					</thead>
 					<tbody>
 		`;
 
-		this.data.forEach(row => {
+		this.data.forEach((row, index) => {
 			let diff_class = row.difference_nos < 0 ? 'text-danger' : (row.difference_nos > 0 ? 'text-success' : '');
 			let scrap_diff_class = row.scrap_difference_kg > 0 ? 'text-danger' : (row.scrap_difference_kg < 0 ? 'text-success' : '');
+			let row_bg = index % 2 === 0 ? '#ffffff' : '#fafbfc';
 			
 			table_html += `
-				<tr>
-					<td>${row.item || ''}</td>
-					<td><a href="/app/deflashing-receipt-entry/${row.lot_no}" target="_blank">${row.lot_no || ''}</a></td>
-					<td>${frappe.datetime.str_to_user(row.date_sent) || ''}</td>
-					<td>${row.date_received ? frappe.datetime.str_to_user(row.date_received) : '<span class="text-muted">Pending</span>'}</td>
-					<td>${row.deflash_person || ''}</td>
-					<td>${row.receiving_person || ''}</td>
-					<td class="text-right">${flt(row.qty_sent_kg, 3)}</td>
-					<td class="text-right">${flt(row.qty_sent_nos, 0)}</td>
-					<td class="text-right">${flt(row.qty_received_kg, 3)}</td>
-					<td class="text-right">${flt(row.qty_received_nos, 0)}</td>
-					<td class="text-right ${diff_class}"><strong>${flt(row.difference_nos, 0)}</strong></td>
-					<td class="text-right ${diff_class}"><strong>${flt(row.difference_percent, 2)}%</strong></td>
-					<td class="text-right">${flt(row.scrap_expected_kg, 3)}</td>
-					<td class="text-right">${flt(row.scrap_actual_kg, 3)}</td>
-					<td class="text-right ${scrap_diff_class}"><strong>${flt(row.scrap_difference_kg, 3)}</strong></td>
-					<td class="text-right ${scrap_diff_class}"><strong>${flt(row.scrap_difference_percent, 2)}%</strong></td>
+				<tr style="background: ${row_bg}; transition: all 0.2s;" onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='${row_bg}'">
+					<td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: 500; color: #2d3748;">${row.item || ''}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0;"><a href="/app/deflashing-receipt-entry/${row.lot_no}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 500;">${row.lot_no || ''}</a></td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${frappe.datetime.str_to_user(row.date_sent) || ''}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.date_received ? frappe.datetime.str_to_user(row.date_received) : '<span class="text-muted" style="font-style: italic;">Pending</span>'}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.deflash_person || ''}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.receiving_person || ''}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #667eea; font-weight: 500;">${flt(row.qty_sent_kg, 3)}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #667eea; font-weight: 500;">${flt(row.qty_sent_nos, 0)}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #48bb78; font-weight: 500;">${flt(row.qty_received_kg, 3)}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #48bb78; font-weight: 500;">${flt(row.qty_received_nos, 0)}</td>
+					<td class="${diff_class}" style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${flt(row.difference_nos, 0)}</td>
+					<td class="${diff_class}" style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${flt(row.difference_percent, 2)}%</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #ed8936; font-weight: 500;">${flt(row.scrap_expected_kg, 3)}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #f56565; font-weight: 500;">${flt(row.scrap_actual_kg, 3)}</td>
+					<td class="${scrap_diff_class}" style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${flt(row.scrap_difference_kg, 3)}</td>
+					<td class="${scrap_diff_class}" style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${flt(row.scrap_difference_percent, 2)}%</td>
 				</tr>
 			`;
 		});
@@ -261,7 +264,7 @@ class DeflashReconciliationReport {
 		$('#from_date').val(last_month);
 		$('#to_date').val(today);
 		this.result_area.find('.report-table').html('');
-		this.result_area.find('.report-summary').html('');
+		this.result_area.find('..report-summary').html('');
 	}
 
 	export_to_excel() {
