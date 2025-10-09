@@ -800,6 +800,10 @@ class MouldPerformanceReport {
                             <th>Compound Code</th>
                             <td colspan="3">${formatSpecValue(mouldSpec.compound_code)}</td>
                         </tr>
+                        <tr>
+                            <th>No. of Cavities</th>
+                            <td colspan="3">${formatSpecValue(mouldSpec.noof_cavities, '0')}</td>
+                        </tr>
                     </table>
                 </div>
                 
