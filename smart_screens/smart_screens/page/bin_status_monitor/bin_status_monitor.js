@@ -19,8 +19,9 @@ class BinStatusMonitorPage {
 		this.all_bins = [];
 		this.filtered_bins = [];
 		this.auto_refresh_interval = null;
-		this.view_mode = 'grid'; // 'grid' or 'table'
+		this.view_mode = 'grid'; // 'grid', 'table', or 'rack_map'
 		this.status_filter = 'active'; // 'active', 'checkout', 'all'
+		this.rack_data = null; // Store rack-grouped data
 		
 		this.init();
 	}
@@ -136,10 +137,13 @@ class BinStatusMonitorPage {
 						</div>
 						
 						<div class="view-toggle">
-							<button class="view-btn active" data-view="grid">
-								<i class="fa fa-th"></i> Grid
+							<button class="view-btn active" data-view="grid" title="Bin Cards">
+								<i class="fa fa-th"></i> Cards
 							</button>
-							<button class="view-btn" data-view="table">
+							<button class="view-btn" data-view="rack_map" title="Visual Rack Map">
+								<i class="fa fa-th-large"></i> Rack Map
+							</button>
+							<button class="view-btn" data-view="table" title="Table View">
 								<i class="fa fa-list"></i> Table
 							</button>
 						</div>
@@ -169,6 +173,19 @@ class BinStatusMonitorPage {
 						</div>
 						<div class="bins-grid" id="bins-grid">
 							<!-- Bin cards will be rendered here -->
+						</div>
+					</div>
+
+					 <!-- Rack Map View Section (NEW) -->
+					<div class="bins-rack-map-view" id="bins-rack-map-view" style="display: none;">
+						<div class="section-header">
+							<h4><i class="fa fa-th-large"></i> Visual Rack Map</h4>
+							<div class="last-updated">
+								Last updated: <span id="last-updated-time-rack">-</span>
+							</div>
+						</div>
+						<div class="rack-map-container" id="rack-map-container">
+							<!-- Rack grids will be rendered here -->
 						</div>
 					</div>
 
@@ -502,27 +519,10 @@ class BinStatusMonitorPage {
 				}
 				
 				/* Grid and Table Views */
-				.bins-grid-view, .bins-table-view {
+				.bins-grid-view, .bins-table-view, .bins-rack-map-view {
 					background: rgba(255, 255, 255, 0.05);
 					border-radius: 12px;
 					padding: 20px;
-					border: 1px solid rgba(255, 255, 255, 0.1);
-				}
-				
-				.section-header {
-					display: flex;
-					justify-content: space-between;
-					align-items: center;
-					margin-bottom: 20px;
-					padding-bottom: 15px;
-					border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-				}
-				
-				.section-header h4 {
-					margin: 0;
-					color: white;
-					font-size: 18px;
-					font-weight: 700;
 				}
 				
 				.last-updated {
@@ -791,6 +791,285 @@ class BinStatusMonitorPage {
 					padding: 40px;
 					color: rgba(255, 255, 255, 0.6);
 					font-size: 14px;
+					}
+				
+				/* ==================== RACK MAP VIEW STYLES ==================== */
+				.rack-map-container {
+					display: flex;
+					flex-direction: column;
+					gap: 30px;
+				}
+				
+				.warehouse-section {
+					background: rgba(255, 255, 255, 0.03);
+					border-radius: 12px;
+					padding: 20px;
+					border: 1px solid rgba(255, 255, 255, 0.1);
+				}
+				
+				.warehouse-header {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					margin-bottom: 20px;
+					padding-bottom: 15px;
+					border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+				}
+				
+				.warehouse-header h5 {
+					margin: 0;
+					color: white;
+					font-size: 18px;
+					font-weight: 700;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				
+				.warehouse-header h5 i {
+					color: #3b82f6;
+					font-size: 20px;
+				}
+				
+				.warehouse-stats {
+					color: rgba(255, 255, 255, 0.6);
+					font-size: 13px;
+					font-weight: 600;
+				}
+				
+				.racks-grid {
+					display: grid;
+					grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+					gap: 20px;
+				}
+				
+				.rack-card {
+					background: rgba(255, 255, 255, 0.08);
+					border: 2px solid rgba(255, 255, 255, 0.15);
+					border-radius: 12px;
+					padding: 15px;
+					transition: all 0.3s;
+					cursor: pointer;
+				}
+				
+				.rack-card:hover {
+					transform: translateY(-5px);
+					box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+					border-color: #10b981;
+					background: rgba(16, 185, 129, 0.1);
+				}
+				
+				.rack-card.has-fifo {
+					border-color: rgba(239, 68, 68, 0.5);
+					background: rgba(239, 68, 68, 0.08);
+				}
+				
+				.rack-card.has-fifo:hover {
+					border-color: #ef4444;
+					box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+				}
+				
+				.rack-card-header {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					margin-bottom: 15px;
+				}
+				
+				.rack-info h6 {
+					margin: 0 0 5px 0;
+					color: white;
+					font-size: 15px;
+					font-weight: 700;
+					display: flex;
+					align-items: center;
+					gap: 8px;
+				}
+				
+				.rack-info h6 i {
+					color: #3b82f6;
+					font-size: 14px;
+				}
+				
+				.rack-bin-count {
+					color: rgba(255, 255, 255, 0.6);
+					font-size: 12px;
+					font-weight: 600;
+				}
+				
+				.rack-fifo-badge {
+					background: #ef4444;
+					color: white;
+					padding: 4px 10px;
+					border-radius: 12px;
+					font-size: 10px;
+					font-weight: 700;
+					display: flex;
+					align-items: center;
+					gap: 5px;
+				}
+				
+				.rack-bins-grid {
+					display: grid;
+					grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+					gap: 8px;
+					margin-bottom: 15px;
+					min-height: 90px;
+				}
+				
+				.rack-bin-slot {
+					background: rgba(16, 185, 129, 0.2);
+					border: 2px solid rgba(16, 185, 129, 0.5);
+					border-radius: 8px;
+					padding: 8px;
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: center;
+					gap: 4px;
+					position: relative;
+					transition: all 0.2s;
+					min-height: 70px;
+				}
+				
+				.rack-bin-slot:hover {
+					transform: scale(1.05);
+					box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+					z-index: 10;
+				}
+				
+				.rack-bin-slot.fifo-bin {
+					background: rgba(239, 68, 68, 0.2);
+					border-color: rgba(239, 68, 68, 0.6);
+					animation: fifo-pulse 2s infinite;
+				}
+				
+				.rack-bin-slot.fifo-bin:hover {
+					box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+				}
+				
+				.rack-bin-slot.checked-out-bin {
+					background: rgba(107, 114, 128, 0.2);
+					border-color: rgba(107, 114, 128, 0.5);
+					opacity: 0.7;
+				}
+				
+				.rack-bin-slot.checked-out-bin:hover {
+					box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+				}
+				
+				@keyframes fifo-pulse {
+					0%, 100% { 
+						border-color: rgba(239, 68, 68, 0.6);
+						box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+					}
+					50% { 
+						border-color: #ef4444;
+						box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+					}
+				}
+				
+				/* Color variations for different items */
+				.bin-color-1 {
+					background: rgba(16, 185, 129, 0.2);
+					border-color: rgba(16, 185, 129, 0.5);
+				}
+				
+				.bin-color-2 {
+					background: rgba(59, 130, 246, 0.2);
+					border-color: rgba(59, 130, 246, 0.5);
+				}
+				
+				.bin-color-3 {
+					background: rgba(139, 92, 246, 0.2);
+					border-color: rgba(139, 92, 246, 0.5);
+				}
+				
+				.bin-color-4 {
+					background: rgba(245, 158, 11, 0.2);
+					border-color: rgba(245, 158, 11, 0.5);
+				}
+				
+				.bin-color-5 {
+					background: rgba(6, 182, 212, 0.2);
+					border-color: rgba(6, 182, 212, 0.5);
+				}
+				
+				.bin-color-6 {
+					background: rgba(236, 72, 153, 0.2);
+					border-color: rgba(236, 72, 153, 0.5);
+				}
+				
+				.bin-batch {
+					color: white;
+					font-size: 11px;
+					font-weight: 700;
+					text-align: center;
+					word-break: break-word;
+					max-width: 100%;
+				}
+				
+				.fifo-icon {
+					color: #ef4444;
+					font-size: 12px;
+					position: absolute;
+					top: 4px;
+					right: 4px;
+					animation: fifo-icon-pulse 1.5s infinite;
+				}
+				
+				.checkout-icon {
+					color: #6b7280;
+					font-size: 10px;
+					position: absolute;
+					top: 4px;
+					left: 4px;
+				}
+				
+				@keyframes fifo-icon-pulse {
+					0%, 100% { opacity: 1; }
+					50% { opacity: 0.4; }
+				}
+				
+				.rack-card-footer {
+					display: flex;
+					justify-content: flex-end;
+					padding-top: 10px;
+					border-top: 1px solid rgba(255, 255, 255, 0.1);
+				}
+				
+				.rack-details-btn {
+					background: rgba(59, 130, 246, 0.2);
+					border: 2px solid rgba(59, 130, 246, 0.4);
+					color: white;
+					padding: 6px 14px;
+					border-radius: 6px;
+					font-size: 12px;
+					font-weight: 600;
+					cursor: pointer;
+					transition: all 0.2s;
+					display: flex;
+					align-items: center;
+					gap: 6px;
+				}
+				
+				.rack-details-btn:hover {
+					background: rgba(59, 130, 246, 0.3);
+					border-color: #3b82f6;
+					transform: translateY(-2px);
+				}
+				
+				.loading-rack-map {
+					text-align: center;
+					padding: 60px 20px;
+					color: rgba(255, 255, 255, 0.7);
+					font-size: 16px;
+				}
+				
+				.loading-rack-map i {
+					color: #10b981;
+					margin-right: 10px;
+					font-size: 24px;
 				}
 			</style>
 		`;
@@ -929,6 +1208,8 @@ class BinStatusMonitorPage {
 	render_bins() {
 		if (this.view_mode === 'grid') {
 			this.render_grid_view();
+		} else if (this.view_mode === 'rack_map') {
+			this.render_rack_map_view();
 		} else {
 			this.render_table_view();
 		}
@@ -1087,14 +1368,133 @@ class BinStatusMonitorPage {
 		this.view_mode = view;
 		
 		if (view === 'grid') {
-			$('#bins-table-view').hide();
+			$('#bins-table-view, #bins-rack-map-view').hide();
 			$('#bins-grid-view').show();
 			this.render_grid_view();
+		} else if (view === 'rack_map') {
+			$('#bins-grid-view, #bins-table-view').hide();
+			$('#bins-rack-map-view').show();
+			this.render_rack_map_view();
 		} else {
-			$('#bins-grid-view').hide();
+			$('#bins-grid-view, #bins-rack-map-view').hide();
 			$('#bins-table-view').show();
 			this.render_table_view();
 		}
+	}
+
+	render_rack_map_view() {
+		const self = this;
+		const container = $('#rack-map-container');
+		container.html('<div class="loading-rack-map"><i class="fa fa-spinner fa-spin"></i> Loading rack map...</div>');
+		
+		// Call the new API to get bins grouped by rack
+		frappe.call({
+			method: 'smart_screens.smart_screens.api.bin_tracker.get_bins_grouped_by_rack',
+			args: {
+				warehouse: null, // Show all warehouses
+				status_filter: self.status_filter
+			},
+			callback: function(r) {
+				if (r.message && r.message.success) {
+					self.rack_data = r.message.data;
+					self.render_rack_grid(r.message.data);
+					$('#last-updated-time-rack').text(frappe.datetime.str_to_user(frappe.datetime.now_datetime()));
+				} else {
+					container.html('<p class="no-results">Failed to load rack map</p>');
+				}
+			}
+		});
+	}
+
+	render_rack_grid(warehouse_data) {
+		const container = $('#rack-map-container');
+		container.empty();
+		
+		if (!warehouse_data || warehouse_data.length === 0) {
+			container.html('<p class="no-results">No racks with bins found</p>');
+			return;
+		}
+		
+		// Render each warehouse section
+		warehouse_data.forEach(wh => {
+			const warehouse_section = `
+				<div class="warehouse-section">
+					<div class="warehouse-header">
+						<h5><i class="fa fa-warehouse"></i> ${wh.warehouse}</h5>
+						<span class="warehouse-stats">${wh.rack_count} Racks • ${wh.total_bins} Bins</span>
+					</div>
+					<div class="racks-grid" id="racks-${wh.warehouse.replace(/\s+/g, '-')}">
+						<!-- Rack cards will be added here -->
+					</div>
+				</div>
+			`;
+			container.append(warehouse_section);
+			
+			const racks_container = $(`#racks-${wh.warehouse.replace(/\s+/g, '-')}`);
+			
+			// Render each rack
+			wh.racks.forEach(rack => {
+				const rack_card = this.create_rack_card(rack, wh.warehouse);
+				racks_container.append(rack_card);
+			});
+		});
+	}
+
+	create_rack_card(rack, warehouse) {
+		const bin_count = rack.bin_count;
+		const has_fifo = rack.bins.some(b => b.remarks && b.remarks.includes('FIFO'));
+		const oldest_bin = rack.bins[0]; // First bin is oldest
+		
+		// Group bins by item for better visualization
+		const item_groups = {};
+		rack.bins.forEach(bin => {
+			if (!item_groups[bin.item_code]) {
+				item_groups[bin.item_code] = [];
+			}
+			item_groups[bin.item_code].push(bin);
+		});
+		
+		let bins_html = '';
+		Object.keys(item_groups).forEach((item_code, index) => {
+			const bins = item_groups[item_code];
+			const color_class = `bin-color-${(index % 6) + 1}`;
+			
+			bins.forEach(bin => {
+				const is_checked_out = bin.status === 0;
+				const has_bin_fifo = bin.remarks && bin.remarks.includes('FIFO');
+				bins_html += `
+					<div class="rack-bin-slot ${color_class} ${has_bin_fifo ? 'fifo-bin' : ''} ${is_checked_out ? 'checked-out-bin' : ''}" 
+						 data-bin-id="${bin.bin_id}"
+						 title="Batch: ${bin.batch}&#10;Item: ${bin.item_name || bin.item_code}&#10;Status: ${is_checked_out ? 'Checked Out' : 'Checked In'}&#10;${has_bin_fifo ? 'FIFO Alert!' : ''}">
+						<span class="bin-batch">${bin.batch}</span>
+						${has_bin_fifo ? '<i class="fa fa-exclamation-triangle fifo-icon"></i>' : ''}
+						${is_checked_out ? '<i class="fa fa-sign-out checkout-icon"></i>' : ''}
+					</div>
+				`;
+			});
+		});
+		
+		const card = `
+			<div class="rack-card ${has_fifo ? 'has-fifo' : ''}" data-rack-id="${rack.rack_id}">
+				<div class="rack-card-header">
+					<div class="rack-info">
+						<h6><i class="fa fa-map-marker"></i> ${rack.rack_location || rack.rack_id}</h6>
+						<span class="rack-bin-count">${bin_count} bin${bin_count > 1 ? 's' : ''}</span>
+					</div>
+					${has_fifo ? '<span class="rack-fifo-badge"><i class="fa fa-exclamation-triangle"></i> FIFO</span>' : ''}
+				</div>
+				<div class="rack-bins-grid">
+					${bins_html}
+				</div>
+				<div class="rack-card-footer">
+					<button class="rack-details-btn" data-rack-id="${rack.rack_id}">
+						<i class="fa fa-info-circle"></i> Details
+					</button>
+				</div>
+			</div>
+		`;
+		
+		return card;
 	}
 
 	filter_bins(query) {
