@@ -61,40 +61,46 @@ f"but you are trying to use it in {self.warehouse}"
 )
 	
 	def check_fifo_violation(self):
-		"""Check if FIFO is violated during checkout"""
+		"""
+		Check if FIFO is violated during checkout
+		Uses Two-Level FIFO:
+		1. Level 1: Batch creation date (ERPNext FIFO)
+		2. Level 2: Check-in time (for bins of same batch)
+		"""
 		if not self.batch or not self.item_code:
 			return
 		
-		# Get the earliest checked-in batch for this item in the warehouse
-		earliest_batch = frappe.db.sql("""
-SELECT 
-bs.batch,
-bs.check_in_time,
-b.creation as batch_creation
-FROM `tabBin Storage Status` bs
-INNER JOIN `tabBatch` b ON bs.batch = b.name
-WHERE 
-bs.item_code = %s 
-AND bs.warehouse = %s 
-AND bs.status = 1
-AND bs.name != %s
-ORDER BY bs.check_in_time ASC
-LIMIT 1
-""", (self.item_code, self.warehouse, self.name), as_dict=1)
+		# Get the batch being checked out
+		current_batch_creation = frappe.db.get_value("Batch", self.batch, "creation")
 		
-		if earliest_batch and self.check_in_time:
-			earliest_time = get_datetime(earliest_batch[0].check_in_time)
-			current_time = get_datetime(self.check_in_time)
-			
-			if current_time < earliest_time:
-				# Current batch was checked in before the earliest batch still in warehouse
-				self.remarks = (self.remarks or "") + "\nFIFO missed: Older batch(es) still in warehouse"
-				frappe.msgprint(
-f"FIFO Violation: Batch {earliest_batch[0].batch} was checked in earlier "
-f"and is still in the warehouse",
-indicator='red',
-alert=True
-)
+		# Find any older batches (by creation date) still checked in for this item
+		older_batches = frappe.db.sql("""
+			SELECT 
+				bs.batch,
+				b.creation as batch_creation,
+				rlm.barcode as rack_barcode
+			FROM `tabBin Storage Status` bs
+			INNER JOIN `tabBatch` b ON bs.batch = b.name
+			LEFT JOIN `tabRack Location Master` rlm ON bs.rack_id = rlm.name
+			WHERE 
+				bs.item_code = %s 
+				AND bs.warehouse = %s 
+				AND bs.status = 1
+				AND bs.name != %s
+				AND b.creation < %s
+			ORDER BY b.creation ASC
+			LIMIT 1
+		""", (self.item_code, self.warehouse, self.name, current_batch_creation), as_dict=1)
+		
+		if older_batches:
+			oldest_batch = older_batches[0]
+			self.remarks = (self.remarks or "") + f"\nFIFO Violation: Older batch {oldest_batch.batch} (created {oldest_batch.batch_creation}) still in warehouse"
+			frappe.msgprint(
+				f"FIFO Violation: Batch {oldest_batch.batch} was created earlier ({oldest_batch.batch_creation}) "
+				f"and is still in the warehouse at {oldest_batch.rack_barcode}",
+				indicator='red',
+				alert=True
+			)
 
 
 @frappe.whitelist()

@@ -432,12 +432,7 @@ class BinCheckInPage {
 		// Don't validate if both fields are empty
 		if (!batch && !rack) return;
 		
-		// Extract warehouse from rack barcode if rack is entered
-		if (rack) {
-			this.warehouse = this.extract_warehouse_from_rack(rack);
-		}
-		
-		// Show validating state
+		 // Show validating state
 		if (batch) {
 			$('#batch-validation-icon').addClass('show validating').removeClass('valid invalid');
 		}
@@ -445,13 +440,15 @@ class BinCheckInPage {
 			$('#rack-validation-icon').addClass('show validating').removeClass('valid invalid');
 		}
 		
+		const self = this;
+		
 		// Single API call to validate both fields
 		frappe.call({
 			method: 'smart_screens.smart_screens.api.bin_tracker.validate_check_in_inputs',
 			args: {
 				batch: batch || null,
 				rack_id: rack || null,
-				warehouse: this.warehouse
+				warehouse: null  // Let the API figure out the warehouse from the rack
 			},
 			callback: (r) => {
 				if (r.message) {
@@ -466,11 +463,11 @@ class BinCheckInPage {
 						if (result.batch_valid) {
 							batch_icon.addClass('valid').html('✓');
 							batch_input.addClass('valid').removeClass('invalid');
-							this.validation_state.batch_valid = true;
+							self.validation_state.batch_valid = true;
 						} else {
 							batch_icon.addClass('invalid').html('✗');
 							batch_input.addClass('invalid').removeClass('valid');
-							this.validation_state.batch_valid = false;
+							self.validation_state.batch_valid = false;
 							
 							// Show error message
 							if (result.batch_message) {
@@ -491,13 +488,14 @@ class BinCheckInPage {
 						if (result.rack_valid) {
 							rack_icon.addClass('valid').html('✓');
 							rack_input.addClass('valid').removeClass('invalid');
-							this.validation_state.rack_valid = true;
-							// Store the rack name for API calls
-							this.rack_name = result.rack_name;
+							self.validation_state.rack_valid = true;
+							// Store the rack name and warehouse for API calls
+							self.rack_name = result.rack_name;
+							self.warehouse = result.warehouse; // Get warehouse from API response
 						} else {
 							rack_icon.addClass('invalid').html('✗');
 							rack_input.addClass('invalid').removeClass('valid');
-							this.validation_state.rack_valid = false;
+							self.validation_state.rack_valid = false;
 							
 							// Show error message
 							if (result.rack_message) {
@@ -518,27 +516,16 @@ class BinCheckInPage {
 				if (batch) {
 					$('#batch-validation-icon').removeClass('validating').addClass('invalid').html('✗');
 					$('#batch-barcode').addClass('invalid').removeClass('valid');
-					this.validation_state.batch_valid = false;
+					self.validation_state.batch_valid = false;
 				}
 				if (rack) {
 					$('#rack-validation-icon').removeClass('validating').addClass('invalid').html('✗');
 					$('#rack-barcode').addClass('invalid').removeClass('valid');
-					this.validation_state.rack_valid = false;
+					self.validation_state.rack_valid = false;
 				}
 				$('#submit-check-in').prop('disabled', true);
 			}
 		});
-	}
-	
-	extract_warehouse_from_rack(rack_barcode) {
-		// Rack barcode format: {Warehouse}-{Rack ID}
-		// Example: "Finished Goods - SPP-A-01" -> warehouse = "Finished Goods - SPP"
-		// We need to find the last hyphen and split there
-		const lastHyphenIndex = rack_barcode.lastIndexOf('-');
-		if (lastHyphenIndex > 0) {
-			return rack_barcode.substring(0, lastHyphenIndex).trim();
-		}
-		return null;
 	}
 	
 	perform_check_in() {

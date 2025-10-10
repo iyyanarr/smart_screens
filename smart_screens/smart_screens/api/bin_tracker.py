@@ -81,6 +81,9 @@ rack_id, rack_doc.warehouse_name, warehouse
 def check_out_batch(batch, rack_id, warehouse="U1-Store - SPP INDIA"):
 	"""
 API method to check out a batch from a rack location
+Uses Two-Level FIFO:
+1. Level 1: Batch creation date (ERPNext FIFO)
+2. Level 2: Check-in time (for bins of same batch)
 
 Args:
 batch: Batch number to check out
@@ -95,18 +98,21 @@ dict: Success status, message, item_code, timestamp, remarks, and doc_name
 		if not batch or not rack_id:
 			frappe.throw(_("Batch and Rack ID are required"))
 		
-		# Find the checked-in record (FIFO - oldest first)
-		records = frappe.get_all(
-"Bin Storage Status",
-filters={
-"batch": batch,
-"rack_id": rack_id,
-"warehouse": warehouse,
-"status": 1
-},
-order_by="check_in_time ASC",
-limit=1
-)
+		# Find the checked-in record (Two-Level FIFO)
+		# Level 1: Order by batch creation date (oldest batch first)
+		# Level 2: Order by check-in time (earliest check-in first for same batch)
+		records = frappe.db.sql("""
+			SELECT bs.name
+			FROM `tabBin Storage Status` bs
+			INNER JOIN `tabBatch` b ON bs.batch = b.name
+			WHERE 
+				bs.batch = %s
+				AND bs.rack_id = %s
+				AND bs.warehouse = %s
+				AND bs.status = 1
+			ORDER BY b.creation ASC, bs.check_in_time ASC
+			LIMIT 1
+		""", (batch, rack_id, warehouse), as_dict=1)
 		
 		if not records:
 			frappe.throw(
@@ -211,14 +217,14 @@ def validate_barcode(barcode, warehouse="U1-Store - SPP INDIA"):
 
 
 @frappe.whitelist()
-def validate_check_in_inputs(batch=None, rack_id=None, warehouse="U1-Store - SPP INDIA"):
+def validate_check_in_inputs(batch=None, rack_id=None, warehouse=None):
 	"""
 	Validate batch and rack inputs for check-in in a single API call
 	
 	Args:
 		batch: Batch number (optional)
 		rack_id: Rack barcode or name (optional)
-		warehouse: Warehouse name (default: U1-Store - SPP INDIA)
+		warehouse: Warehouse name (optional - will be auto-detected from rack)
 	
 	Returns:
 		dict: Validation results for both batch and rack
@@ -229,7 +235,8 @@ def validate_check_in_inputs(batch=None, rack_id=None, warehouse="U1-Store - SPP
 		"batch_message": "",
 		"rack_message": "",
 		"item_code": None,
-			"rack_name": None,
+		"rack_name": None,
+		"warehouse": None,
 		"can_submit": False
 	}
 	
@@ -270,14 +277,10 @@ def validate_check_in_inputs(batch=None, rack_id=None, warehouse="U1-Store - SPP
 				)
 			
 			if rack_doc:
-				# Check if warehouse matches (if warehouse is provided)
-				if warehouse and rack_doc.warehouse_name != warehouse:
-					result["rack_message"] = f"Rack belongs to {rack_doc.warehouse_name}, not {warehouse}"
-					result["rack_valid"] = False
-				else:
-					result["rack_valid"] = True
-					result["rack_message"] = "Valid Rack"
-					result["rack_name"] = rack_doc.name  # Store the actual name for API calls
+				result["rack_valid"] = True
+				result["rack_message"] = "Valid Rack"
+				result["rack_name"] = rack_doc.name  # Store the actual name for API calls
+				result["warehouse"] = rack_doc.warehouse_name  # Return warehouse for frontend
 			else:
 				# Check if rack exists but not submitted
 				rack_any = frappe.db.get_value(
@@ -298,8 +301,8 @@ def validate_check_in_inputs(batch=None, rack_id=None, warehouse="U1-Store - SPP
 				if rack_any:
 					if rack_any.docstatus != 1:
 						result["rack_message"] = "Rack not submitted"
-					elif warehouse and rack_any.warehouse_name != warehouse:
-						result["rack_message"] = f"Rack belongs to {rack_any.warehouse_name}, not {warehouse}"
+					else:
+						result["rack_message"] = "Rack does not exist"
 				else:
 					result["rack_message"] = "Rack does not exist"
 		
@@ -459,6 +462,9 @@ def validate_check_out_inputs(batch=None, rack_id=None, warehouse="U1-Store - SP
 def find_product_by_item(item_code, warehouse="U1-Store - SPP INDIA", show_all=False):
 	"""
 Find batches and their locations for a given item code
+Uses Two-Level FIFO:
+1. Level 1: Batch creation date (ERPNext FIFO)
+2. Level 2: Check-in time (for bins of same batch)
 
 Args:
 item_code: Item code to search
@@ -470,6 +476,7 @@ dict: FIFO batch info and optionally all batches
 """
 	try:
 		# Get all checked-in batches for this item
+		# Two-Level FIFO: Order by batch creation date, then check-in time
 		batches = frappe.db.sql("""
 SELECT 
 bs.batch,
@@ -478,7 +485,8 @@ bs.check_in_time,
 rlm.barcode as rack_barcode,
 rlm.rack_id as rack_location,
 b.batch_qty,
-b.expiry_date
+b.expiry_date,
+b.creation as batch_creation
 FROM `tabBin Storage Status` bs
 INNER JOIN `tabBatch` b ON bs.batch = b.name
 LEFT JOIN `tabRack Location Master` rlm ON bs.rack_id = rlm.name
@@ -486,7 +494,7 @@ WHERE
 bs.item_code = %s 
 AND bs.warehouse = %s 
 AND bs.status = 1
-ORDER BY bs.check_in_time ASC, b.creation ASC
+ORDER BY b.creation ASC, bs.check_in_time ASC
 """, (item_code, warehouse), as_dict=1)
 		
 		if not batches:
@@ -495,7 +503,7 @@ ORDER BY bs.check_in_time ASC, b.creation ASC
 				"message": _("No batches found for item {0} in warehouse {1}").format(item_code, warehouse)
 			}
 		
-		# FIFO batch is the first one (earliest check-in)
+		# FIFO batch is the first one (oldest batch creation, earliest check-in)
 		fifo_batch = batches[0]
 		
 		result = {
@@ -507,6 +515,7 @@ ORDER BY bs.check_in_time ASC, b.creation ASC
 				"rack_location": fifo_batch.rack_location,
 				"rack_barcode": fifo_batch.rack_barcode,
 				"check_in_time": fifo_batch.check_in_time,
+				"batch_creation": fifo_batch.batch_creation,
 				"batch_qty": fifo_batch.batch_qty,
 				"expiry_date": fifo_batch.expiry_date
 			},

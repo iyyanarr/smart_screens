@@ -15,7 +15,7 @@ frappe.pages['product_finder'].on_page_load = function(wrapper) {
 class ProductFinderPage {
 	constructor(page) {
 		this.page = page;
-		this.warehouse = null; // Will be auto-extracted from search context
+		this.warehouse = null;
 		this.current_item = null;
 		this.current_batch = null;
 		
@@ -23,8 +23,8 @@ class ProductFinderPage {
 	}
 
 	init() {
-		this.add_custom_styles(); // Add styles FIRST
 		this.setup_page();
+		this.add_styles();
 		this.load_html();
 		this.bind_events();
 		
@@ -35,74 +35,445 @@ class ProductFinderPage {
 	}
 
 	setup_page() {
-		 // Setup page actions
-		this.page.set_secondary_action('Clear', () => {
-			this.clear_all();
-		}, 'fa fa-eraser');
+		// Hide the default page header
+		this.page.wrapper.find('.page-head').hide();
 		
-		// Override Frappe's default page styling
-		this.page.wrapper.find('.page-head').css('background', 'transparent');
-		this.page.wrapper.css('background', 'transparent');
+		// Remove all padding from parent containers
 		this.page.main.parent().css({
-			'background': 'transparent',
-			'padding': '0'
+			'padding': '0',
+			'margin': '0'
+		});
+		
+		this.page.main.css({
+			'padding': '0',
+			'margin': '0'
 		});
 	}
 
+	add_styles() {
+		// Remove any existing styles
+		$('#product-finder-styles').remove();
+		
+		const styles = `
+			<style id="product-finder-styles">
+				/* Reset all Frappe containers for this page */
+				body[data-route="product_finder"] .layout-main-section-wrapper {
+					padding: 0 !important;
+					margin: 0 !important;
+				}
+				
+				body[data-route="product_finder"] .layout-main-section {
+					padding: 0 !important;
+					margin: 0 !important;
+				}
+				
+				/* Main container */
+				.product-finder-container {
+					width: 100%;
+					min-height: calc(100vh - 50px);
+					background: #2d3748; /* Dark navy background */
+					display: flex;
+					flex-direction: column;
+				}
+				
+				/* Green Header - Same as Bin Check-In */
+				.product-finder-header {
+					background: #43e97b; /* Solid green */
+					padding: 20px 30px;
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+				}
+				
+				.product-finder-header h1 {
+					color: white;
+					font-size: 24px;
+					font-weight: 700;
+					margin: 0;
+					display: flex;
+					align-items: center;
+					gap: 12px;
+				}
+				
+				.back-btn {
+					height: 42px;
+					padding: 0 20px;
+					background: #2d3748;
+					border: 2px solid rgba(255,255,255,0.3);
+					border-radius: 8px;
+					color: white;
+					font-size: 13px;
+					font-weight: 700;
+					cursor: pointer;
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					transition: all 0.2s;
+				}
+				
+				.back-btn:hover {
+					background: #1a202c;
+					border-color: rgba(255,255,255,0.5);
+					transform: translateY(-2px);
+					box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+				}
+				
+				/* Main Content Area */
+				.product-finder-content {
+					flex: 1;
+					display: flex;
+					flex-direction: column;
+					padding: 40px;
+					gap: 30px;
+				}
+				
+				/* Search Card */
+				.search-card {
+					background: rgba(255,255,255,0.05);
+					border-radius: 12px;
+					padding: 40px;
+					border: 1px solid rgba(255,255,255,0.1);
+				}
+				
+				.search-card h3 {
+					color: white;
+					font-size: 18px;
+					font-weight: 700;
+					margin: 0 0 30px 0;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+				}
+				
+				.form-group {
+					margin-bottom: 25px;
+					position: relative;
+				}
+				
+				.form-group label {
+					display: block;
+					color: white;
+					font-size: 14px;
+					font-weight: 600;
+					margin-bottom: 10px;
+					text-transform: uppercase;
+					letter-spacing: 0.5px;
+				}
+				
+				.form-group input {
+					width: 100%;
+					height: 50px;
+					padding: 0 16px;
+					background: rgba(255,255,255,0.1);
+					border: 2px solid rgba(255,255,255,0.2);
+					border-radius: 8px;
+					color: white;
+					font-size: 18px;
+					font-weight: 500;
+					transition: all 0.2s;
+				}
+				
+				.form-group input::placeholder {
+					color: rgba(255,255,255,0.4);
+				}
+				
+				.form-group input:focus {
+					outline: none;
+					border-color: #43e97b;
+					background: rgba(67,233,123,0.1);
+					box-shadow: 0 0 0 3px rgba(67,233,123,0.2);
+				}
+				
+				.or-divider {
+					text-align: center;
+					margin: 25px 0;
+					position: relative;
+				}
+				
+				.or-divider::before {
+					content: '';
+					position: absolute;
+					top: 50%;
+					left: 0;
+					right: 0;
+					height: 1px;
+					background: rgba(255,255,255,0.2);
+				}
+				
+				.or-divider span {
+					background: #2d3748;
+					color: rgba(255,255,255,0.6);
+					padding: 8px 20px;
+					border-radius: 20px;
+					font-weight: 700;
+					font-size: 14px;
+					position: relative;
+					letter-spacing: 2px;
+				}
+				
+				.action-buttons {
+					display: flex;
+					gap: 15px;
+					justify-content: flex-end;
+					margin-top: 30px;
+					flex-wrap: wrap;
+				}
+				
+				.action-buttons .btn {
+					height: 50px;
+					padding: 0 25px;
+					border-radius: 8px;
+					font-size: 14px;
+					font-weight: 700;
+					cursor: pointer;
+					transition: all 0.2s;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+					border: none;
+				}
+				
+				.action-buttons .btn-primary {
+					background: #43e97b;
+					color: white;
+				}
+				
+				.action-buttons .btn-primary:hover:not(:disabled) {
+					background: #38f9d7;
+					transform: translateY(-2px);
+					box-shadow: 0 6px 20px rgba(67,233,123,0.3);
+				}
+				
+				.action-buttons .btn-primary:disabled {
+					background: rgba(255,255,255,0.1);
+					color: rgba(255,255,255,0.3);
+					cursor: not-allowed;
+				}
+				
+				.action-buttons .btn-secondary {
+					background: rgba(255,255,255,0.1);
+					border: 2px solid rgba(255,255,255,0.3);
+					color: white;
+				}
+				
+				.action-buttons .btn-secondary:hover {
+					background: rgba(255,255,255,0.15);
+					border-color: rgba(255,255,255,0.5);
+					transform: translateY(-2px);
+				}
+				
+				/* Results Section */
+				.results-card {
+					background: rgba(255,255,255,0.05);
+					border-radius: 12px;
+					padding: 40px;
+					border: 1px solid rgba(255,255,255,0.1);
+				}
+				
+				.results-card h3 {
+					color: white;
+					font-size: 18px;
+					font-weight: 700;
+					margin: 0 0 30px 0;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				
+				.product-card {
+					background: rgba(67,233,123,0.1);
+					border: 2px solid rgba(67,233,123,0.3);
+					border-radius: 12px;
+					padding: 30px;
+					transition: all 0.3s;
+				}
+				
+				.product-card h4 {
+					color: #43e97b;
+					font-size: 16px;
+					margin: 0 0 20px 0;
+					font-weight: 700;
+					text-align: center;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+				}
+				
+				.product-detail {
+					display: flex;
+					justify-content: space-between;
+					padding: 12px 0;
+					border-bottom: 1px solid rgba(255,255,255,0.1);
+				}
+				
+				.product-detail:last-child {
+					border-bottom: none;
+				}
+				
+				.product-detail .label {
+					color: rgba(255,255,255,0.7);
+					font-weight: 600;
+					font-size: 14px;
+				}
+				
+				.product-detail .value {
+					color: white;
+					font-weight: 700;
+					font-size: 16px;
+				}
+				
+				.location-badge {
+					display: inline-block;
+					background: #43e97b;
+					color: white;
+					padding: 8px 16px;
+					border-radius: 20px;
+					font-size: 14px;
+					font-weight: 700;
+					margin-top: 10px;
+				}
+				
+				/* Table Styles */
+				.results-card table {
+					width: 100%;
+					border-collapse: collapse;
+					margin-top: 20px;
+				}
+				
+				.results-card table thead th {
+					background: rgba(67,233,123,0.2);
+					color: white;
+					padding: 15px;
+					text-align: left;
+					font-weight: 700;
+					font-size: 13px;
+					text-transform: uppercase;
+					letter-spacing: 1px;
+					border-bottom: 2px solid rgba(67,233,123,0.5);
+				}
+				
+				.results-card table tbody tr {
+					background: rgba(255,255,255,0.03);
+					border-bottom: 1px solid rgba(255,255,255,0.1);
+					transition: all 0.2s;
+				}
+				
+				.results-card table tbody tr:hover {
+					background: rgba(67,233,123,0.1);
+				}
+				
+				.results-card table tbody tr.table-success {
+					background: rgba(67,233,123,0.2);
+					border-left: 4px solid #43e97b;
+				}
+				
+				.results-card table tbody td {
+					padding: 15px;
+					color: rgba(255,255,255,0.9);
+					font-size: 14px;
+				}
+				
+				/* Error Section */
+				.error-section {
+					background: rgba(255,255,255,0.05);
+					border-radius: 12px;
+					padding: 40px;
+					border: 1px solid rgba(255,255,255,0.1);
+				}
+				
+				.error-message-box {
+					background: rgba(255,59,48,0.15);
+					border: 2px solid rgba(255,59,48,0.4);
+					border-radius: 12px;
+					padding: 30px;
+					text-align: center;
+				}
+				
+				.error-message-box h4 {
+					color: #ff3b30;
+					margin: 0 0 15px 0;
+					font-size: 18px;
+					font-weight: 700;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					gap: 10px;
+				}
+				
+				.error-message-box p {
+					color: rgba(255,255,255,0.9);
+					margin: 0;
+					font-size: 15px;
+				}
+			</style>
+		`;
+		
+		$('head').append(styles);
+	}
+
 	load_html() {
-		const html = `
-			<div class="product-finder-page">
+		this.page.main.html(`
+			<div class="product-finder-container">
+				<!-- Green Header -->
 				<div class="product-finder-header">
-					<h1><i class="fa fa-search"></i> PRODUCT FINDER</h1>
-					<p>Find batch locations by Item Code or Batch Number</p>
+					<h1>
+						<i class="fa fa-search"></i>
+						PRODUCT FINDER
+					</h1>
+					<button class="back-btn" onclick="window.history.back()">
+						<i class="fa fa-arrow-left"></i>
+						BACK TO DASHBOARD
+					</button>
 				</div>
-
-				<div class="product-finder-container">
-					<div class="search-section">
+				
+				<!-- Main Content -->
+				<div class="product-finder-content">
+					<!-- Search Card -->
+					<div class="search-card">
 						<h3><i class="fa fa-search"></i> Search Product</h3>
-
+						
 						<div class="form-group">
-							<label for="item-code-input"><i class="fa fa-cube"></i> Item Code</label>
+							<label><i class="fa fa-cube"></i> Item Code</label>
 							<input 
 								type="text" 
 								id="item-code-input" 
-								class="form-control search-input" 
-								placeholder="Enter item code..."
+								class="form-control" 
+								placeholder="Scan or enter item code..."
 								autocomplete="off"
 							/>
 						</div>
-
+						
 						<div class="or-divider">
 							<span>OR</span>
 						</div>
-
+						
 						<div class="form-group">
-							<label for="batch-number-input"><i class="fa fa-tags"></i> Batch Number</label>
+							<label><i class="fa fa-tags"></i> Batch Number</label>
 							<input 
 								type="text" 
 								id="batch-number-input" 
-								class="form-control search-input" 
-								placeholder="Enter batch number..."
+								class="form-control" 
+								placeholder="Scan or enter batch number..."
 								autocomplete="off"
 							/>
 						</div>
-
+						
 						<div class="action-buttons">
 							<button class="btn btn-secondary btn-clear">
 								<i class="fa fa-eraser"></i> Clear
 							</button>
 							<button class="btn btn-primary btn-search-item" disabled>
-								<i class="fa fa-search"></i> Search by Item Code
+								<i class="fa fa-search"></i> Search by Item
 							</button>
 							<button class="btn btn-primary btn-search-batch" disabled>
 								<i class="fa fa-search"></i> Search by Batch
 							</button>
 						</div>
 					</div>
-
+					
 					<!-- FIFO Result Section -->
 					<div class="fifo-result-section" style="display: none;">
-						<div class="results-section">
+						<div class="results-card">
 							<h3><i class="fa fa-check-circle"></i> FIFO Batch Found</h3>
 							<div class="product-card fifo-card">
 								<h4>FIFO Batch Details</h4>
@@ -141,10 +512,10 @@ class ProductFinderPage {
 							</div>
 						</div>
 					</div>
-
+					
 					<!-- Batch Result Section -->
 					<div class="batch-result-section" style="display: none;">
-						<div class="results-section">
+						<div class="results-card">
 							<h3><i class="fa fa-map-marker"></i> Batch Location Details</h3>
 							<div class="product-card batch-card">
 								<h4>Batch Information</h4>
@@ -171,23 +542,23 @@ class ProductFinderPage {
 							</div>
 						</div>
 					</div>
-
+					
 					<!-- All Batches Table Section -->
 					<div class="all-batches-section" style="display: none;">
-						<div class="results-section">
+						<div class="results-card">
 							<h3><i class="fa fa-list"></i> All Batches</h3>
 							<div class="all-batches-table"></div>
 						</div>
 					</div>
-
+					
 					<!-- Batch Locations Table Section -->
 					<div class="batch-locations-section" style="display: none;">
-						<div class="results-section">
+						<div class="results-card">
 							<h3><i class="fa fa-map-marker"></i> Batch Locations</h3>
 							<div class="batch-locations-table"></div>
 						</div>
 					</div>
-
+					
 					<!-- Error Section -->
 					<div class="error-section" style="display: none;">
 						<div class="error-message-box">
@@ -197,436 +568,7 @@ class ProductFinderPage {
 					</div>
 				</div>
 			</div>
-		`;
-		
-		// Clear and style the page container
-		this.page.main.empty();
-		this.page.main.css({
-			'padding': '0 !important',
-			'margin': '0 !important',
-			'background': 'transparent'
-		});
-		this.page.wrapper.find('.page-content').css({
-			'padding': '0 !important',
-			'background': 'transparent'
-		});
-		this.page.main.html(html);
-	}
-
-	add_custom_styles() {
-		// Remove any existing styles for this page
-		$('#product-finder-custom-styles').remove();
-		
-		const style = `
-			<style id="product-finder-custom-styles">
-				/* Force override Frappe defaults */
-				body[data-route="product_finder"] .page-wrapper,
-				body[data-route="product_finder"] .page-content,
-				body[data-route="product_finder"] .page-container {
-					background: transparent !important;
-					padding: 0 !important;
-					margin: 0 !important;
-				}
-				
-				body[data-route="product_finder"] .page-head {
-					background: transparent !important;
-				}
-				
-				/* Dark Purple/Pink Theme for Product Finder */
-				.product-finder-page { 
-					padding: 0; 
-					margin: 0 -15px;
-					min-height: 100vh;
-					background: linear-gradient(135deg, #2d1b69 0%, #3d2a7a 50%, #4a3589 100%);
-					position: relative;
-				}
-				
-				.product-finder-page::before {
-					content: '';
-					position: absolute;
-					top: 0;
-					left: 0;
-					right: 0;
-					bottom: 0;
-					background: 
-						repeating-linear-gradient(90deg, rgba(250,112,154,0.03) 0px, transparent 1px, transparent 50px, rgba(250,112,154,0.03) 51px),
-						repeating-linear-gradient(0deg, rgba(250,112,154,0.03) 0px, transparent 1px, transparent 50px, rgba(250,112,154,0.03) 51px);
-					pointer-events: none;
-					z-index: 0;
-				}
-				
-				.product-finder-page > * {
-					position: relative;
-					z-index: 1;
-				}
-				
-				/* Header */
-				.product-finder-header { 
-					text-align: center; 
-					padding: 50px 30px; 
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-					color: #2c3e50; 
-					box-shadow: 0 10px 40px rgba(250, 112, 154, 0.4);
-					border-bottom: 4px solid rgba(255,255,255,0.2);
-					position: relative;
-					overflow: hidden;
-				}
-				
-				.product-finder-header::before {
-					content: '';
-					position: absolute;
-					top: -50%;
-					left: -50%;
-					width: 200%;
-					height: 200%;
-					background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
-					animation: searchPulse 4s ease-in-out infinite;
-				}
-				
-				@keyframes searchPulse {
-					0%, 100% { opacity: 0.5; transform: scale(1); }
-					50% { opacity: 0.8; transform: scale(1.1); }
-				}
-				
-				.product-finder-header h1 { 
-					font-size: 48px; 
-					margin: 0 0 15px 0; 
-					font-weight: 900;
-					position: relative;
-					text-shadow: 0 4px 20px rgba(0,0,0,0.2);
-					letter-spacing: 4px;
-				}
-				
-				.product-finder-header p { 
-					margin: 0; 
-					font-size: 20px; 
-					opacity: 0.9;
-					position: relative;
-					font-weight: 500;
-					letter-spacing: 1px;
-				}
-				
-				.product-finder-container { 
-					max-width: 1400px; 
-					margin: 0 auto; 
-					padding: 40px 30px; 
-				}
-				
-				.search-section { 
-					background: rgba(0, 0, 0, 0.3);
-					backdrop-filter: blur(10px);
-					padding: 50px; 
-					border-radius: 24px; 
-					margin-bottom: 40px; 
-					border: 2px solid rgba(250, 112, 154, 0.3);
-					box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
-				}
-				
-				.search-section h3 { 
-					margin: 0 0 35px 0; 
-					color: #fa709a; 
-					font-size: 28px; 
-					font-weight: 700;
-					text-shadow: 0 0 30px rgba(250, 112, 154, 0.5);
-					text-transform: uppercase;
-					letter-spacing: 2px;
-				}
-				
-				.or-divider {
-					text-align: center;
-					margin: 30px 0;
-					position: relative;
-				}
-				
-				.or-divider::before {
-					content: '';
-					position: absolute;
-					top: 50%;
-					left: 0;
-					right: 0;
-					height: 2px;
-					background: rgba(255, 255, 255, 0.1);
-				}
-				
-				.or-divider span {
-					background: rgba(0, 0, 0, 0.3);
-					color: rgba(255, 255, 255, 0.7);
-					padding: 10px 30px;
-					border-radius: 20px;
-					font-weight: 700;
-					font-size: 18px;
-					position: relative;
-					letter-spacing: 3px;
-				}
-				
-				.product-finder-page .form-group { 
-					margin-bottom: 30px;
-				}
-				
-				.product-finder-page .form-group label { 
-					display: block; 
-					margin-bottom: 15px; 
-					font-weight: 600; 
-					color: rgba(255, 255, 255, 0.95);
-					font-size: 16px;
-					text-transform: uppercase;
-					letter-spacing: 2px;
-				}
-				
-				.product-finder-page .form-group label i {
-					margin-right: 10px;
-					color: #fa709a;
-				}
-				
-				.product-finder-page .form-group input { 
-					width: 100%; 
-					height: 65px; 
-					padding: 0 25px; 
-					border: 3px solid rgba(250, 112, 154, 0.3);
-					background: rgba(0, 0, 0, 0.3);
-					color: #ffffff;
-					border-radius: 15px; 
-					font-size: 20px;
-					font-weight: 600;
-					transition: all 0.3s;
-					letter-spacing: 1px;
-				}
-				
-				.product-finder-page .form-group input::placeholder {
-					color: rgba(255, 255, 255, 0.3);
-				}
-				
-				.product-finder-page .form-group input:focus { 
-					border-color: #fa709a; 
-					background: rgba(250, 112, 154, 0.1);
-					box-shadow: 0 0 0 5px rgba(250, 112, 154, 0.2), 0 0 30px rgba(250, 112, 154, 0.3);
-					outline: none;
-				}
-				
-				.action-buttons { 
-					display: flex; 
-					gap: 20px; 
-					justify-content: flex-end; 
-					margin-top: 40px;
-					flex-wrap: wrap;
-				}
-				
-				.product-finder-page .btn-primary { 
-					padding: 18px 40px; 
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%) !important;
-					color: #2c3e50 !important; 
-					border: none !important; 
-					border-radius: 15px; 
-					font-size: 18px; 
-					font-weight: 700;
-					cursor: pointer; 
-					transition: all 0.3s;
-					box-shadow: 0 6px 25px rgba(250, 112, 154, 0.4);
-					text-transform: uppercase;
-					letter-spacing: 2px;
-				}
-				
-				.product-finder-page .btn-primary:hover:not(:disabled) { 
-					transform: translateY(-4px); 
-					box-shadow: 0 10px 35px rgba(250, 112, 154, 0.6);
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%) !important;
-				}
-				
-				.product-finder-page .btn-primary:disabled {
-					opacity: 0.5;
-					cursor: not-allowed;
-				}
-				
-				.product-finder-page .btn-secondary { 
-					padding: 18px 40px; 
-					background: rgba(255, 255, 255, 0.1) !important;
-					color: white !important; 
-					border: 3px solid rgba(255, 255, 255, 0.3) !important;
-					border-radius: 15px; 
-					font-size: 18px; 
-					font-weight: 700;
-					cursor: pointer; 
-					transition: all 0.3s;
-					text-transform: uppercase;
-					letter-spacing: 2px;
-				}
-				
-				.product-finder-page .btn-secondary:hover { 
-					background: rgba(255, 255, 255, 0.2) !important;
-					border-color: rgba(255, 255, 255, 0.6) !important;
-					transform: translateY(-4px);
-				}
-				
-				.results-section { 
-					background: rgba(0, 0, 0, 0.3);
-					backdrop-filter: blur(10px);
-					padding: 40px; 
-					border-radius: 24px; 
-					border: 2px solid rgba(250, 112, 154, 0.3);
-					box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
-					margin-bottom: 30px;
-				}
-				
-				.results-section h3 { 
-					margin: 0 0 30px 0; 
-					color: #fa709a; 
-					font-size: 28px; 
-					font-weight: 700;
-					text-shadow: 0 0 30px rgba(250, 112, 154, 0.5);
-					text-transform: uppercase;
-					letter-spacing: 2px;
-				}
-				
-				.product-card {
-					background: rgba(250, 112, 154, 0.1);
-					border: 2px solid rgba(250, 112, 154, 0.3);
-					border-radius: 20px;
-					padding: 35px;
-					transition: all 0.3s;
-				}
-				
-				.product-card:hover {
-					transform: translateY(-5px);
-					background: rgba(250, 112, 154, 0.15);
-					border-color: rgba(250, 112, 154, 0.6);
-					box-shadow: 0 15px 40px rgba(250, 112, 154, 0.3);
-				}
-				
-				.product-card h4 {
-					color: #fee140;
-					font-size: 24px;
-					margin: 0 0 25px 0;
-					font-weight: 700;
-					letter-spacing: 1px;
-					text-align: center;
-				}
-				
-				.product-detail {
-					display: flex;
-					justify-content: space-between;
-					padding: 15px 0;
-					border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-				}
-				
-				.product-detail:last-child {
-					border-bottom: none;
-				}
-				
-				.product-detail .label {
-					color: rgba(255, 255, 255, 0.7);
-					font-weight: 600;
-					text-transform: uppercase;
-					font-size: 14px;
-					letter-spacing: 1px;
-				}
-				
-				.product-detail .value {
-					color: #ffffff;
-					font-weight: 700;
-					font-size: 18px;
-				}
-				
-				.location-badge {
-					display: inline-block;
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-					color: #2c3e50;
-					padding: 10px 20px;
-					border-radius: 20px;
-					font-size: 16px;
-					font-weight: 700;
-					margin-top: 15px;
-					letter-spacing: 1px;
-					box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
-				}
-				
-				.results-section table {
-					width: 100%;
-					border-collapse: separate;
-					border-spacing: 0 10px;
-					margin-top: 20px;
-				}
-				
-				.results-section table thead th {
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-					color: #2c3e50;
-					padding: 18px;
-					text-align: left;
-					font-weight: 700;
-					font-size: 14px;
-					text-transform: uppercase;
-					letter-spacing: 2px;
-					border: none;
-				}
-				
-				.results-section table thead th:first-child {
-					border-radius: 12px 0 0 12px;
-				}
-				
-				.results-section table thead th:last-child {
-					border-radius: 0 12px 12px 0;
-				}
-				
-				.results-section table tbody tr {
-					background: rgba(250, 112, 154, 0.08);
-					transition: all 0.3s;
-				}
-				
-				.results-section table tbody tr:hover {
-					background: rgba(250, 112, 154, 0.15);
-					transform: scale(1.02);
-				}
-				
-				.results-section table tbody tr.table-success {
-					background: rgba(67, 233, 123, 0.2);
-					border: 2px solid rgba(67, 233, 123, 0.5);
-				}
-				
-				.results-section table tbody td {
-					padding: 18px;
-					color: rgba(255, 255, 255, 0.95);
-					border: none;
-					font-weight: 500;
-					font-size: 15px;
-				}
-				
-				.results-section table tbody td:first-child {
-					border-radius: 12px 0 0 12px;
-				}
-				
-				.results-section table tbody td:last-child {
-					border-radius: 0 12px 12px 0;
-				}
-				
-				.error-message-box { 
-					background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-					color: white; 
-					padding: 35px; 
-					border-radius: 20px; 
-					box-shadow: 0 6px 30px rgba(231, 76, 60, 0.4);
-					border: 3px solid rgba(255, 255, 255, 0.3);
-					animation: shake 0.5s ease-out;
-				}
-				
-				@keyframes shake {
-					0%, 100% { transform: translateX(0); }
-					25% { transform: translateX(-10px); }
-					75% { transform: translateX(10px); }
-				}
-				
-				.error-message-box h4 {
-					font-size: 24px;
-					margin: 0 0 15px 0;
-					font-weight: 700;
-					letter-spacing: 1px;
-				}
-				
-				.error-message-box p {
-					margin: 0;
-					font-size: 16px;
-				}
-			</style>
-		`;
-		$('head').append(style);
+		`);
 	}
 
 	bind_events() {
@@ -716,13 +658,13 @@ class ProductFinderPage {
 			method: 'smart_screens.smart_screens.api.bin_tracker.find_product_by_item',
 			args: {
 				item_code: item_code,
-				warehouse: null, // Search across all warehouses
+				warehouse: 'U1-Store - SPP INDIA', // Use default warehouse
 				show_all: false
 			},
 			callback: function(r) {
 				if (r.message && r.message.success) {
 					self.current_item = item_code;
-					self.warehouse = r.message.fifo_batch.warehouse; // Get warehouse from result
+					self.warehouse = 'U1-Store - SPP INDIA';
 					self.display_fifo_result(r.message);
 				} else {
 					self.show_error(r.message.message || 'No batches found for this item');
@@ -756,12 +698,12 @@ class ProductFinderPage {
 			method: 'smart_screens.smart_screens.api.bin_tracker.find_product_by_batch',
 			args: {
 				batch: batch,
-				warehouse: null // Search across all warehouses
+				warehouse: 'U1-Store - SPP INDIA' // Use default warehouse
 			},
 			callback: function(r) {
 				if (r.message && r.message.success) {
 					self.current_batch = batch;
-					self.warehouse = r.message.locations[0]?.warehouse; // Get warehouse from first location
+					self.warehouse = 'U1-Store - SPP INDIA';
 					self.display_batch_result(r.message);
 				} else {
 					self.show_error(r.message.message || 'Batch not found');

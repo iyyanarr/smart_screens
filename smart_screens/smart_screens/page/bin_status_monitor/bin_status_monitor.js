@@ -20,6 +20,7 @@ class BinStatusMonitorPage {
 		this.filtered_bins = [];
 		this.auto_refresh_interval = null;
 		this.view_mode = 'grid'; // 'grid' or 'table'
+		this.status_filter = 'active'; // 'active', 'checkout', 'all'
 		
 		this.init();
 	}
@@ -66,6 +67,19 @@ class BinStatusMonitorPage {
 
 				<!-- Main Content Area -->
 				<div class="monitor-content">
+						<!-- Status Filter Tabs -->
+						<div class="status-tabs">
+							<button class="status-tab active" data-status="active">
+								<i class="fa fa-inbox"></i> Active Bins
+							</button>
+							<button class="status-tab" data-status="checkout">
+								<i class="fa fa-sign-out"></i> Checkout History
+							</button>
+							<button class="status-tab" data-status="all">
+								<i class="fa fa-history"></i> All Records
+							</button>
+						</div>
+
 					<!-- Summary Cards Row -->
 					<div class="summary-cards-row">
 						<div class="summary-card card-green">
@@ -212,7 +226,7 @@ class BinStatusMonitorPage {
 				
 				/* Purple/Blue Gradient Header - Same as Dashboard */
 				.monitor-header {
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+					background: #5b21b6; /* Solid dark purple - flat color */
 					padding: 20px 30px;
 					display: flex;
 					align-items: center;
@@ -260,6 +274,51 @@ class BinStatusMonitorPage {
 					overflow-y: auto;
 				}
 				
+				 /* Status Filter Tabs */
+				.status-tabs {
+					display: flex;
+					gap: 10px;
+					margin-bottom: 25px;
+					background: rgba(255, 255, 255, 0.05);
+					padding: 8px;
+					border-radius: 12px;
+					border: 1px solid rgba(255, 255, 255, 0.1);
+				}
+				
+				.status-tab {
+					flex: 1;
+					padding: 12px 20px;
+					background: transparent;
+					border: 2px solid rgba(255, 255, 255, 0.1);
+					border-radius: 8px;
+					color: rgba(255, 255, 255, 0.6);
+					font-size: 14px;
+					font-weight: 600;
+					cursor: pointer;
+					transition: all 0.3s;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					gap: 8px;
+				}
+				
+				.status-tab:hover:not(.active) {
+					background: rgba(255, 255, 255, 0.05);
+					border-color: rgba(255, 255, 255, 0.2);
+					color: rgba(255, 255, 255, 0.8);
+				}
+				
+				.status-tab.active {
+					background: #10b981;
+					border-color: #10b981;
+					color: white;
+					box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+				}
+				
+				.status-tab i {
+					font-size: 16px;
+				}
+				
 				/* Summary Cards Row */
 				.summary-cards-row {
 					display: grid;
@@ -300,19 +359,19 @@ class BinStatusMonitorPage {
 				}
 				
 				.card-green .card-icon {
-					background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+					background: #10b981; /* Flat emerald green */
 				}
 				
 				.card-blue .card-icon {
-					background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+					background: #3b82f6; /* Flat blue */
 				}
 				
 				.card-purple .card-icon {
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+					background: #8b5cf6; /* Flat purple */
 				}
 				
 				.card-orange .card-icon {
-					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+					background: #f59e0b; /* Flat amber */
 				}
 				
 				.card-content h3 {
@@ -401,9 +460,9 @@ class BinStatusMonitorPage {
 				}
 				
 				.view-btn.active {
-					background: #43e97b;
+					background: #10b981; /* Flat green instead of gradient */
 					color: white;
-					box-shadow: 0 2px 8px rgba(67, 233, 123, 0.3);
+					box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 				}
 				
 				.view-btn:hover:not(.active) {
@@ -434,12 +493,12 @@ class BinStatusMonitorPage {
 				}
 				
 				.export-btn {
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+					background: #8b5cf6; /* Flat purple instead of gradient */
 					border: none;
 				}
 				
 				.export-btn:hover {
-					filter: brightness(1.1);
+					background: #7c3aed; /* Darker purple on hover */
 				}
 				
 				/* Grid and Table Views */
@@ -492,19 +551,44 @@ class BinStatusMonitorPage {
 				.bin-card:hover {
 					transform: translateY(-5px);
 					box-shadow: 0 10px 30px rgba(67, 233, 123, 0.3);
-					border-color: #43e97b;
-					background: rgba(67, 233, 123, 0.15);
+					border-color: #10b981; /* Flat green */
+					background: rgba(16, 185, 129, 0.15);
 				}
 				
 				.bin-card.fifo-warning {
-					background: rgba(255, 107, 107, 0.1);
-					border-color: rgba(255, 107, 107, 0.5);
+					background: rgba(239, 68, 68, 0.1);
+					border-color: rgba(239, 68, 68, 0.5);
 				}
 				
 				.bin-card.fifo-warning:hover {
-					border-color: #ff6b6b;
-					box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
-					background: rgba(255, 107, 107, 0.15);
+					border-color: #ef4444; /* Flat red */
+					box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+					background: rgba(239, 68, 68, 0.15);
+				}
+				
+				/* Checked-out bin styling */
+				.bin-card.checked-out {
+					background: rgba(107, 114, 128, 0.1);
+					border-color: rgba(107, 114, 128, 0.4);
+				}
+				
+				.bin-card.checked-out:hover {
+					border-color: #6b7280;
+					box-shadow: 0 10px 30px rgba(107, 114, 128, 0.3);
+					background: rgba(107, 114, 128, 0.15);
+				}
+				
+				.bin-card.checked-out .bin-icon {
+					background: #6b7280; /* Gray for checked out */
+				}
+				
+				.status-badge.badge-out {
+					background: #6b7280; /* Gray for checked out */
+				}
+				
+				.bins-table-container tbody tr.checkout-row {
+					background: rgba(107, 114, 128, 0.1);
+					border-left: 3px solid #6b7280;
 				}
 				
 				.bin-header {
@@ -518,7 +602,7 @@ class BinStatusMonitorPage {
 					width: 45px;
 					height: 45px;
 					border-radius: 10px;
-					background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+					background: #10b981; /* Flat green instead of gradient */
 					display: flex;
 					align-items: center;
 					justify-content: center;
@@ -527,7 +611,7 @@ class BinStatusMonitorPage {
 				}
 				
 				.bin-card.fifo-warning .bin-icon {
-					background: linear-gradient(135deg, #ff6b6b 0%, #ff9f40 100%);
+					background: #ef4444; /* Flat red instead of gradient */
 				}
 				
 				.status-badge {
@@ -537,7 +621,7 @@ class BinStatusMonitorPage {
 					font-weight: 700;
 					text-transform: uppercase;
 					letter-spacing: 0.5px;
-					background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+					background: #10b981; /* Flat green instead of gradient */
 					color: white;
 				}
 				
@@ -567,21 +651,21 @@ class BinStatusMonitorPage {
 				}
 				
 				.bin-detail .batch-value {
-					color: #43e97b;
+					color: #10b981; /* Flat green */
 					font-size: 16px;
 					font-weight: 700;
 				}
 				
 				.bin-detail .rack-value {
-					color: #4facfe;
+					color: #3b82f6; /* Flat blue */
 				}
 				
 				.bin-detail .time-value {
-					color: #a8edea;
+					color: #06b6d4; /* Flat cyan */
 				}
 				
 				.fifo-badge {
-					background: linear-gradient(135deg, #ff6b6b 0%, #ff9f40 100%);
+					background: #ef4444; /* Flat red instead of gradient */
 					color: white;
 					padding: 6px 10px;
 					border-radius: 6px;
@@ -609,7 +693,7 @@ class BinStatusMonitorPage {
 				}
 				
 				.bins-table-container th {
-					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+					background: #5b21b6; /* Flat dark purple instead of gradient */
 					color: white;
 					padding: 12px 15px;
 					text-align: left;
@@ -633,13 +717,13 @@ class BinStatusMonitorPage {
 				}
 				
 				.bins-table-container tbody tr:hover {
-					background: rgba(67, 233, 123, 0.1);
+					background: rgba(16, 185, 129, 0.1);
 					transform: scale(1.01);
 				}
 				
 				.bins-table-container tbody tr.fifo-row {
-					background: rgba(255, 107, 107, 0.1);
-					border-left: 3px solid #ff6b6b;
+					background: rgba(239, 68, 68, 0.1);
+					border-left: 3px solid #ef4444; /* Flat red */
 				}
 				
 				.bins-table-container tbody td {
@@ -657,7 +741,7 @@ class BinStatusMonitorPage {
 				}
 				
 				.fifo-tag {
-					background: #ff6b6b;
+					background: #ef4444; /* Flat red */
 					color: white;
 					padding: 3px 8px;
 					border-radius: 10px;
@@ -674,7 +758,7 @@ class BinStatusMonitorPage {
 				}
 				
 				.loading-section i {
-					color: #43e97b;
+					color: #10b981; /* Flat green */
 					margin-bottom: 15px;
 				}
 				
@@ -719,6 +803,15 @@ class BinStatusMonitorPage {
 		// Back to dashboard button
 		$('#back-to-dashboard').on('click', () => {
 			frappe.set_route('bin_tracker_dashboard');
+		});
+		
+		 // Status tab buttons
+		$('.status-tab').on('click', function() {
+			const status = $(this).data('status');
+			$('.status-tab').removeClass('active');
+			$(this).addClass('active');
+			self.status_filter = status;
+			self.load_bin_data();
 		});
 		
 		// Search input
@@ -779,14 +872,21 @@ class BinStatusMonitorPage {
 			$('#bins-grid-view, #bins-table-view, #empty-state').hide();
 		}
 		
+		// Determine filter based on status_filter
+		let status_filters = {};
+		if (self.status_filter === 'active') {
+			status_filters = { status: 1 };  // Only checked-in bins
+		} else if (self.status_filter === 'checkout') {
+			status_filters = { status: 0 };  // Only checked-out bins
+		}
+		// If 'all', no status filter - show everything
+		
 		frappe.call({
 			method: 'frappe.client.get_list',
 			args: {
 				doctype: 'Bin Storage Status',
-				filters: {
-					status: 1
-				},
-				fields: ['name', 'warehouse', 'batch', 'item_code', 'rack_id', 'check_in_time', 'remarks'],
+				filters: status_filters,
+				fields: ['name', 'warehouse', 'batch', 'item_code', 'rack_id', 'check_in_time', 'check_out_time', 'status', 'remarks'],
 				order_by: 'check_in_time desc',
 				limit_page_length: 0
 			},
@@ -844,17 +944,20 @@ class BinStatusMonitorPage {
 		}
 		
 		this.filtered_bins.forEach(bin => {
-			const duration = this.get_duration(bin.check_in_time);
+			const is_checked_out = bin.status === 0;
+			const duration = is_checked_out && bin.check_out_time 
+				? this.get_checkout_duration(bin.check_in_time, bin.check_out_time)
+				: this.get_duration(bin.check_in_time);
 			const has_fifo_warning = bin.remarks && bin.remarks.includes('FIFO');
 			
 			const card = `
-				<div class="bin-card ${has_fifo_warning ? 'fifo-warning' : ''}" data-bin-name="${bin.name}">
+				<div class="bin-card ${has_fifo_warning ? 'fifo-warning' : ''} ${is_checked_out ? 'checked-out' : ''}" data-bin-name="${bin.name}">
 					<div class="bin-header">
 						<div class="bin-icon">
-							<i class="fa fa-inbox"></i>
+							<i class="fa ${is_checked_out ? 'fa-sign-out' : 'fa-inbox'}"></i>
 						</div>
 						<div class="bin-status">
-							<span class="status-badge">CHECKED IN</span>
+							<span class="status-badge ${is_checked_out ? 'badge-out' : ''}">${is_checked_out ? 'CHECKED OUT' : 'CHECKED IN'}</span>
 						</div>
 					</div>
 					
@@ -881,12 +984,27 @@ class BinStatusMonitorPage {
 							<span class="value">${bin.warehouse}</span>
 						</div>
 						
-						<div class="bin-detail">
-							<label>Stored Since</label>
-							<span class="value time-value">
-								<i class="fa fa-clock-o"></i> ${duration}
-							</span>
-						</div>
+						${is_checked_out ? `
+							<div class="bin-detail">
+								<label>Check-Out Time</label>
+								<span class="value time-value">
+									<i class="fa fa-sign-out"></i> ${frappe.datetime.str_to_user(bin.check_out_time)}
+								</span>
+							</div>
+							<div class="bin-detail">
+								<label>Storage Duration</label>
+								<span class="value time-value">
+									<i class="fa fa-clock-o"></i> ${duration}
+								</span>
+							</div>
+						` : `
+							<div class="bin-detail">
+								<label>Stored Since</label>
+								<span class="value time-value">
+									<i class="fa fa-clock-o"></i> ${duration}
+								</span>
+							</div>
+						`}
 						
 						${has_fifo_warning ? `
 							<div class="fifo-badge">
@@ -896,7 +1014,7 @@ class BinStatusMonitorPage {
 					</div>
 					
 					<div class="bin-footer">
-						<small>${frappe.datetime.str_to_user(bin.check_in_time)}</small>
+						<small>Check-in: ${frappe.datetime.str_to_user(bin.check_in_time)}</small>
 					</div>
 				</div>
 			`;
@@ -923,6 +1041,7 @@ class BinStatusMonitorPage {
 						<th>Rack Location</th>
 						<th>Warehouse</th>
 						<th>Check-In Time</th>
+						<th>Check-Out Time</th>
 						<th>Duration</th>
 						<th>Status</th>
 					</tr>
@@ -931,9 +1050,12 @@ class BinStatusMonitorPage {
 		`;
 		
 		this.filtered_bins.forEach((bin, index) => {
-			const duration = this.get_duration(bin.check_in_time);
+			const is_checked_out = bin.status === 0;
+			const duration = is_checked_out && bin.check_out_time 
+				? this.get_checkout_duration(bin.check_in_time, bin.check_out_time)
+				: this.get_duration(bin.check_in_time);
 			const has_fifo_warning = bin.remarks && bin.remarks.includes('FIFO');
-			const row_class = has_fifo_warning ? 'fifo-row' : '';
+			const row_class = has_fifo_warning ? 'fifo-row' : (is_checked_out ? 'checkout-row' : '');
 			
 			html += `
 				<tr class="${row_class}">
@@ -943,9 +1065,10 @@ class BinStatusMonitorPage {
 					<td><i class="fa fa-map-marker"></i> ${bin.rack_id}</td>
 					<td>${bin.warehouse}</td>
 					<td>${frappe.datetime.str_to_user(bin.check_in_time)}</td>
+					<td>${is_checked_out ? frappe.datetime.str_to_user(bin.check_out_time) : '-'}</td>
 					<td>${duration}</td>
 					<td>
-						<span class="status-badge">CHECKED IN</span>
+						<span class="status-badge ${is_checked_out ? 'badge-out' : ''}">${is_checked_out ? 'CHECKED OUT' : 'CHECKED IN'}</span>
 						${has_fifo_warning ? '<span class="fifo-tag">FIFO Alert</span>' : ''}
 					</td>
 				</tr>
@@ -993,6 +1116,24 @@ class BinStatusMonitorPage {
 		const now = new Date();
 		const check_in = new Date(check_in_time);
 		const diff = now - check_in;
+		
+		const hours = Math.floor(diff / (1000 * 60 * 60));
+		const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+		
+		if (hours > 24) {
+			const days = Math.floor(hours / 24);
+			return `${days}d ${hours % 24}h`;
+		} else if (hours > 0) {
+			return `${hours}h ${minutes}m`;
+		} else {
+			return `${minutes}m`;
+		}
+	}
+
+	get_checkout_duration(check_in_time, check_out_time) {
+		const check_in = new Date(check_in_time);
+		const check_out = new Date(check_out_time);
+		const diff = check_out - check_in;
 		
 		const hours = Math.floor(diff / (1000 * 60 * 60));
 		const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));

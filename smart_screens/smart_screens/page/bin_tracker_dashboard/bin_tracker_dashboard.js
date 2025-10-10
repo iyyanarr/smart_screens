@@ -163,11 +163,12 @@ class BinTrackerDashboard {
 					transform: translateY(-2px);
 				}
 				
-				/* Main Content Area - Two Cards */
+				/* Main Content Area - Four Navigation Cards */
 				.main-content {
 					flex: 1;
 					display: grid;
 					grid-template-columns: 1fr 1fr;
+					grid-template-rows: 1fr 1fr;
 					gap: 0;
 					background: #2d3748;
 				}
@@ -179,19 +180,21 @@ class BinTrackerDashboard {
 					justify-content: center;
 					cursor: pointer;
 					transition: all 0.3s ease;
-					padding: 60px 30px;
+					padding: 40px 20px;
 					background: rgba(45, 55, 72, 0.8);
+					border: 1px solid rgba(255,255,255,0.1);
 				}
 				
 				.main-card h2 {
-					font-size: 56px;
+					font-size: 36px;
 					font-weight: 900;
 					margin: 0;
-					letter-spacing: 2px;
+					letter-spacing: 1px;
 					color: white;
+					text-align: center;
 				}
 				
-				/* Color differentiation for CHECK IN and CHECK OUT text */
+				/* Color differentiation for each card */
 				.check-in-card h2 {
 					color: #43e97b; /* Bright green */
 					text-shadow: 0 2px 10px rgba(67, 233, 123, 0.5);
@@ -202,28 +205,46 @@ class BinTrackerDashboard {
 					text-shadow: 0 2px 10px rgba(79, 172, 254, 0.5);
 				}
 				
+				.product-finder-card h2 {
+					color: #f093fb; /* Bright pink */
+					text-shadow: 0 2px 10px rgba(240, 147, 251, 0.5);
+				}
+				
+				.status-monitor-card h2 {
+					color: #feca57; /* Bright yellow */
+					text-shadow: 0 2px 10px rgba(254, 202, 87, 0.5);
+				}
+				
 				.main-card p {
-					font-size: 16px;
-					margin: 15px 0 0 0;
+					font-size: 14px;
+					margin: 12px 0 0 0;
 					color: rgba(255, 255, 255, 0.7);
 					text-align: center;
-					max-width: 350px;
+					max-width: 280px;
+					line-height: 1.4;
 				}
 				
-				.check-in-card {
-					border-right: 1px solid rgba(255,255,255,0.1);
+				.main-card .icon-large {
+					font-size: 48px;
+					margin-bottom: 15px;
+					opacity: 0.8;
 				}
 				
-				 .check-in-card:hover {
+				/* Hover effects for each card */
+				.check-in-card:hover {
 					background: linear-gradient(135deg, rgba(67, 233, 123, 0.3) 0%, rgba(56, 249, 215, 0.3) 100%) !important;
-				}
-				
-				.check-out-card {
-					/* No special background, uses parent */
 				}
 				
 				.check-out-card:hover {
 					background: linear-gradient(135deg, rgba(79, 172, 254, 0.3) 0%, rgba(0, 242, 254, 0.3) 100%) !important;
+				}
+				
+				.product-finder-card:hover {
+					background: linear-gradient(135deg, rgba(240, 147, 251, 0.3) 0%, rgba(245, 87, 108, 0.3) 100%) !important;
+				}
+				
+				.status-monitor-card:hover {
+					background: linear-gradient(135deg, rgba(254, 202, 87, 0.3) 0%, rgba(255, 159, 67, 0.3) 100%) !important;
 				}
 				
 				.main-card:hover {
@@ -318,7 +339,7 @@ class BinTrackerDashboard {
 					</div>
 				</div>
 				
-				<!-- Main Content: Two Big Cards -->
+				<!-- Main Content: Four Navigation Cards -->
 				<div class="main-content">
 					 <!-- CHECK IN with Green hover -->
 					<div class="main-card check-in-card" data-page="bin_check_in">
@@ -330,6 +351,18 @@ class BinTrackerDashboard {
 					<div class="main-card check-out-card" data-page="bin_check_out">
 						<h2>CHECK OUT</h2>
 						<p>Check-out inventory with FIFO validation</p>
+					</div>
+					
+					<!-- PRODUCT FINDER with Pink hover -->
+					<div class="main-card product-finder-card" data-page="product_finder">
+						<h2>PRODUCT FINDER</h2>
+						<p>Search for products and view details</p>
+					</div>
+					
+					<!-- STATUS MONITOR with Yellow hover -->
+					<div class="main-card status-monitor-card" data-page="bin_status_monitor">
+						<h2>STATUS MONITOR</h2>
+						<p>Monitor the status of bins and racks</p>
 					</div>
 				</div>
 				
@@ -372,7 +405,7 @@ class BinTrackerDashboard {
 			}, 1000);
 		});
 		
-		// Main card navigation - CHECK IN and CHECK OUT
+		// Main card navigation - CHECK IN, CHECK OUT, PRODUCT FINDER, STATUS MONITOR
 		$('.main-card').on('click', function() {
 			const page = $(this).data('page');
 			if (page) {
