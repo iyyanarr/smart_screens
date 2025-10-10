@@ -13,8 +13,18 @@ class DeflashReconciliationReport {
 		this.page = page;
 		this.parent = $(this.page.body);
 		this.page.main.addClass('frappe-card');
+		this.add_export_button();
 		this.make_filters();
 		this.make_result_area();
+		this.sort_column = null;
+		this.sort_direction = 'asc';
+	}
+
+	add_export_button() {
+		// Add Export to Excel button to the page header (title row)
+		this.page.set_primary_action('Export to Excel', () => {
+			this.export_to_excel();
+		}, 'export');
 	}
 
 	make_filters() {
@@ -50,10 +60,9 @@ class DeflashReconciliationReport {
 					</div>
 				</div>
 				<div class="row">
-					<div class="col-sm-12">
-						<button class="btn btn-primary btn-sm" id="get_report">Get Report</button>
+					<div class="col-sm-12" style="text-align: right;">
+						<button class="btn btn-primary btn-sm" id="get_report" style="margin-right: 5px;">Get Report</button>
 						<button class="btn btn-default btn-sm" id="clear_filters">Clear Filters</button>
-						<button class="btn btn-success btn-sm" id="export_excel" style="float: right;">Export to Excel</button>
 					</div>
 				</div>
 			</div>
@@ -68,7 +77,6 @@ class DeflashReconciliationReport {
 		// Bind events
 		$('#get_report').click(() => this.fetch_data());
 		$('#clear_filters').click(() => this.clear_filters());
-		$('#export_excel').click(() => this.export_to_excel());
 	}
 
 	make_result_area() {
@@ -187,18 +195,30 @@ class DeflashReconciliationReport {
 		`;
 		this.result_area.find('.report-summary').html(summary_html);
 
-		// Render table with clean white styling
+		// Render table with clean white styling and sortable headers
 		let table_html = `
 			<div class="table-responsive" style="border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
 				<table class="table table-bordered table-hover" style="font-size: 12px; margin-bottom: 0; background: #ffffff;">
 					<thead>
 						<tr style="background: #ffffff; border-bottom: 2px solid #e2e8f0;">
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Item</th>
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Lot No</th>
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Date Sent</th>
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Date Received</th>
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Deflash Person</th>
-							<th rowspan="2" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle;">Receiving Person</th>
+							<th rowspan="2" class="sortable-header" data-column="item" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Item <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
+							<th rowspan="2" class="sortable-header" data-column="lot_no" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Lot No <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
+							<th rowspan="2" class="sortable-header" data-column="date_sent" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Date Sent <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
+							<th rowspan="2" class="sortable-header" data-column="date_received" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Date Received <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
+							<th rowspan="2" class="sortable-header" data-column="deflash_person" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Deflash Person <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
+							<th rowspan="2" class="sortable-header" data-column="receiving_person" style="color: #2d3748; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; vertical-align: middle; cursor: pointer; user-select: none;">
+								Receiving Person <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 5px;"></i>
+							</th>
 							<th colspan="2" style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Qty Sent</th>
 							<th colspan="2" style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Qty Received</th>
 							<th colspan="2" style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Difference</th>
@@ -229,7 +249,7 @@ class DeflashReconciliationReport {
 				<tr style="background: ${row_bg}; transition: all 0.2s;" onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='${row_bg}'">
 					<td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: 500; color: #2d3748;">${row.item || ''}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0;"><a href="/app/deflashing-receipt-entry/${row.lot_no}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 500;">${row.lot_no || ''}</a></td>
-					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${frappe.datetime.str_to_user(row.date_sent) || ''}</td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.date_sent ? frappe.datetime.str_to_user(row.date_sent) : ''}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.date_received ? frappe.datetime.str_to_user(row.date_received) : '<span class="text-muted" style="font-style: italic;">Pending</span>'}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.deflash_person || ''}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.receiving_person || ''}</td>
@@ -254,6 +274,63 @@ class DeflashReconciliationReport {
 		`;
 
 		this.result_area.find('.report-table').html(table_html);
+		
+		// Bind sort event handlers
+		$('.sortable-header').off('click').on('click', function() {
+			me.sort_table($(this).data('column'));
+		});
+	}
+
+	sort_table(column) {
+		// Toggle sort direction if clicking the same column
+		if (this.sort_column === column) {
+			this.sort_direction = this.sort_direction === 'asc' ? 'desc' : 'asc';
+		} else {
+			this.sort_column = column;
+			this.sort_direction = 'asc';
+		}
+
+		// Sort the data
+		this.data.sort((a, b) => {
+			let val_a = a[column];
+			let val_b = b[column];
+
+			// Handle null/undefined values
+			if (!val_a && !val_b) return 0;
+			if (!val_a) return 1;
+			if (!val_b) return -1;
+
+			// Date comparison
+			if (column === 'date_sent' || column === 'date_received') {
+				val_a = new Date(val_a);
+				val_b = new Date(val_b);
+			}
+
+			// String comparison (case-insensitive)
+			if (typeof val_a === 'string') {
+				val_a = val_a.toLowerCase();
+				val_b = val_b.toLowerCase();
+			}
+
+			let comparison = 0;
+			if (val_a > val_b) {
+				comparison = 1;
+			} else if (val_a < val_b) {
+				comparison = -1;
+			}
+
+			return this.sort_direction === 'asc' ? comparison : -comparison;
+		});
+
+		// Re-render the table
+		this.render_report();
+
+		// Update sort icons
+		$('.sortable-header i').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort').css('color', '#cbd5e0');
+		$(`.sortable-header[data-column="${this.sort_column}"] i`)
+			.removeClass('fa-sort')
+			.addClass(this.sort_direction === 'asc' ? 'fa-sort-up' : 'fa-sort-down')
+			.css('color', '#2d3748');
 	}
 
 	clear_filters() {
