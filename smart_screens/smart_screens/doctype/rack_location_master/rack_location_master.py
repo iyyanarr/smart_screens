@@ -6,13 +6,17 @@ from frappe.model.document import Document
 import barcode
 from barcode.writer import ImageWriter
 from io import BytesIO
+from datetime import datetime
 
 
 class RackLocationMaster(Document):
 	def before_save(self):
 		"""Generate barcode text before saving"""
-		if self.warehouse_name and self.rack_id:
-			self.barcode = f"{self.warehouse_name}-{self.rack_id}"
+		if self.warehouse_name and self.rack_id and not self.barcode:
+			# Generate barcode using creation timestamp
+			# Format: YYYYMMDDHHMMSS (14 digits)
+			timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+			self.barcode = timestamp
 	
 	def on_update(self):
 		"""Generate barcode image after document is saved"""
@@ -32,13 +36,25 @@ class RackLocationMaster(Document):
 			return None
 		
 		try:
-			# Generate the barcode using Code128 format
+			# Generate the barcode using Code128 format with custom options
 			barcode_class = barcode.get_barcode_class('code128')
+			
+			# Configure writer options for small stickers
+			writer_options = {
+				'module_width': 0.2,  # Narrower bars for compact size
+				'module_height': 10.0,  # Reduced height
+				'quiet_zone': 3.0,  # Add quiet zone (margins) on left and right
+				'font_size': 8,  # Smaller font
+				'text_distance': 3.0,  # Distance between barcode and text
+				'background': 'white',
+				'foreground': 'black',
+			}
+			
 			barcode_instance = barcode_class(self.barcode, writer=ImageWriter())
 			
 			# Save the barcode image to a BytesIO object
 			barcode_buffer = BytesIO()
-			barcode_instance.write(barcode_buffer)
+			barcode_instance.write(barcode_buffer, options=writer_options)
 			barcode_buffer.seek(0)
 			
 			# Create a unique filename
@@ -105,7 +121,9 @@ def regenerate_barcode(docname):
 		doc = frappe.get_doc("Rack Location Master", docname)
 		
 		if doc.warehouse_name and doc.rack_id:
-			doc.barcode = f"{doc.warehouse_name}-{doc.rack_id}"
+			# Generate new timestamp-based barcode
+			timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+			doc.barcode = timestamp
 			doc.barcode_image = doc._generate_and_save_barcode()
 			doc.save(ignore_permissions=True)
 			

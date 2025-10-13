@@ -27,31 +27,14 @@ frappe.ui.form.on('Rack Location Master', {
 			});
 		}
 		
-		// Auto-generate barcode if not already generated
-		if (frm.doc.warehouse_name && frm.doc.rack_id && !frm.doc.barcode) {
-			frm.set_value('barcode', frm.doc.warehouse_name + '-' + frm.doc.rack_id);
-		}
-		
-		// Show barcode prominently
+		 // Show barcode prominently
 		if (frm.doc.barcode) {
 			frm.set_df_property('barcode', 'description', 
-				`<strong>Scan this barcode: ${frm.doc.barcode}</strong>`);
-		}
-	},
-	
-	warehouse_name: function(frm) {
-		// Auto-generate barcode when warehouse changes
-		if (frm.doc.warehouse_name && frm.doc.rack_id) {
-			frm.set_value('barcode', frm.doc.warehouse_name + '-' + frm.doc.rack_id);
+				`<strong>Barcode: ${frm.doc.barcode}</strong>`);
 		}
 	},
 	
 	rack_id: function(frm) {
-		// Auto-generate barcode when rack_id changes
-		if (frm.doc.warehouse_name && frm.doc.rack_id) {
-			frm.set_value('barcode', frm.doc.warehouse_name + '-' + frm.doc.rack_id);
-		}
-		
 		// Convert rack_id to uppercase for consistency
 		if (frm.doc.rack_id) {
 			frm.set_value('rack_id', frm.doc.rack_id.toUpperCase());
