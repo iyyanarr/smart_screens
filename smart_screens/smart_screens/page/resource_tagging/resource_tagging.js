@@ -23,8 +23,9 @@ class ResourceTaggingPage {
         
         this.sublot_details = null;
         this.employee_details = null;
-        this.resource_tags = [];
-        this.bom_operations = [];  // ✅ Store BOM operations for validation
+        this.resource_tags = [];  // Saved tags from database
+        this.pending_tags = [];   // ✅ NEW: Pending tags not yet saved
+        this.bom_operations = [];
         
         FinishingCommon.addFactoryStyles();
         this.make();
@@ -155,6 +156,15 @@ class ResourceTaggingPage {
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- ✅ NEW: Save All Button -->
+                        <div class="row mt-4">
+                            <div class="col-12 text-right">
+                                <button class="btn btn-primary" id="save_all_tags_btn">
+                                    <i class="fa fa-save mr-2"></i>Save All
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -201,6 +211,11 @@ class ResourceTaggingPage {
         // Add resource tag
         this.resource_section.find('#add_resource_tag_btn').on('click', () => {
             this.add_resource_tag();
+        });
+        
+        // ✅ Save all pending tags
+        this.resource_section.find('#save_all_tags_btn').on('click', () => {
+            this.save_all_pending_tags();
         });
     }
     
@@ -360,7 +375,8 @@ class ResourceTaggingPage {
         }
         
         // ✅ Check for duplicate operations
-        const isDuplicate = this.resource_tags.some(tag => tag.operation_type === operation);
+        const isDuplicate = this.resource_tags.some(tag => tag.operation_type === operation) ||
+                            this.pending_tags.some(tag => tag.operation_type === operation);
         if (isDuplicate) {
             frappe.msgprint({
                 title: __('Duplicate Operation'),
@@ -382,56 +398,98 @@ class ResourceTaggingPage {
             return;
         }
         
-        // ✅ NEW: Fetch additional fields before creating the record
-        this.fetch_additional_fields_and_create(operation);
+        // ✅ NEW: Add to pending tags
+        this.pending_tags.push({
+            operation_type: operation,
+            operator_id: this.employee_details.employee.name,
+            operator_name: this.employee_details.employee.employee_name
+        });
+        
+        this.update_resource_table();
+        
+        // Clear inputs
+        this.resource_section.find('#operation_select').val('');
+        this.resource_section.find('#scan_employee').val('');
+        this.resource_section.find('#employee_validation_result').html('');
+        this.employee_details = null;
+        
+        // Focus back to operation
+        this.resource_section.find('#operation_select').focus();
+    }
+    
+    // ✅ NEW: Save all pending tags
+    save_all_pending_tags() {
+        if (this.pending_tags.length === 0) {
+            frappe.msgprint(__("No pending tags to save"));
+            return;
+        }
+        
+        const promises = this.pending_tags.map(tag => {
+            return new Promise((resolve, reject) => {
+                this.fetch_additional_fields_and_create(tag.operation_type, tag, resolve, reject);
+            });
+        });
+        
+        Promise.all(promises)
+            .then(() => {
+                frappe.show_alert({
+                    message: __("All pending tags saved successfully"),
+                    indicator: 'green'
+                }, 3);
+                
+                this.pending_tags = [];
+                this.update_resource_table();
+                
+                // Check if all BOM operations are complete
+                this.check_bom_completion();
+            })
+            .catch((error) => {
+                frappe.msgprint({
+                    title: __('Error'),
+                    message: __('Failed to save some tags: ') + (error.message || 'Unknown error'),
+                    indicator: 'red'
+                });
+            });
     }
     
     // ✅ NEW: Fetch all missing fields before creating Lot Resource Tagging
-    fetch_additional_fields_and_create(operation) {
+    fetch_additional_fields_and_create(operation, tag, resolve, reject) {
         frappe.call({
             method: "smart_screens.smart_screens.api.resource_tagging.get_resource_tagging_fields",
             args: {
                 item_code: this.sublot_details.item_code,
                 operation: operation,
                 sublot_number: this.sublot_details.sublot_number,
-                employee_id: this.employee_details.employee.name
+                employee_id: tag.operator_id
             },
             callback: (r) => {
                 if (r.message && r.message.status === "success") {
                     const additional_fields = r.message.data;
-                    this.create_resource_tag_with_fields(operation, additional_fields);
+                    this.create_resource_tag_with_fields(operation, tag, additional_fields, resolve, reject);
                 } else {
-                    frappe.msgprint({
-                        title: __('Error'),
-                        message: __('Failed to fetch required fields: ') + (r.message ? r.message.message : 'Unknown error'),
-                        indicator: 'red'
-                    });
+                    reject(new Error(r.message ? r.message.message : 'Unknown error'));
                 }
             },
             error: (err) => {
-                frappe.msgprint({
-                    title: __('Error'),
-                    message: __('Failed to fetch required fields: ') + (err.message || 'Unknown error'),
-                    indicator: 'red'
-                });
+                reject(new Error(err.message || 'Unknown error'));
             }
         });
     }
     
     // ✅ NEW: Create Lot Resource Tagging with all required fields
-    create_resource_tag_with_fields(operation, additional_fields) {
+    create_resource_tag_with_fields(operation, tag, additional_fields, resolve, reject) {
         frappe.call({
             method: "frappe.client.insert",
             args: {
                 doc: {
                     doctype: "Lot Resource Tagging",
                     scan_lot_no: this.sublot_details.sublot_number,
-                    scan_operator: this.employee_details.employee.name,
+                    scan_operator: tag.operator_id,
                     product_ref: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch,
                     operation_type: operation,
-                    operator_id: this.employee_details.employee.name,
-                    operator_name: this.employee_details.employee.employee_name,
+                    operator_id: tag.operator_id,
+                    operator_name: tag.operator_name,
                     posting_date: frappe.datetime.get_today(),
                     qtynos: this.sublot_details.sublot_qty || 0,
                     available_qty: this.sublot_details.sublot_qty || 0,
@@ -451,21 +509,19 @@ class ResourceTaggingPage {
             callback: (r) => {
                 if (r.message) {
                     // ✅ Auto-submit the document after creation
-                    this.submit_resource_tag(r.message);
+                    this.submit_resource_tag(r.message, resolve, reject);
+                } else {
+                    reject(new Error('Failed to create resource tag'));
                 }
             },
             error: (err) => {
-                frappe.msgprint({
-                    title: __('Creation Failed'),
-                    message: __('Failed to create resource tag: ') + (err.message || 'Unknown error'),
-                    indicator: 'red'
-                });
+                reject(new Error(err.message || 'Unknown error'));
             }
         });
     }
     
     // ✅ Submit resource tag document
-    submit_resource_tag(doc) {
+    submit_resource_tag(doc, resolve, reject) {
         frappe.call({
             method: "frappe.client.submit",
             args: {
@@ -473,39 +529,14 @@ class ResourceTaggingPage {
             },
             callback: (r) => {
                 if (r.message) {
-                    frappe.show_alert({
-                        message: __("Resource tagged and submitted successfully"),
-                        indicator: 'green'
-                    }, 3);
-                    
                     this.resource_tags.push(r.message);
-                    this.update_resource_table();
-                    
-                    // Check if all BOM operations are complete
-                    this.check_bom_completion();
-                    
-                    // Clear inputs
-                    this.resource_section.find('#operation_select').val('');
-                    this.resource_section.find('#scan_employee').val('');
-                    this.resource_section.find('#employee_validation_result').html('');
-                    this.employee_details = null;
-                    
-                    // Focus back to operation
-                    this.resource_section.find('#operation_select').focus();
+                    resolve();
                 } else {
-                    frappe.msgprint({
-                        title: __('Submission Failed'),
-                        message: __('Resource tag was created but could not be submitted. Please submit it manually.'),
-                        indicator: 'orange'
-                    });
+                    reject(new Error('Failed to submit resource tag'));
                 }
             },
             error: (r) => {
-                frappe.msgprint({
-                    title: __('Submission Error'),
-                    message: __('Resource tag was created but submission failed: ') + (r.message || 'Unknown error'),
-                    indicator: 'red'
-                });
+                reject(new Error(r.message || 'Unknown error'));
             }
         });
     }
@@ -523,7 +554,9 @@ class ResourceTaggingPage {
         if (!this.bom_operations || this.bom_operations.length === 0) return;
         
         const assignedOperations = this.resource_tags.map(tag => tag.operation_type);
-        const missingOperations = this.bom_operations.filter(op => !assignedOperations.includes(op));
+        const pendingOperations = this.pending_tags.map(tag => tag.operation_type);
+        const allAssignedOperations = [...assignedOperations, ...pendingOperations];
+        const missingOperations = this.bom_operations.filter(op => !allAssignedOperations.includes(op));
         
         // Remove previous info if exists
         this.resource_section.find('.bom-completion-info').remove();
@@ -558,7 +591,7 @@ class ResourceTaggingPage {
         const tbody = this.resource_section.find('#resource_tags_table tbody');
         tbody.empty();
         
-        if (this.resource_tags.length === 0) {
+        if (this.resource_tags.length === 0 && this.pending_tags.length === 0) {
             tbody.append(`
                 <tr>
                     <td colspan="4" class="text-center text-muted">
@@ -584,10 +617,32 @@ class ResourceTaggingPage {
             `);
         });
         
+        this.pending_tags.forEach((tag, idx) => {
+            tbody.append(`
+                <tr class="table-warning">
+                    <td>${tag.operation_type}</td>
+                    <td>${tag.operator_id}</td>
+                    <td>${tag.operator_name}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" data-pending-index="${idx}">
+                            <i class="fa fa-trash mr-1"></i>Remove
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+        
         // Attach delete handlers
         tbody.find('button[data-tag-name]').on('click', (e) => {
             const tag_name = $(e.currentTarget).data('tag-name');
             this.remove_resource_tag(tag_name);
+        });
+        
+        // Attach remove handlers for pending tags
+        tbody.find('button[data-pending-index]').on('click', (e) => {
+            const index = $(e.currentTarget).data('pending-index');
+            this.pending_tags.splice(index, 1);
+            this.update_resource_table();
         });
     }
     
