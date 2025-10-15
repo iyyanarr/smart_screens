@@ -683,30 +683,32 @@ class QualityInspectionPage {
         const total_rejection = this.rejection_details.reduce((sum, r) => sum + r.quantity, 0);
         const final_qty = inspection_qty - total_rejection;
         
-        // ✅ NEW: Create Inspection Entry document directly
+        // ✅ FIXED: Create SPP Inspection Entry document with correct field mappings
         frappe.call({
             method: "frappe.client.insert",
             args: {
                 doc: {
-                    doctype: "Inspection Entry",
+                    doctype: "SPP Inspection Entry",
                     inspection_type: inspection_type,
                     scan_inspector: this.inspector_details.employee.name,
+                    inspector_code: this.inspector_details.employee.name,
                     inspector_name: this.inspector_details.employee.employee_name,
-                    scan_production_lot: this.sublot_details.name,
+                    scan_production_lot: this.sublot_details.sublot_number,
+                    lot_no: this.sublot_details.sublot_number,
                     product_ref_no: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch || this.sublot_details.batch,
+                    inspected_qty_nos: inspection_qty,
                     total_inspected_qty_nos: inspection_qty,
-                    rejection_qty: total_rejection,
-                    final_qty: final_qty,
-                    uom: this.sublot_details.uom,
+                    available_qty_nos: this.sublot_details.sublot_qty,
+                    rejected_qty_nos: total_rejection,
+                    accepted_qty_nos: final_qty,
                     warehouse: this.user_settings.default_warehouse,
-                    source_warehouse: this.user_settings.source_warehouse || this.user_settings.default_warehouse,
-                    target_warehouse: this.user_settings.target_warehouse || this.user_settings.default_warehouse,
                     posting_date: frappe.datetime.get_today(),
-                    // Add rejection details as child table if needed
-                    inspection_rejection_details: this.rejection_details.map(r => ({
-                        defect_type: r.defect_type,
-                        rejection_qty: r.quantity
+                    // ✅ Add rejection items as child table
+                    items: this.rejection_details.map(r => ({
+                        type_of_defect: r.defect_type,
+                        rejected_qty: r.quantity,
+                        rejected_qty_kg: 0
                     }))
                 }
             },
@@ -729,7 +731,7 @@ class QualityInspectionPage {
         });
     }
     
-    // ✅ NEW: Submit inspection entry document
+    // ✅ FIXED: Update submit method to use correct doctype
     submit_inspection_entry(doc) {
         frappe.call({
             method: "frappe.client.submit",
@@ -755,7 +757,7 @@ class QualityInspectionPage {
                                 <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
                                 <h4 class="mt-3">Inspection Entry Created & Submitted Successfully!</h4>
                                 <p><strong>Inspection ID:</strong> ${r.message.name}</p>
-                                <p><strong>Sub-Lot:</strong> ${this.sublot_details.name}</p>
+                                <p><strong>Sub-Lot:</strong> ${this.sublot_details.sublot_number}</p>
                                 <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
                                 <p><strong>Type:</strong> ${r.message.inspection_type}</p>
                                 <p><strong>Inspection Qty:</strong> ${inspection_qty}</p>
@@ -771,7 +773,7 @@ class QualityInspectionPage {
                         primary_action: {
                             label: __('View Inspection Entry'),
                             action: () => {
-                                frappe.set_route("Form", "Inspection Entry", r.message.name);
+                                frappe.set_route("Form", "SPP Inspection Entry", r.message.name);
                             }
                         }
                     });
