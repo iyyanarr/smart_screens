@@ -217,15 +217,21 @@ class QualityInspectionPage {
         const result_div = this.inspection_section.find('#insp_sublot_validation_result');
         result_div.html('<div class="alert alert-info">Validating sub-lot...</div>');
         
+        // Search by sublot_number field instead of document name
         frappe.call({
-            method: "frappe.client.get",
+            method: "frappe.client.get_list",
             args: {
                 doctype: "Sub Lot Entry",
-                name: sublot_number
+                filters: {
+                    sublot_number: sublot_number,
+                    docstatus: 1  // Only submitted documents
+                },
+                fields: ["name", "item_code", "sublot_number", "sublot_batch", "batch", "sublot_qty", "uom"],
+                limit: 1
             },
             callback: (r) => {
-                if (r.message) {
-                    this.sublot_details = r.message;
+                if (r.message && r.message.length > 0) {
+                    this.sublot_details = r.message[0];
                     
                     result_div.html(`<div class="alert alert-success">
                         <i class="fa fa-check-circle mr-2"></i>Sub-Lot validated successfully!
@@ -233,9 +239,9 @@ class QualityInspectionPage {
                     
                     // Display sublot info
                     this.inspection_section.find('#insp_sublot_info_display').show();
-                    this.inspection_section.find('#insp_display_item_code').text(r.message.item_code);
-                    this.inspection_section.find('#insp_display_batch').text(r.message.sublot_batch || r.message.batch);
-                    this.inspection_section.find('#insp_display_qty').text(`${r.message.sublot_qty} ${r.message.uom}`);
+                    this.inspection_section.find('#insp_display_item_code').text(this.sublot_details.item_code);
+                    this.inspection_section.find('#insp_display_batch').text(this.sublot_details.sublot_batch || this.sublot_details.batch);
+                    this.inspection_section.find('#insp_display_qty').text(`${this.sublot_details.sublot_qty} ${this.sublot_details.uom}`);
                     
                     // Show inspection details section
                     this.inspection_section.find('#inspection_details_section').show();
@@ -245,7 +251,7 @@ class QualityInspectionPage {
                     
                 } else {
                     result_div.html(`<div class="alert alert-danger">
-                        <i class="fa fa-times-circle mr-2"></i>Invalid sub-lot number
+                        <i class="fa fa-times-circle mr-2"></i>Invalid sub-lot number or sub-lot not submitted
                     </div>`);
                     this.inspection_section.find('#insp_sublot_info_display').hide();
                     this.inspection_section.find('#inspection_details_section').hide();

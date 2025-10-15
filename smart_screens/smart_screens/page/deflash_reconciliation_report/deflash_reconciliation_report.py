@@ -5,24 +5,34 @@ import frappe
 from frappe.utils import flt, getdate
 
 @frappe.whitelist()
-def get_deflash_reconciliation_data(from_date=None, to_date=None, item=None, deflash_vendor=None):
+def get_deflash_reconciliation_data(date_type='sent', from_date=None, to_date=None, item=None, deflash_vendor=None):
     """
-    Fetch Deflash Reconciliation Report data
-    Columns: Item, Lot No, Date Sent, Date Received, Deflash Person, Receiving Person,
-             Qty Sent (Kg, Nos), Qty Received (Kg, Nos), Difference (Nos, %),
-             Scrap (Expected, Actual, Difference Kg, Difference %)
+    Fetch Deflash Reconciliation Report data with flexible date filtering
+    date_type: 'sent' or 'received' to determine which date field to filter on
     """
     try:
         conditions = []
         params = {}
         
-        if from_date:
-            conditions.append("DDE.posting_date >= %(from_date)s")
-            params['from_date'] = from_date
-        
-        if to_date:
-            conditions.append("DDE.posting_date <= %(to_date)s")
-            params['to_date'] = to_date
+        # Date filters based on selected type
+        if date_type == 'sent':
+            # Filter by Date Sent (Deflashing Despatch Entry posting_date)
+            if from_date:
+                conditions.append("DDE.posting_date >= %(from_date)s")
+                params['from_date'] = from_date
+            
+            if to_date:
+                conditions.append("DDE.posting_date <= %(to_date)s")
+                params['to_date'] = to_date
+        elif date_type == 'received':
+            # Filter by Date Received (Deflashing Receipt Entry posting_date)
+            if from_date:
+                conditions.append("DRE.posting_date >= %(from_date)s")
+                params['from_date'] = from_date
+            
+            if to_date:
+                conditions.append("DRE.posting_date <= %(to_date)s")
+                params['to_date'] = to_date
         
         if item:
             conditions.append("DDEI.item = %(item)s")

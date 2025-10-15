@@ -36,6 +36,15 @@ class DeflashReconciliationReport {
 				<div class="row">
 					<div class="col-sm-3">
 						<div class="form-group">
+							<label>Date Filter Type</label>
+							<select class="form-control" id="date_type">
+								<option value="sent">Date Sent</option>
+								<option value="received">Date Received</option>
+							</select>
+						</div>
+					</div>
+					<div class="col-sm-3">
+						<div class="form-group">
 							<label>From Date</label>
 							<input type="date" class="form-control" id="from_date">
 						</div>
@@ -52,17 +61,24 @@ class DeflashReconciliationReport {
 							<input type="text" class="form-control" id="item" placeholder="Item Code">
 						</div>
 					</div>
+				</div>
+				<div class="row">
 					<div class="col-sm-3">
 						<div class="form-group">
 							<label>Deflash Vendor</label>
 							<input type="text" class="form-control" id="deflash_vendor" placeholder="Vendor Code">
 						</div>
 					</div>
-				</div>
-				<div class="row">
-					<div class="col-sm-12" style="text-align: right;">
-						<button class="btn btn-primary btn-sm" id="get_report" style="margin-right: 5px;">Get Report</button>
-						<button class="btn btn-default btn-sm" id="clear_filters">Clear Filters</button>
+					<div class="col-sm-9" style="text-align: right;">
+						<label>&nbsp;</label>
+						<div>
+							<button class="btn btn-primary btn-sm" id="get_report" style="margin-right: 5px;">
+								<i class="fa fa-search mr-1"></i>Get Report
+							</button>
+							<button class="btn btn-default btn-sm" id="clear_filters">
+								<i class="fa fa-eraser mr-1"></i>Clear Filters
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -90,7 +106,9 @@ class DeflashReconciliationReport {
 
 	fetch_data() {
 		let me = this;
+		let date_type = $('#date_type').val();
 		let filters = {
+			date_type: date_type,
 			from_date: $('#from_date').val(),
 			to_date: $('#to_date').val(),
 			item: $('#item').val(),
@@ -101,11 +119,11 @@ class DeflashReconciliationReport {
 		me.show_loading();
 
 		frappe.call({
-			method: 'smart_screens.smart_screens.page.deflash_reconciliation_report.deflash_reconciliation_report.get_deflash_reconciliation_data',
-			args: filters,
-			callback: function(r) {
-				// Hide loading animation
-				me.hide_loading();
+method: 'smart_screens.smart_screens.page.deflash_reconciliation_report.deflash_reconciliation_report.get_deflash_reconciliation_data',
+args: filters,
+callback: function(r) {
+// Hide loading animation
+me.hide_loading();
 				
 				if (r.message && r.message.status === 'success') {
 					me.data = r.message.data;
@@ -225,16 +243,36 @@ class DeflashReconciliationReport {
 							<th colspan="4" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 12px; text-align: center; background: #ffffff;">Scrap</th>
 						</tr>
 						<tr style="background: #fafbfc;">
-							<th style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Kg</th>
-							<th style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
-							<th style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Kg</th>
-							<th style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
-							<th style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Nos</th>
-							<th style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">%</th>
-							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Expected</th>
-							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Actual</th>
-							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Diff Kg</th>
-							<th style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px;">Diff %</th>
+							<th class="sortable-header" data-column="qty_sent_kg" style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Kg <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="qty_sent_nos" style="color: #667eea; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Nos <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="qty_received_kg" style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Kg <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="qty_received_nos" style="color: #48bb78; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Nos <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="difference_nos" style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Nos <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="difference_percent" style="color: #ed8936; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								% <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="scrap_expected_kg" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Expected <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="scrap_actual_kg" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Actual <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="scrap_difference_kg" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Diff Kg <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
+							<th class="sortable-header" data-column="scrap_difference_percent" style="color: #f56565; font-weight: 600; border: 1px solid #e2e8f0; padding: 10px; font-size: 11px; cursor: pointer; user-select: none;">
+								Diff % <i class="fa fa-sort" style="color: #cbd5e0; margin-left: 3px; font-size: 10px;"></i>
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -336,12 +374,13 @@ class DeflashReconciliationReport {
 	clear_filters() {
 		$('#item').val('');
 		$('#deflash_vendor').val('');
+		$('#date_type').val('sent');
 		let today = frappe.datetime.get_today();
 		let last_month = frappe.datetime.add_days(today, -30);
 		$('#from_date').val(last_month);
 		$('#to_date').val(today);
 		this.result_area.find('.report-table').html('');
-		this.result_area.find('..report-summary').html('');
+		this.result_area.find('.report-summary').html('');
 	}
 
 	export_to_excel() {

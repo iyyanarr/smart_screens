@@ -1,16 +1,16 @@
 {
- "creation": "2024-10-14 15:05:00.000000",
+ "creation": "2024-10-14 15:03:00.000000",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2024-10-14 15:05:00.000000",
+ "modified": "2024-10-14 15:03:00.000000",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "sublot-creation",
  "owner": "Administrator",
- "page_name": "sublot-creation",
+ "page_name": "Sub-Lot Creation",
  "roles": [],
  "standard": "Yes",
  "system_page": 0,
- "title": "Sub-Lot Creation Center"
+ "title": "Sub-Lot Creation"
 }

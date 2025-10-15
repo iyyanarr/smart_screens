@@ -157,26 +157,34 @@ class SubLotCreationPage {
                 this.sublot_section.find('#sublot_qty').prop('disabled', true);
                 this.sublot_section.find('#create_sublot_btn').prop('disabled', true);
             } else {
-                this.lot_details = data;
+                // Store lot details with normalized field names
+                this.lot_details = {
+                    item_code: data.item_code,
+                    batch_no: data.batch_no,
+                    qty: data.batch_quantity || 0,  // Use batch_quantity from backend
+                    uom: data.uom || 'Nos',  // Default to 'Nos' if UOM not provided
+                    warehouse: data.warehouse,
+                    stock_entry: data.stock_entry
+                };
                 
                 result_div.html(`<div class="alert alert-success">
                     <i class="fa fa-check-circle mr-2"></i>Lot validated successfully!
                     <div class="mt-2">
-                        <strong>Item:</strong> ${data.item_code}<br>
-                        <strong>Batch:</strong> ${data.batch_no}<br>
-                        <strong>Available:</strong> ${data.qty} ${data.uom}
+                        <strong>Item:</strong> ${this.lot_details.item_code}<br>
+                        <strong>Batch:</strong> ${this.lot_details.batch_no}<br>
+                        <strong>Available:</strong> ${this.lot_details.qty} ${this.lot_details.uom}
                     </div>
                 </div>`);
                 
-                this.sublot_section.find('#available_qty').text(`${data.qty} ${data.uom}`);
+                this.sublot_section.find('#available_qty').text(`${this.lot_details.qty} ${this.lot_details.uom}`);
                 this.sublot_section.find('#sublot_qty')
                     .prop('disabled', false)
-                    .attr('max', data.qty)
+                    .attr('max', this.lot_details.qty)
                     .focus();
                 this.sublot_section.find('#create_sublot_btn').prop('disabled', false);
                 
                 // Fetch BOM details
-                this.fetch_bom_details(data.item_code);
+                this.fetch_bom_details(this.lot_details.item_code);
             }
         });
     }
@@ -251,10 +259,25 @@ class SubLotCreationPage {
             },
             callback: (r) => {
                 if (r.message) {
+                    // Document created successfully, now submit it
+                    this.submit_sublot_entry(r.message, sublot_data);
+                }
+            }
+        });
+    }
+    
+    submit_sublot_entry(doc, sublot_data) {
+        frappe.call({
+            method: "frappe.client.submit",
+            args: {
+                doc: doc
+            },
+            callback: (r) => {
+                if (r.message) {
                     this.sublot_details = r.message;
                     
                     frappe.show_alert({
-                        message: __("Sub-Lot created successfully: " + r.message.name),
+                        message: __("Sub-Lot created and submitted successfully: " + r.message.name),
                         indicator: 'green'
                     }, 10);
                     
@@ -264,10 +287,11 @@ class SubLotCreationPage {
                         message: `
                             <div class="text-center">
                                 <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
-                                <h4 class="mt-3">Sub-Lot Created Successfully!</h4>
+                                <h4 class="mt-3">Sub-Lot Created & Submitted Successfully!</h4>
                                 <p><strong>Sub-Lot Number:</strong> ${r.message.name}</p>
                                 <p><strong>Batch:</strong> ${sublot_data.new_batch_number}</p>
                                 <p><strong>Quantity:</strong> ${sublot_data.processed_qty} ${this.lot_details.uom}</p>
+                                <p class="text-success mt-2"><i class="fa fa-check"></i> Document Status: <strong>Submitted</strong></p>
                             </div>
                         `,
                         primary_action: {
@@ -279,7 +303,20 @@ class SubLotCreationPage {
                     });
                     
                     this.reset_form();
+                } else {
+                    frappe.msgprint({
+                        title: __('Submission Failed'),
+                        message: __('Sub-Lot was created but could not be submitted. Please submit it manually.'),
+                        indicator: 'orange'
+                    });
                 }
+            },
+            error: (r) => {
+                frappe.msgprint({
+                    title: __('Submission Error'),
+                    message: __('Sub-Lot was created but submission failed: ') + (r.message || 'Unknown error'),
+                    indicator: 'red'
+                });
             }
         });
     }
