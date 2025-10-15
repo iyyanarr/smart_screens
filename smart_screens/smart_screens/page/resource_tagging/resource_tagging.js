@@ -1,0 +1,434 @@
+/**
+ * Resource Tagging Center - Individual Page
+ * Standalone page for assigning operations and employees to sub-lots
+ */
+
+frappe.pages['resource-tagging'].on_page_load = function(wrapper) {
+    var page = frappe.ui.make_app_page({
+        parent: wrapper,
+        title: 'Resource Tagging Center',
+        single_column: true
+    });
+    
+    FinishingCommon.showLocationSelector(page, (locationData) => {
+        new ResourceTaggingPage(page, locationData);
+    });
+};
+
+class ResourceTaggingPage {
+    constructor(page, locationData) {
+        this.page = page;
+        this.wrapper = $(page.wrapper);
+        this.user_settings = locationData;
+        
+        this.sublot_details = null;
+        this.employee_details = null;
+        this.resource_tags = [];
+        this.allowed_operations = [];
+        
+        FinishingCommon.addFactoryStyles();
+        this.make();
+    }
+    
+    make() {
+        this.wrapper.find('.page-content').empty();
+        
+        this.add_header_section();
+        this.add_resource_tagging_section();
+        this.add_information_section();
+    }
+    
+    add_header_section() {
+        $(`<div class="page-head-content mb-4">
+            <p class="text-muted" style="font-size: 16px;">
+                Assign operations and employees to sub-lots for traceability.
+                Scan sub-lot, select operation, validate employee, and create resource tags.
+            </p>
+        </div>`).appendTo(this.wrapper.find('.page-content'));
+    }
+    
+    add_resource_tagging_section() {
+        this.resource_section = $(`
+            <div class="factory-section">
+                <div class="factory-section-head">
+                    <i class="fa fa-users mr-2"></i>Resource Tagging
+                </div>
+                <div class="section-body">
+                    <!-- Sub-lot Scanner -->
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <div class="factory-form-group">
+                                <label class="factory-label">
+                                    <i class="fa fa-barcode mr-2"></i>Scan Sub-Lot Number
+                                </label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control factory-input" 
+                                           id="scan_sublot" placeholder="Scan or enter sub-lot number"
+                                           autocomplete="off">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-primary factory-btn-validate" id="validate_sublot_btn">
+                                            <i class="fa fa-check mr-2"></i>Validate
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="sublot_validation_result" class="factory-validation-result"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div id="sublot_info_display" class="card mt-4" style="display: none;">
+                                <div class="card-body p-3">
+                                    <div class="factory-compact-info">
+                                        <div class="factory-compact-row">
+                                            <span class="factory-compact-label">Item:</span>
+                                            <span class="factory-compact-value" id="display_item_code">-</span>
+                                        </div>
+                                        <div class="factory-compact-row">
+                                            <span class="factory-compact-label">Quantity:</span>
+                                            <span class="factory-compact-value" id="display_qty">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Resource Assignment Section -->
+                    <div id="resource_assignment_section" style="display: none;">
+                        <h5 class="mb-3">Assign Resources</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-5">
+                                <div class="factory-form-group">
+                                    <label class="factory-label">
+                                        <i class="fa fa-cog mr-2"></i>Select Operation
+                                    </label>
+                                    <select class="form-control factory-input" id="operation_select">
+                                        <option value="">Select operation...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-5">
+                                <div class="factory-form-group">
+                                    <label class="factory-label">
+                                        <i class="fa fa-user mr-2"></i>Scan Employee ID
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control factory-input" 
+                                               id="scan_employee" placeholder="Scan employee ID"
+                                               autocomplete="off">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-primary factory-btn-validate" id="validate_employee_btn">
+                                                <i class="fa fa-check mr-2"></i>Validate
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="employee_validation_result" class="factory-validation-result"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-2 d-flex align-items-end mb-3">
+                                <button class="btn btn-success factory-btn w-100" id="add_resource_tag_btn">
+                                    <i class="fa fa-plus mr-2"></i>Add
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Resource Tags Table -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <h5>Assigned Resources</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered factory-table" id="resource_tags_table">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th width="30%">Operation</th>
+                                                <th width="20%">Employee ID</th>
+                                                <th width="30%">Employee Name</th>
+                                                <th width="20%">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).appendTo(this.wrapper.find('.page-content'));
+        
+        this.attach_event_handlers();
+    }
+    
+    add_information_section() {
+        FinishingCommon.createInfoSection(
+            this.wrapper.find('.page-content'),
+            this.user_settings,
+            "Current Settings"
+        );
+    }
+    
+    attach_event_handlers() {
+        // Validate sublot on Enter
+        this.resource_section.find('#scan_sublot').on('keypress', (e) => {
+            if (e.which === 13) {
+                e.preventDefault();
+                this.validate_sublot();
+            }
+        });
+        
+        // Validate sublot on button click
+        this.resource_section.find('#validate_sublot_btn').on('click', () => {
+            this.validate_sublot();
+        });
+        
+        // Validate employee on Enter
+        this.resource_section.find('#scan_employee').on('keypress', (e) => {
+            if (e.which === 13) {
+                e.preventDefault();
+                this.validate_employee();
+            }
+        });
+        
+        // Validate employee on button click
+        this.resource_section.find('#validate_employee_btn').on('click', () => {
+            this.validate_employee();
+        });
+        
+        // Add resource tag
+        this.resource_section.find('#add_resource_tag_btn').on('click', () => {
+            this.add_resource_tag();
+        });
+    }
+    
+    validate_sublot() {
+        const sublot_number = this.resource_section.find('#scan_sublot').val().trim();
+        
+        if (!sublot_number) {
+            frappe.msgprint(__("Please scan or enter a sub-lot number"));
+            return;
+        }
+        
+        const result_div = this.resource_section.find('#sublot_validation_result');
+        result_div.html('<div class="alert alert-info">Validating sub-lot...</div>');
+        
+        frappe.call({
+            method: "frappe.client.get",
+            args: {
+                doctype: "Sub Lot Entry",
+                name: sublot_number
+            },
+            callback: (r) => {
+                if (r.message) {
+                    this.sublot_details = r.message;
+                    
+                    result_div.html(`<div class="alert alert-success">
+                        <i class="fa fa-check-circle mr-2"></i>Sub-Lot validated successfully!
+                    </div>`);
+                    
+                    // Display sublot info
+                    this.resource_section.find('#sublot_info_display').show();
+                    this.resource_section.find('#display_item_code').text(r.message.item_code);
+                    this.resource_section.find('#display_qty').text(`${r.message.sublot_qty} ${r.message.uom}`);
+                    
+                    // Show resource assignment section
+                    this.resource_section.find('#resource_assignment_section').show();
+                    
+                    // Fetch BOM operations
+                    this.fetch_operations(r.message.item_code);
+                    
+                    // Load existing tags
+                    this.load_existing_tags(sublot_number);
+                    
+                } else {
+                    result_div.html(`<div class="alert alert-danger">
+                        <i class="fa fa-times-circle mr-2"></i>Invalid sub-lot number
+                    </div>`);
+                    this.resource_section.find('#sublot_info_display').hide();
+                    this.resource_section.find('#resource_assignment_section').hide();
+                }
+            }
+        });
+    }
+    
+    fetch_operations(item_code) {
+        FinishingCommon.fetchBOM(item_code, (error, bom) => {
+            if (!error && bom.operations) {
+                this.allowed_operations = bom.operations.map(op => op.operation);
+                this.update_operation_dropdown();
+            } else {
+                // Default operations if no BOM
+                this.allowed_operations = ['Post Curing', 'OD Trimming', 'ID Trimming', 'Visual Inspection'];
+                this.update_operation_dropdown();
+            }
+        });
+    }
+    
+    update_operation_dropdown() {
+        const select = this.resource_section.find('#operation_select');
+        select.html('<option value="">Select operation...</option>');
+        
+        this.allowed_operations.forEach(op => {
+            select.append(`<option value="${op}">${op}</option>`);
+        });
+    }
+    
+    load_existing_tags(sublot_number) {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Lot Resource Tagging",
+                filters: { sublot: sublot_number },
+                fields: ["name", "operation", "employee", "employee_name", "creation"]
+            },
+            callback: (r) => {
+                if (r.message) {
+                    this.resource_tags = r.message;
+                    this.update_resource_table();
+                }
+            }
+        });
+    }
+    
+    validate_employee() {
+        const employee_id = this.resource_section.find('#scan_employee').val().trim();
+        
+        if (!employee_id) {
+            frappe.msgprint(__("Please scan or enter an employee ID"));
+            return;
+        }
+        
+        const result_div = this.resource_section.find('#employee_validation_result');
+        result_div.html('<div class="alert alert-info">Validating employee...</div>');
+        
+        FinishingCommon.validateEmployee(employee_id, (error, data) => {
+            if (error) {
+                result_div.html(`<div class="alert alert-danger">
+                    <i class="fa fa-times-circle mr-2"></i>${error}
+                </div>`);
+                this.employee_details = null;
+            } else {
+                this.employee_details = data;
+                result_div.html(`<div class="alert alert-success">
+                    <i class="fa fa-check-circle mr-2"></i>${data.employee.employee_name} - ${data.designation || 'N/A'}
+                </div>`);
+            }
+        });
+    }
+    
+    add_resource_tag() {
+        if (!this.sublot_details) {
+            frappe.msgprint(__("Please validate a sub-lot first"));
+            return;
+        }
+        
+        if (!this.employee_details) {
+            frappe.msgprint(__("Please validate an employee first"));
+            return;
+        }
+        
+        const operation = this.resource_section.find('#operation_select').val();
+        if (!operation) {
+            frappe.msgprint(__("Please select an operation"));
+            return;
+        }
+        
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Lot Resource Tagging",
+                    sublot: this.sublot_details.name,
+                    item_code: this.sublot_details.item_code,
+                    operation: operation,
+                    employee: this.employee_details.employee.name,
+                    employee_name: this.employee_details.employee.employee_name
+                }
+            },
+            callback: (r) => {
+                if (r.message) {
+                    frappe.show_alert({
+                        message: __("Resource tagged successfully"),
+                        indicator: 'green'
+                    }, 3);
+                    
+                    this.resource_tags.push(r.message);
+                    this.update_resource_table();
+                    
+                    // Clear inputs
+                    this.resource_section.find('#operation_select').val('');
+                    this.resource_section.find('#scan_employee').val('');
+                    this.resource_section.find('#employee_validation_result').html('');
+                    this.employee_details = null;
+                    
+                    // Focus back to operation
+                    this.resource_section.find('#operation_select').focus();
+                }
+            }
+        });
+    }
+    
+    update_resource_table() {
+        const tbody = this.resource_section.find('#resource_tags_table tbody');
+        tbody.empty();
+        
+        if (this.resource_tags.length === 0) {
+            tbody.append(`
+                <tr>
+                    <td colspan="4" class="text-center text-muted">
+                        No resources assigned yet
+                    </td>
+                </tr>
+            `);
+            return;
+        }
+        
+        this.resource_tags.forEach((tag, idx) => {
+            tbody.append(`
+                <tr>
+                    <td>${tag.operation}</td>
+                    <td>${tag.employee}</td>
+                    <td>${tag.employee_name}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" data-tag-name="${tag.name}">
+                            <i class="fa fa-trash mr-1"></i>Delete
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+        
+        // Attach delete handlers
+        tbody.find('button[data-tag-name]').on('click', (e) => {
+            const tag_name = $(e.currentTarget).data('tag-name');
+            this.remove_resource_tag(tag_name);
+        });
+    }
+    
+    remove_resource_tag(tag_name) {
+        frappe.confirm(
+            __('Are you sure you want to remove this resource tag?'),
+            () => {
+                frappe.call({
+                    method: "frappe.client.delete",
+                    args: {
+                        doctype: "Lot Resource Tagging",
+                        name: tag_name
+                    },
+                    callback: (r) => {
+                        frappe.show_alert({
+                            message: __("Resource tag removed"),
+                            indicator: 'red'
+                        }, 3);
+                        
+                        this.resource_tags = this.resource_tags.filter(t => t.name !== tag_name);
+                        this.update_resource_table();
+                    }
+                });
+            }
+        );
+    }
+}

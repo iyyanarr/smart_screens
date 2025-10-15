@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/smart_screens/css/smart_screens.css"
-# app_include_js = "/assets/smart_screens/js/smart_screens.js"
+app_include_js = "/assets/smart_screens/js/finishing_common.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/smart_screens/css/smart_screens.css"
