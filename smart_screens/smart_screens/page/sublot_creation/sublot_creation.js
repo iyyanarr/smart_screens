@@ -276,13 +276,27 @@ class SubLotCreationPage {
                 if (r.message) {
                     this.sublot_details = r.message;
                     
-                    // ✅ Store lot details before reset for print label access
-                    const lot_details_copy = {...this.lot_details};
+                    // ✅ FIX: Store lot_details before reset to use in print dialog
+                    const lot_details_copy = {
+                        item_code: this.lot_details.item_code,
+                        batch_no: this.lot_details.batch_no,
+                        qty: this.lot_details.qty,
+                        uom: this.lot_details.uom,
+                        warehouse: this.lot_details.warehouse
+                    };
+                    
+                    const user_settings_copy = {
+                        default_warehouse: this.user_settings.default_warehouse,
+                        target_warehouse: this.user_settings.target_warehouse
+                    };
                     
                     frappe.show_alert({
                         message: __("Sub-Lot created and submitted successfully: " + r.message.name),
                         indicator: 'green'
                     }, 10);
+                    
+                    // ✅ FIX: Reset form BEFORE showing the dialog
+                    this.reset_form();
                     
                     // Show success dialog with Print Label and View options
                     frappe.msgprint({
@@ -300,7 +314,7 @@ class SubLotCreationPage {
                         primary_action: {
                             label: __('Print Label'),
                             action: () => {
-                                this.print_sublot_label(r.message, sublot_data, lot_details_copy);
+                                this.print_sublot_label(r.message, sublot_data, lot_details_copy, user_settings_copy);
                             }
                         },
                         secondary_action: {
@@ -310,8 +324,6 @@ class SubLotCreationPage {
                             }
                         }
                     });
-                    
-                    this.reset_form();
                 } else {
                     frappe.msgprint({
                         title: __('Submission Failed'),
@@ -330,7 +342,7 @@ class SubLotCreationPage {
         });
     }
     
-    print_sublot_label(doc, sublot_data, lot_details) {
+    print_sublot_label(doc, sublot_data, lot_details, user_settings) {
         const print_dialog = new frappe.ui.Dialog({
             title: __('Print Sub-Lot Label'),
             size: 'large',
@@ -338,7 +350,7 @@ class SubLotCreationPage {
                 {
                     fieldtype: 'HTML',
                     fieldname: 'label_preview',
-                    options: this.generate_label_preview_html(doc, sublot_data, lot_details)
+                    options: this.generate_label_preview_html(doc, sublot_data, lot_details, user_settings)
                 },
                 {
                     fieldtype: 'Section Break'
@@ -353,7 +365,7 @@ class SubLotCreationPage {
             ],
             primary_action_label: __('Print'),
             primary_action: (values) => {
-                this.print_label_to_printer(doc, sublot_data, lot_details, values.copies);
+                this.print_label_to_printer(doc, sublot_data, values.copies, lot_details, user_settings);
                 print_dialog.hide();
             }
         });
@@ -361,7 +373,17 @@ class SubLotCreationPage {
         print_dialog.show();
     }
     
-    generate_label_preview_html(doc, sublot_data, lot_details) {
+    generate_label_preview_html(doc, sublot_data, lot_details, user_settings) {
+        // ✅ FIX: Use passed lot_details parameter instead of this.lot_details
+        let barcode_img_src = '';
+        if (sublot_data.barcode_image) {
+            if (sublot_data.barcode_image.startsWith('data:')) {
+                barcode_img_src = sublot_data.barcode_image;
+            } else {
+                barcode_img_src = `data:image/png;base64,${sublot_data.barcode_image}`;
+            }
+        }
+        
         return `
             <div class="label-container" style="border: 2px solid #333; padding: 20px; max-width: 500px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
@@ -371,8 +393,8 @@ class SubLotCreationPage {
                 
                 <div style="text-align: center; margin: 15px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd;">
                     <div style="font-weight: bold; margin-bottom: 10px; color: #333;">SUB-LOT NUMBER</div>
-                    ${sublot_data.barcode_image ? 
-                        `<img src="${sublot_data.barcode_image}" style="max-width: 100%; height: 80px;" />` : 
+                    ${barcode_img_src ? 
+                        `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 80px; display: block; margin: 0 auto;" />` : 
                         `<div style="background: #e0e0e0; padding: 20px; font-size: 24px; font-weight: bold; letter-spacing: 2px;">${sublot_data.new_batch_number}</div>`
                     }
                     <p style="margin: 10px 0 0 0; font-size: 18px; font-weight: bold;">${sublot_data.sub_lot_number}</p>
@@ -394,11 +416,11 @@ class SubLotCreationPage {
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${this.user_settings.default_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${user_settings.default_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${this.user_settings.target_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${user_settings.target_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
@@ -419,8 +441,8 @@ class SubLotCreationPage {
         `;
     }
     
-    print_label_to_printer(doc, sublot_data, lot_details, copies) {
-        const label_html = this.generate_label_preview_html(doc, sublot_data, lot_details);
+    print_label_to_printer(doc, sublot_data, copies, lot_details, user_settings) {
+        const label_html = this.generate_label_preview_html(doc, sublot_data, lot_details, user_settings);
         
         const print_window = window.open('', '_blank');
         
