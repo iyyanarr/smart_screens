@@ -683,46 +683,114 @@ class QualityInspectionPage {
         const total_rejection = this.rejection_details.reduce((sum, r) => sum + r.quantity, 0);
         const final_qty = inspection_qty - total_rejection;
         
-        // Set route options to pre-fill the Inspection Entry form
-        frappe.route_options = {
-            inspection_type: inspection_type,
-            scan_inspector: this.inspector_details.employee.name,
-            scan_production_lot: this.sublot_details.name,
-            product_ref_no: this.sublot_details.item_code,
-            batch_no: this.sublot_details.sublot_batch || this.sublot_details.batch,
-            total_inspected_qty_nos: inspection_qty,
-            rejection_qty: total_rejection,
-            final_qty: final_qty,
-            uom: this.sublot_details.uom,
-            warehouse: this.user_settings.default_warehouse,
-            source_warehouse: this.user_settings.source_warehouse,
-            target_warehouse: this.user_settings.target_warehouse
-        };
-        
-        // Show confirmation and navigate
-        frappe.msgprint({
-            title: __('Creating Inspection Entry'),
-            message: `
-                <div class="text-center">
-                    <i class="fa fa-info-circle text-primary" style="font-size: 48px;"></i>
-                    <h4 class="mt-3">Redirecting to Inspection Entry Form</h4>
-                    <p><strong>Sub-Lot:</strong> ${this.sublot_details.name}</p>
-                    <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
-                    <p><strong>Type:</strong> ${inspection_type}</p>
-                    <p><strong>Inspection Qty:</strong> ${inspection_qty}</p>
-                    <p><strong>Rejection Qty:</strong> ${total_rejection}</p>
-                    <p class="text-success"><strong>Final Qty:</strong> ${final_qty}</p>
-                    ${this.rejection_details.length > 0 ? 
-                        `<p class="mt-2"><strong>Defects:</strong> ${this.rejection_details.map(r => r.defect_type).join(', ')}</p>` : 
-                        ''
-                    }
-                </div>
-            `,
-            primary_action: {
-                label: __('Continue'),
-                action: () => {
-                    frappe.set_route("Form", "Inspection Entry", "new-inspection-entry");
+        // ✅ NEW: Create Inspection Entry document directly
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Inspection Entry",
+                    inspection_type: inspection_type,
+                    scan_inspector: this.inspector_details.employee.name,
+                    inspector_name: this.inspector_details.employee.employee_name,
+                    scan_production_lot: this.sublot_details.name,
+                    product_ref_no: this.sublot_details.item_code,
+                    batch_no: this.sublot_details.sublot_batch || this.sublot_details.batch,
+                    total_inspected_qty_nos: inspection_qty,
+                    rejection_qty: total_rejection,
+                    final_qty: final_qty,
+                    uom: this.sublot_details.uom,
+                    warehouse: this.user_settings.default_warehouse,
+                    source_warehouse: this.user_settings.source_warehouse || this.user_settings.default_warehouse,
+                    target_warehouse: this.user_settings.target_warehouse || this.user_settings.default_warehouse,
+                    posting_date: frappe.datetime.get_today(),
+                    // Add rejection details as child table if needed
+                    inspection_rejection_details: this.rejection_details.map(r => ({
+                        defect_type: r.defect_type,
+                        rejection_qty: r.quantity
+                    }))
                 }
+            },
+            freeze: true,
+            freeze_message: __("Creating inspection entry..."),
+            callback: (r) => {
+                if (r.message) {
+                    this.submit_inspection_entry(r.message);
+                } else {
+                    frappe.msgprint(__("Failed to create inspection entry"));
+                }
+            },
+            error: (err) => {
+                frappe.msgprint({
+                    title: __('Creation Failed'),
+                    message: __('Failed to create inspection entry: ') + (err.message || 'Unknown error'),
+                    indicator: 'red'
+                });
+            }
+        });
+    }
+    
+    // ✅ NEW: Submit inspection entry document
+    submit_inspection_entry(doc) {
+        frappe.call({
+            method: "frappe.client.submit",
+            args: {
+                doc: doc
+            },
+            callback: (r) => {
+                if (r.message) {
+                    const inspection_qty = parseFloat(this.inspection_section.find('#inspection_qty').val());
+                    const total_rejection = this.rejection_details.reduce((sum, r) => sum + r.quantity, 0);
+                    const final_qty = inspection_qty - total_rejection;
+                    
+                    frappe.show_alert({
+                        message: __("Inspection entry created and submitted successfully: " + r.message.name),
+                        indicator: 'green'
+                    }, 10);
+                    
+                    // Show success dialog with option to view
+                    frappe.msgprint({
+                        title: __('Inspection Entry Created'),
+                        message: `
+                            <div class="text-center">
+                                <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
+                                <h4 class="mt-3">Inspection Entry Created & Submitted Successfully!</h4>
+                                <p><strong>Inspection ID:</strong> ${r.message.name}</p>
+                                <p><strong>Sub-Lot:</strong> ${this.sublot_details.name}</p>
+                                <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
+                                <p><strong>Type:</strong> ${r.message.inspection_type}</p>
+                                <p><strong>Inspection Qty:</strong> ${inspection_qty}</p>
+                                ${total_rejection > 0 ? `<p><strong>Rejection Qty:</strong> ${total_rejection}</p>` : ''}
+                                <p class="text-success"><strong>Final Qty:</strong> ${final_qty}</p>
+                                <p class="text-success mt-2"><i class="fa fa-check"></i> Document Status: <strong>Submitted</strong></p>
+                                ${this.rejection_details.length > 0 ? 
+                                    `<p class="mt-2"><strong>Defects:</strong> ${this.rejection_details.map(r => r.defect_type).join(', ')}</p>` : 
+                                    ''
+                                }
+                            </div>
+                        `,
+                        primary_action: {
+                            label: __('View Inspection Entry'),
+                            action: () => {
+                                frappe.set_route("Form", "Inspection Entry", r.message.name);
+                            }
+                        }
+                    });
+                    
+                    this.reset_form();
+                } else {
+                    frappe.msgprint({
+                        title: __('Submission Failed'),
+                        message: __('Inspection entry was created but could not be submitted. Please submit it manually.'),
+                        indicator: 'orange'
+                    });
+                }
+            },
+            error: (r) => {
+                frappe.msgprint({
+                    title: __('Submission Error'),
+                    message: __('Inspection entry was created but submission failed: ') + (r.message || 'Unknown error'),
+                    indicator: 'red'
+                });
             }
         });
     }

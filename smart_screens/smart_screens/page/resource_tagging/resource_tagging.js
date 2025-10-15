@@ -387,12 +387,12 @@ class ResourceTaggingPage {
             args: {
                 doc: {
                     doctype: "Lot Resource Tagging",
-                    scan_lot_no: this.sublot_details.sublot_number,  // ✅ FIXED: Correct field
+                    scan_lot_no: this.sublot_details.sublot_number,
                     product_ref: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch,
-                    operation_type: operation,  // ✅ FIXED: Correct field name
-                    operator_id: this.employee_details.employee.name,  // ✅ FIXED: Correct field name
-                    operator_name: this.employee_details.employee.employee_name,  // ✅ FIXED: Correct field name
+                    operation_type: operation,
+                    operator_id: this.employee_details.employee.name,
+                    operator_name: this.employee_details.employee.employee_name,
                     posting_date: frappe.datetime.get_today(),
                     qtynos: this.sublot_details.sublot_qty || 0,
                     available_qty: this.sublot_details.sublot_qty || 0
@@ -400,15 +400,31 @@ class ResourceTaggingPage {
             },
             callback: (r) => {
                 if (r.message) {
+                    // ✅ NEW: Auto-submit the document after creation
+                    this.submit_resource_tag(r.message);
+                }
+            }
+        });
+    }
+    
+    // ✅ NEW: Submit resource tag document
+    submit_resource_tag(doc) {
+        frappe.call({
+            method: "frappe.client.submit",
+            args: {
+                doc: doc
+            },
+            callback: (r) => {
+                if (r.message) {
                     frappe.show_alert({
-                        message: __("Resource tagged successfully"),
+                        message: __("Resource tagged and submitted successfully"),
                         indicator: 'green'
                     }, 3);
                     
                     this.resource_tags.push(r.message);
                     this.update_resource_table();
                     
-                    // ✅ NEW: Check if all BOM operations are complete
+                    // Check if all BOM operations are complete
                     this.check_bom_completion();
                     
                     // Clear inputs
@@ -419,7 +435,20 @@ class ResourceTaggingPage {
                     
                     // Focus back to operation
                     this.resource_section.find('#operation_select').focus();
+                } else {
+                    frappe.msgprint({
+                        title: __('Submission Failed'),
+                        message: __('Resource tag was created but could not be submitted. Please submit it manually.'),
+                        indicator: 'orange'
+                    });
                 }
+            },
+            error: (r) => {
+                frappe.msgprint({
+                    title: __('Submission Error'),
+                    message: __('Resource tag was created but submission failed: ') + (r.message || 'Unknown error'),
+                    indicator: 'red'
+                });
             }
         });
     }
