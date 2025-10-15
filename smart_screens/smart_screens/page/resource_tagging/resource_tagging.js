@@ -388,6 +388,7 @@ class ResourceTaggingPage {
                 doc: {
                     doctype: "Lot Resource Tagging",
                     scan_lot_no: this.sublot_details.sublot_number,
+                    scan_operator: this.employee_details.employee.name,  // ✅ FIXED: Added scan_operator field
                     product_ref: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch,
                     operation_type: operation,

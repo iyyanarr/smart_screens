@@ -276,6 +276,9 @@ class SubLotCreationPage {
                 if (r.message) {
                     this.sublot_details = r.message;
                     
+                    // ✅ Store lot details before reset for print label access
+                    const lot_details_copy = {...this.lot_details};
+                    
                     frappe.show_alert({
                         message: __("Sub-Lot created and submitted successfully: " + r.message.name),
                         indicator: 'green'
@@ -290,14 +293,14 @@ class SubLotCreationPage {
                                 <h4 class="mt-3">Sub-Lot Created & Submitted Successfully!</h4>
                                 <p><strong>Sub-Lot Number:</strong> ${r.message.name}</p>
                                 <p><strong>Batch:</strong> ${sublot_data.new_batch_number}</p>
-                                <p><strong>Quantity:</strong> ${sublot_data.processed_qty} ${this.lot_details.uom}</p>
+                                <p><strong>Quantity:</strong> ${sublot_data.processed_qty} ${lot_details_copy.uom}</p>
                                 <p class="text-success mt-2"><i class="fa fa-check"></i> Document Status: <strong>Submitted</strong></p>
                             </div>
                         `,
                         primary_action: {
                             label: __('Print Label'),
                             action: () => {
-                                this.print_sublot_label(r.message, sublot_data);
+                                this.print_sublot_label(r.message, sublot_data, lot_details_copy);
                             }
                         },
                         secondary_action: {
@@ -327,7 +330,7 @@ class SubLotCreationPage {
         });
     }
     
-    print_sublot_label(doc, sublot_data) {
+    print_sublot_label(doc, sublot_data, lot_details) {
         const print_dialog = new frappe.ui.Dialog({
             title: __('Print Sub-Lot Label'),
             size: 'large',
@@ -335,7 +338,7 @@ class SubLotCreationPage {
                 {
                     fieldtype: 'HTML',
                     fieldname: 'label_preview',
-                    options: this.generate_label_preview_html(doc, sublot_data)
+                    options: this.generate_label_preview_html(doc, sublot_data, lot_details)
                 },
                 {
                     fieldtype: 'Section Break'
@@ -350,7 +353,7 @@ class SubLotCreationPage {
             ],
             primary_action_label: __('Print'),
             primary_action: (values) => {
-                this.print_label_to_printer(doc, sublot_data, values.copies);
+                this.print_label_to_printer(doc, sublot_data, lot_details, values.copies);
                 print_dialog.hide();
             }
         });
@@ -358,7 +361,7 @@ class SubLotCreationPage {
         print_dialog.show();
     }
     
-    generate_label_preview_html(doc, sublot_data) {
+    generate_label_preview_html(doc, sublot_data, lot_details) {
         return `
             <div class="label-container" style="border: 2px solid #333; padding: 20px; max-width: 500px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
@@ -379,7 +382,7 @@ class SubLotCreationPage {
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${this.lot_details.item_code}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${lot_details.item_code}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
@@ -387,7 +390,7 @@ class SubLotCreationPage {
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.processed_qty} ${this.lot_details.uom}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.processed_qty} ${lot_details.uom}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
@@ -416,8 +419,8 @@ class SubLotCreationPage {
         `;
     }
     
-    print_label_to_printer(doc, sublot_data, copies) {
-        const label_html = this.generate_label_preview_html(doc, sublot_data);
+    print_label_to_printer(doc, sublot_data, lot_details, copies) {
+        const label_html = this.generate_label_preview_html(doc, sublot_data, lot_details);
         
         const print_window = window.open('', '_blank');
         
