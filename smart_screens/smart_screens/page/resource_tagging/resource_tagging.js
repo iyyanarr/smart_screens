@@ -24,7 +24,7 @@ class ResourceTaggingPage {
         this.sublot_details = null;
         this.employee_details = null;
         this.resource_tags = [];
-        this.allowed_operations = [];
+        this.bom_operations = [];  // ✅ Store BOM operations for validation
         
         FinishingCommon.addFactoryStyles();
         this.make();
@@ -262,12 +262,12 @@ class ResourceTaggingPage {
     
     fetch_operations(item_code) {
         FinishingCommon.fetchBOM(item_code, (error, bom) => {
-            if (!error && bom.operations) {
-                this.allowed_operations = bom.operations.map(op => op.operation);
+            if (!error && bom && bom.operations) {
+                this.bom_operations = bom.operations.map(op => op.operation).filter(Boolean);
                 this.update_operation_dropdown();
             } else {
                 // Default operations if no BOM
-                this.allowed_operations = ['Post Curing', 'OD Trimming', 'ID Trimming', 'Visual Inspection'];
+                this.bom_operations = ['Post Curing', 'OD Trimming', 'ID Trimming', 'Visual Inspection'];
                 this.update_operation_dropdown();
             }
         });
@@ -277,24 +277,31 @@ class ResourceTaggingPage {
         const select = this.resource_section.find('#operation_select');
         select.html('<option value="">Select operation...</option>');
         
-        this.allowed_operations.forEach(op => {
+        this.bom_operations.forEach(op => {
             select.append(`<option value="${op}">${op}</option>`);
         });
     }
     
-    load_existing_tags(sublot_number) {
+    load_existing_tags(sublot_id) {
         frappe.call({
             method: "frappe.client.get_list",
             args: {
                 doctype: "Lot Resource Tagging",
-                filters: { sublot: sublot_number },
-                fields: ["name", "operation", "employee", "employee_name", "creation"]
+                filters: { scan_lot_no: this.sublot_details.sublot_number },
+                fields: ["name", "operation_type", "operator_id", "operator_name", "posting_date"]
             },
             callback: (r) => {
                 if (r.message) {
                     this.resource_tags = r.message;
                     this.update_resource_table();
+                    this.check_bom_completion();
                 }
+            },
+            error: (err) => {
+                console.error("Error loading existing tags:", err);
+                // Continue even if loading existing tags fails
+                this.resource_tags = [];
+                this.update_resource_table();
             }
         });
     }
@@ -342,16 +349,53 @@ class ResourceTaggingPage {
             return;
         }
         
+        // ✅ NEW: Validate operation exists in BOM
+        if (!this.isBomOperation(operation)) {
+            frappe.msgprint({
+                title: __('Invalid Operation'),
+                message: __(`Operation "${operation}" is not in the BOM for this item. Please select a valid operation.`),
+                indicator: 'red'
+            });
+            return;
+        }
+        
+        // ✅ NEW: Check for duplicate operations
+        const isDuplicate = this.resource_tags.some(tag => tag.operation_type === operation);
+        if (isDuplicate) {
+            frappe.msgprint({
+                title: __('Duplicate Operation'),
+                message: __(`Operation "${operation}" is already assigned. Duplicate operations are not allowed.`),
+                indicator: 'orange'
+            });
+            return;
+        }
+        
+        // ✅ NEW: Validate employee is authorized for this operation
+        if (this.employee_details.allowed_operations && 
+            this.employee_details.allowed_operations.length > 0 &&
+            !this.employee_details.allowed_operations.includes(operation)) {
+            frappe.msgprint({
+                title: __('Unauthorized Operation'),
+                message: __(`Employee "${this.employee_details.employee.employee_name}" is not authorized to perform operation "${operation}"`),
+                indicator: 'red'
+            });
+            return;
+        }
+        
         frappe.call({
             method: "frappe.client.insert",
             args: {
                 doc: {
                     doctype: "Lot Resource Tagging",
-                    sublot: this.sublot_details.name,
-                    item_code: this.sublot_details.item_code,
-                    operation: operation,
-                    employee: this.employee_details.employee.name,
-                    employee_name: this.employee_details.employee.employee_name
+                    scan_lot_no: this.sublot_details.sublot_number,  // ✅ FIXED: Correct field
+                    product_ref: this.sublot_details.item_code,
+                    batch_no: this.sublot_details.sublot_batch,
+                    operation_type: operation,  // ✅ FIXED: Correct field name
+                    operator_id: this.employee_details.employee.name,  // ✅ FIXED: Correct field name
+                    operator_name: this.employee_details.employee.employee_name,  // ✅ FIXED: Correct field name
+                    posting_date: frappe.datetime.get_today(),
+                    qtynos: this.sublot_details.sublot_qty || 0,
+                    available_qty: this.sublot_details.sublot_qty || 0
                 }
             },
             callback: (r) => {
@@ -364,6 +408,9 @@ class ResourceTaggingPage {
                     this.resource_tags.push(r.message);
                     this.update_resource_table();
                     
+                    // ✅ NEW: Check if all BOM operations are complete
+                    this.check_bom_completion();
+                    
                     // Clear inputs
                     this.resource_section.find('#operation_select').val('');
                     this.resource_section.find('#scan_employee').val('');
@@ -375,6 +422,50 @@ class ResourceTaggingPage {
                 }
             }
         });
+    }
+    
+    // ✅ NEW: Helper method to check if operation is in BOM
+    isBomOperation(operation) {
+        if (!this.bom_operations || this.bom_operations.length === 0) {
+            return true; // If no BOM, allow all operations
+        }
+        return this.bom_operations.includes(operation);
+    }
+    
+    // ✅ NEW: Check if all BOM operations have been assigned
+    check_bom_completion() {
+        if (!this.bom_operations || this.bom_operations.length === 0) return;
+        
+        const assignedOperations = this.resource_tags.map(tag => tag.operation_type);
+        const missingOperations = this.bom_operations.filter(op => !assignedOperations.includes(op));
+        
+        // Remove previous info if exists
+        this.resource_section.find('.bom-completion-info').remove();
+        
+        if (missingOperations.length === 0) {
+            frappe.show_alert({
+                message: __("All BOM operations have been assigned! ✓"),
+                indicator: 'green'
+            }, 5);
+            
+            // Add success badge
+            const $success = $(`
+                <div class="alert alert-success mt-3 bom-completion-info">
+                    <i class="fa fa-check-circle mr-2"></i>
+                    <strong>All BOM operations completed!</strong>
+                </div>
+            `);
+            this.resource_section.find('#resource_tags_table').closest('.table-responsive').after($success);
+        } else {
+            // Show info about missing operations
+            const $info = $(`
+                <div class="alert alert-info mt-3 bom-completion-info">
+                    <i class="fa fa-info-circle mr-2"></i>
+                    <strong>Pending Operations:</strong> ${missingOperations.join(', ')}
+                </div>
+            `);
+            this.resource_section.find('#resource_tags_table').closest('.table-responsive').after($info);
+        }
     }
     
     update_resource_table() {
@@ -395,9 +486,9 @@ class ResourceTaggingPage {
         this.resource_tags.forEach((tag, idx) => {
             tbody.append(`
                 <tr>
-                    <td>${tag.operation}</td>
-                    <td>${tag.employee}</td>
-                    <td>${tag.employee_name}</td>
+                    <td>${tag.operation_type}</td>
+                    <td>${tag.operator_id}</td>
+                    <td>${tag.operator_name}</td>
                     <td>
                         <button class="btn btn-sm btn-danger" data-tag-name="${tag.name}">
                             <i class="fa fa-trash mr-1"></i>Delete
@@ -432,6 +523,9 @@ class ResourceTaggingPage {
                         
                         this.resource_tags = this.resource_tags.filter(t => t.name !== tag_name);
                         this.update_resource_table();
+                        
+                        // ✅ NEW: Re-check BOM completion after deletion
+                        this.check_bom_completion();
                     }
                 });
             }

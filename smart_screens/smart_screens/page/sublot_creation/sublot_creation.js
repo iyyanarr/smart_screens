@@ -281,7 +281,7 @@ class SubLotCreationPage {
                         indicator: 'green'
                     }, 10);
                     
-                    // Show success dialog with option to view
+                    // Show success dialog with Print Label and View options
                     frappe.msgprint({
                         title: __('Sub-Lot Created'),
                         message: `
@@ -295,6 +295,12 @@ class SubLotCreationPage {
                             </div>
                         `,
                         primary_action: {
+                            label: __('Print Label'),
+                            action: () => {
+                                this.print_sublot_label(r.message, sublot_data);
+                            }
+                        },
+                        secondary_action: {
                             label: __('View Sub-Lot'),
                             action: () => {
                                 frappe.set_route("Form", "Sub Lot Entry", r.message.name);
@@ -319,6 +325,135 @@ class SubLotCreationPage {
                 });
             }
         });
+    }
+    
+    print_sublot_label(doc, sublot_data) {
+        const print_dialog = new frappe.ui.Dialog({
+            title: __('Print Sub-Lot Label'),
+            size: 'large',
+            fields: [
+                {
+                    fieldtype: 'HTML',
+                    fieldname: 'label_preview',
+                    options: this.generate_label_preview_html(doc, sublot_data)
+                },
+                {
+                    fieldtype: 'Section Break'
+                },
+                {
+                    fieldtype: 'Int',
+                    fieldname: 'copies',
+                    label: __('Number of Copies'),
+                    default: 1,
+                    reqd: 1
+                }
+            ],
+            primary_action_label: __('Print'),
+            primary_action: (values) => {
+                this.print_label_to_printer(doc, sublot_data, values.copies);
+                print_dialog.hide();
+            }
+        });
+        
+        print_dialog.show();
+    }
+    
+    generate_label_preview_html(doc, sublot_data) {
+        return `
+            <div class="label-container" style="border: 2px solid #333; padding: 20px; max-width: 500px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
+                <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h3 style="margin: 0; font-size: 20px; font-weight: bold;">SHREE POLYMER</h3>
+                    <p style="margin: 5px 0; font-size: 12px;">Sub-Lot Label</p>
+                </div>
+                
+                <div style="text-align: center; margin: 15px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd;">
+                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">SUB-LOT NUMBER</div>
+                    ${sublot_data.barcode_image ? 
+                        `<img src="${sublot_data.barcode_image}" style="max-width: 100%; height: 80px;" />` : 
+                        `<div style="background: #e0e0e0; padding: 20px; font-size: 24px; font-weight: bold; letter-spacing: 2px;">${sublot_data.new_batch_number}</div>`
+                    }
+                    <p style="margin: 10px 0 0 0; font-size: 18px; font-weight: bold;">${sublot_data.sub_lot_number}</p>
+                </div>
+                
+                <div style="margin-top: 15px; font-size: 14px; line-height: 1.8;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${this.lot_details.item_code}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.new_batch_number}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.processed_qty} ${this.lot_details.uom}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${this.user_settings.default_warehouse || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${this.user_settings.target_warehouse || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${frappe.datetime.str_to_user(frappe.datetime.now_date())}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;"><strong>Created By:</strong></td>
+                            <td style="padding: 8px; font-size: 11px;">${frappe.session.user}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; text-align: center; font-size: 10px; color: #666;">
+                    <p style="margin: 0;">Stock Entry: ${sublot_data.stock_entry_name}</p>
+                    <p style="margin: 5px 0 0 0;">Sub-Lot Entry: ${doc.name}</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    print_label_to_printer(doc, sublot_data, copies) {
+        const label_html = this.generate_label_preview_html(doc, sublot_data);
+        
+        const print_window = window.open('', '_blank');
+        
+        print_window.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Print Sub-Lot Label - ${sublot_data.sub_lot_number}</title>
+                <style>
+                    @media print {
+                        body { margin: 0; padding: 10mm; }
+                        .label-container { page-break-after: always; }
+                        .label-container:last-child { page-break-after: auto; }
+                    }
+                    body { font-family: Arial, sans-serif; }
+                    @page { size: A4 portrait; margin: 1cm; }
+                </style>
+            </head>
+            <body>
+                ${Array(copies).fill(label_html).join('')}
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 100);
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        
+        print_window.document.close();
+        
+        frappe.show_alert({
+            message: __('Printing {0} label(s)...', [copies]),
+            indicator: 'blue'
+        }, 3);
     }
     
     reset_form() {
