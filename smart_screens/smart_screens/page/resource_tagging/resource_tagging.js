@@ -349,7 +349,7 @@ class ResourceTaggingPage {
             return;
         }
         
-        // ✅ NEW: Validate operation exists in BOM
+        // ✅ Validate operation exists in BOM
         if (!this.isBomOperation(operation)) {
             frappe.msgprint({
                 title: __('Invalid Operation'),
@@ -359,7 +359,7 @@ class ResourceTaggingPage {
             return;
         }
         
-        // ✅ NEW: Check for duplicate operations
+        // ✅ Check for duplicate operations
         const isDuplicate = this.resource_tags.some(tag => tag.operation_type === operation);
         if (isDuplicate) {
             frappe.msgprint({
@@ -370,7 +370,7 @@ class ResourceTaggingPage {
             return;
         }
         
-        // ✅ NEW: Validate employee is authorized for this operation
+        // ✅ Validate employee is authorized for this operation
         if (this.employee_details.allowed_operations && 
             this.employee_details.allowed_operations.length > 0 &&
             !this.employee_details.allowed_operations.includes(operation)) {
@@ -382,13 +382,51 @@ class ResourceTaggingPage {
             return;
         }
         
+        // ✅ NEW: Fetch additional fields before creating the record
+        this.fetch_additional_fields_and_create(operation);
+    }
+    
+    // ✅ NEW: Fetch all missing fields before creating Lot Resource Tagging
+    fetch_additional_fields_and_create(operation) {
+        frappe.call({
+            method: "smart_screens.smart_screens.api.resource_tagging.get_resource_tagging_fields",
+            args: {
+                item_code: this.sublot_details.item_code,
+                operation: operation,
+                sublot_number: this.sublot_details.sublot_number,
+                employee_id: this.employee_details.employee.name
+            },
+            callback: (r) => {
+                if (r.message && r.message.status === "success") {
+                    const additional_fields = r.message.data;
+                    this.create_resource_tag_with_fields(operation, additional_fields);
+                } else {
+                    frappe.msgprint({
+                        title: __('Error'),
+                        message: __('Failed to fetch required fields: ') + (r.message ? r.message.message : 'Unknown error'),
+                        indicator: 'red'
+                    });
+                }
+            },
+            error: (err) => {
+                frappe.msgprint({
+                    title: __('Error'),
+                    message: __('Failed to fetch required fields: ') + (err.message || 'Unknown error'),
+                    indicator: 'red'
+                });
+            }
+        });
+    }
+    
+    // ✅ NEW: Create Lot Resource Tagging with all required fields
+    create_resource_tag_with_fields(operation, additional_fields) {
         frappe.call({
             method: "frappe.client.insert",
             args: {
                 doc: {
                     doctype: "Lot Resource Tagging",
                     scan_lot_no: this.sublot_details.sublot_number,
-                    scan_operator: this.employee_details.employee.name,  // ✅ FIXED: Added scan_operator field
+                    scan_operator: this.employee_details.employee.name,
                     product_ref: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch,
                     operation_type: operation,
@@ -396,19 +434,37 @@ class ResourceTaggingPage {
                     operator_name: this.employee_details.employee.employee_name,
                     posting_date: frappe.datetime.get_today(),
                     qtynos: this.sublot_details.sublot_qty || 0,
-                    available_qty: this.sublot_details.sublot_qty || 0
+                    available_qty: this.sublot_details.sublot_qty || 0,
+                    operations: this.bom_operations.join(','),
+                    warehouse: this.sublot_details.warehouse || this.user_settings.default_warehouse,
+                    
+                    // ✅ NEW: Additional fields from backend
+                    workstation: additional_fields.workstation || '',
+                    bom_no: additional_fields.bom_no || '',
+                    spp_batch_no: additional_fields.spp_batch_no || this.sublot_details.batch || this.sublot_details.sublot_batch,
+                    work_order_ref: additional_fields.work_order_ref || '',
+                    stock_entry_ref: additional_fields.stock_entry_ref || '',
+                    qty_after_rejection_nos: additional_fields.qty_after_rejection_nos || this.sublot_details.sublot_qty || 0,
+                    job_card: additional_fields.job_card || ''
                 }
             },
             callback: (r) => {
                 if (r.message) {
-                    // ✅ NEW: Auto-submit the document after creation
+                    // ✅ Auto-submit the document after creation
                     this.submit_resource_tag(r.message);
                 }
+            },
+            error: (err) => {
+                frappe.msgprint({
+                    title: __('Creation Failed'),
+                    message: __('Failed to create resource tag: ') + (err.message || 'Unknown error'),
+                    indicator: 'red'
+                });
             }
         });
     }
     
-    // ✅ NEW: Submit resource tag document
+    // ✅ Submit resource tag document
     submit_resource_tag(doc) {
         frappe.call({
             method: "frappe.client.submit",
@@ -454,7 +510,7 @@ class ResourceTaggingPage {
         });
     }
     
-    // ✅ NEW: Helper method to check if operation is in BOM
+    // ✅ Helper method to check if operation is in BOM
     isBomOperation(operation) {
         if (!this.bom_operations || this.bom_operations.length === 0) {
             return true; // If no BOM, allow all operations
@@ -487,11 +543,11 @@ class ResourceTaggingPage {
             `);
             this.resource_section.find('#resource_tags_table').closest('.table-responsive').after($success);
         } else {
-            // Show info about missing operations
+            // ✅ FIXED: Just show info, don't block user
             const $info = $(`
                 <div class="alert alert-info mt-3 bom-completion-info">
                     <i class="fa fa-info-circle mr-2"></i>
-                    <strong>Pending Operations:</strong> ${missingOperations.join(', ')}
+                    <strong>Pending Operations (${missingOperations.length}):</strong> ${missingOperations.join(', ')}
                 </div>
             `);
             this.resource_section.find('#resource_tags_table').closest('.table-responsive').after($info);
@@ -554,7 +610,7 @@ class ResourceTaggingPage {
                         this.resource_tags = this.resource_tags.filter(t => t.name !== tag_name);
                         this.update_resource_table();
                         
-                        // ✅ NEW: Re-check BOM completion after deletion
+                        // ✅ Re-check BOM completion after deletion
                         this.check_bom_completion();
                     }
                 });
