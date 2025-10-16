@@ -26,6 +26,10 @@ class ResourceTaggingPage {
         this.resource_tags = [];  // Saved tags from database
         this.pending_tags = [];   // ✅ NEW: Pending tags not yet saved
         this.bom_operations = [];
+        this.bom_details = null;  // ✅ NEW: Store full BOM details
+        
+        // ✅ NEW: Add color options for operation badges
+        this.badgeColors = ["primary", "secondary", "success", "danger", "warning", "info", "dark"];
         
         FinishingCommon.addFactoryStyles();
         this.make();
@@ -57,7 +61,7 @@ class ResourceTaggingPage {
                 <div class="section-body">
                     <!-- Sub-lot Scanner -->
                     <div class="row mb-4">
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                             <div class="factory-form-group">
                                 <label class="factory-label">
                                     <i class="fa fa-barcode mr-2"></i>Scan Sub-Lot Number
@@ -75,7 +79,7 @@ class ResourceTaggingPage {
                                 <div id="sublot_validation_result" class="factory-validation-result"></div>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div id="sublot_info_display" class="card mt-4" style="display: none;">
                                 <div class="card-body p-3">
                                     <div class="factory-compact-info">
@@ -87,6 +91,19 @@ class ResourceTaggingPage {
                                             <span class="factory-compact-label">Quantity:</span>
                                             <span class="factory-compact-value" id="display_qty">-</span>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- ✅ NEW: BOM Information Display -->
+                        <div class="col-md-3">
+                            <div id="bom_info_display" class="card mt-4" style="display: none;">
+                                <div class="card-header bg-light p-2">
+                                    <strong><i class="fa fa-sitemap mr-2"></i>BOM Information</strong>
+                                </div>
+                                <div class="card-body p-2">
+                                    <div id="bom_details_content" class="small">
+                                        <div class="text-muted">No BOM data</div>
                                     </div>
                                 </div>
                             </div>
@@ -276,13 +293,126 @@ class ResourceTaggingPage {
     }
     
     fetch_operations(item_code) {
-        FinishingCommon.fetchBOM(item_code, (error, bom) => {
-            if (!error && bom && bom.operations) {
-                this.bom_operations = bom.operations.map(op => op.operation).filter(Boolean);
-                this.update_operation_dropdown();
-            } else {
-                // Default operations if no BOM
-                this.bom_operations = ['Post Curing', 'OD Trimming', 'ID Trimming', 'Visual Inspection'];
+        // ✅ NEW: Show loading indicator
+        const bomDisplay = this.resource_section.find('#bom_info_display');
+        const bomContent = this.resource_section.find('#bom_details_content');
+        
+        bomDisplay.show();
+        bomContent.html(`
+            <div class="text-center">
+                <i class="fa fa-spinner fa-spin"></i> Loading BOM...
+            </div>
+        `);
+        
+        // ✅ Use the same method as Sub Lot Process Page
+        frappe.call({
+            method: "smart_screens.smart_screens.utils.bom_validation.get_boms_by_component_item",
+            args: {
+                item_code: item_code,
+                get_default_only: 1  // Only get default and active BOM
+            },
+            callback: (response) => {
+                if (response.message && response.message.success) {
+                    const bomData = response.message.data;
+                    
+                    if (bomData.boms && bomData.boms.length > 0) {
+                        // ✅ Store BOM details for later use
+                        this.bom_details = bomData.boms;
+                        const defaultBom = bomData.boms[0];
+                        
+                        // ✅ Extract operations from BOM
+                        if (defaultBom.operations && defaultBom.operations.length > 0) {
+                            this.bom_operations = defaultBom.operations
+                                .map(op => op.operation)
+                                .filter(Boolean);
+                        } else {
+                            this.bom_operations = [];
+                        }
+                        
+                        // ✅ Create visual BOM display with badges
+                        let bomHtml = '<div class="bom-info-content">';
+                        bomHtml += `<div class="mb-1"><strong>BOM:</strong> <small>${defaultBom.bom_no}</small></div>`;
+                        bomHtml += `<div class="mb-2"><strong>Item:</strong> <small>${defaultBom.parent_item_code}</small></div>`;
+                        
+                        // Show operations as colored badges
+                        if (this.bom_operations.length > 0) {
+                            bomHtml += `<div><strong>Operations:</strong></div>`;
+                            bomHtml += `<div class="operations-badges mt-1">`;
+                            this.bom_operations.forEach(op => {
+                                const badgeColor = this.getRandomBadgeColor();
+                                bomHtml += `<span class="badge badge-${badgeColor} mr-1 mb-1" style="font-size: 9px;">${op}</span>`;
+                            });
+                            bomHtml += `</div>`;
+                        } else {
+                            bomHtml += `<div class="text-warning small">No operations defined in BOM</div>`;
+                        }
+                        
+                        bomHtml += '</div>';
+                        bomContent.html(bomHtml);
+                        
+                        // Update operation dropdown
+                        this.update_operation_dropdown();
+                        
+                    } else {
+                        // ✅ No BOM found - show warning but allow manual operations
+                        bomContent.html(`
+                            <div class="alert alert-warning mb-0 p-2">
+                                <small><i class="fa fa-exclamation-triangle mr-1"></i>No default BOM found</small>
+                            </div>
+                        `);
+                        
+                        // ✅ Use fallback operations instead of hardcoded
+                        this.bom_operations = [
+                            'Moulding',
+                            'Post Curing',
+                            'OD Trimming',
+                            'ID Trimming',
+                            'Visual Inspection',
+                            'Final Visual Inspection'
+                        ];
+                        
+                        this.update_operation_dropdown();
+                    }
+                } else {
+                    // ✅ Error fetching BOM
+                    bomContent.html(`
+                        <div class="alert alert-danger mb-0 p-2">
+                            <small><i class="fa fa-times-circle mr-1"></i>Error loading BOM</small>
+                        </div>
+                    `);
+                    
+                    // ✅ Use fallback operations
+                    this.bom_operations = [
+                        'Moulding',
+                        'Post Curing',
+                        'OD Trimming',
+                        'ID Trimming',
+                        'Visual Inspection',
+                        'Final Visual Inspection'
+                    ];
+                    
+                    this.update_operation_dropdown();
+                }
+            },
+            error: (err) => {
+                console.error("Error fetching BOM:", err);
+                
+                bomContent.html(`
+                    <div class="alert alert-danger mb-0 p-2">
+                        <small><i class="fa fa-times-circle mr-1"></i>Failed to load BOM</small>
+                    </div>
+                `);
+                
+                // ✅ Use fallback operations on error
+                this.bom_operations = [
+                    'Moulding',
+                    'Post Curing',
+                    'OD Trimming',
+                    'ID Trimming',
+                    'Visual Inspection',
+                    'Final Visual Inspection'
+                ];
+                
                 this.update_operation_dropdown();
             }
         });
@@ -301,7 +431,7 @@ class ResourceTaggingPage {
         frappe.call({
             method: "frappe.client.get_list",
             args: {
-                doctype: "Lot Resource Tagging",
+                doctype: "SPP Lot Resource Tagging",  // ✅ FIXED: Changed from "Lot Resource Tagging"
                 filters: { scan_lot_no: this.sublot_details.sublot_number },
                 fields: ["name", "operation_type", "operator_id", "operator_name", "posting_date"]
             },
@@ -417,128 +547,300 @@ class ResourceTaggingPage {
         this.resource_section.find('#operation_select').focus();
     }
     
-    // ✅ NEW: Save all pending tags
+    // ✅ NEW: Save all pending tags using the complete workflow
     save_all_pending_tags() {
         if (this.pending_tags.length === 0) {
             frappe.msgprint(__("No pending tags to save"));
             return;
         }
         
-        const promises = this.pending_tags.map(tag => {
-            return new Promise((resolve, reject) => {
-                this.fetch_additional_fields_and_create(tag.operation_type, tag, resolve, reject);
-            });
+        // Show progress dialog
+        const progressDialog = new frappe.ui.Dialog({
+            title: __('Processing Resource Tagging Workflow'),
+            fields: [
+                {
+                    fieldname: 'progress_html',
+                    fieldtype: 'HTML',
+                    options: this.getProgressHTML(0, 'Initializing...')
+                }
+            ],
+            primary_action_label: __('Close'),
+            primary_action: function() {
+                progressDialog.hide();
+            }
         });
         
-        Promise.all(promises)
-            .then(() => {
-                frappe.show_alert({
-                    message: __("All pending tags saved successfully"),
-                    indicator: 'green'
-                }, 3);
-                
-                this.pending_tags = [];
-                this.update_resource_table();
-                
-                // Check if all BOM operations are complete
-                this.check_bom_completion();
-            })
-            .catch((error) => {
-                frappe.msgprint({
-                    title: __('Error'),
-                    message: __('Failed to save some tags: ') + (error.message || 'Unknown error'),
-                    indicator: 'red'
-                });
-            });
-    }
-    
-    // ✅ NEW: Fetch all missing fields before creating Lot Resource Tagging
-    fetch_additional_fields_and_create(operation, tag, resolve, reject) {
+        progressDialog.show();
+        progressDialog.$wrapper.find('.btn-primary').hide(); // Hide close button initially
+        
+        // Update progress function
+        const updateProgress = (percent, message, stage) => {
+            progressDialog.fields_dict.progress_html.$wrapper.html(
+                this.getProgressHTML(percent, message, stage)
+            );
+        };
+        
+        // Call the new workflow API
+        updateProgress(20, 'Creating Sub Lot Process...', 'process');
+        
         frappe.call({
-            method: "smart_screens.smart_screens.api.resource_tagging.get_resource_tagging_fields",
+            method: "smart_screens.smart_screens.api.resource_tagging.create_resource_tagging_workflow",
             args: {
-                item_code: this.sublot_details.item_code,
-                operation: operation,
                 sublot_number: this.sublot_details.sublot_number,
-                employee_id: tag.operator_id
+                operations_data: this.pending_tags
             },
             callback: (r) => {
                 if (r.message && r.message.status === "success") {
-                    const additional_fields = r.message.data;
-                    this.create_resource_tag_with_fields(operation, tag, additional_fields, resolve, reject);
-                } else {
-                    reject(new Error(r.message ? r.message.message : 'Unknown error'));
-                }
-            },
-            error: (err) => {
-                reject(new Error(err.message || 'Unknown error'));
-            }
-        });
-    }
-    
-    // ✅ NEW: Create Lot Resource Tagging with all required fields
-    create_resource_tag_with_fields(operation, tag, additional_fields, resolve, reject) {
-        frappe.call({
-            method: "frappe.client.insert",
-            args: {
-                doc: {
-                    doctype: "Lot Resource Tagging",
-                    scan_lot_no: this.sublot_details.sublot_number,
-                    scan_operator: tag.operator_id,
-                    product_ref: this.sublot_details.item_code,
-                    batch_no: this.sublot_details.sublot_batch,
-                    operation_type: operation,
-                    operator_id: tag.operator_id,
-                    operator_name: tag.operator_name,
-                    posting_date: frappe.datetime.get_today(),
-                    qtynos: this.sublot_details.sublot_qty || 0,
-                    available_qty: this.sublot_details.sublot_qty || 0,
-                    operations: this.bom_operations.join(','),
-                    warehouse: this.sublot_details.warehouse || this.user_settings.default_warehouse,
+                    updateProgress(100, 'Workflow completed successfully!', 'complete');
                     
-                    // ✅ NEW: Additional fields from backend
-                    workstation: additional_fields.workstation || '',
-                    bom_no: additional_fields.bom_no || '',
-                    spp_batch_no: additional_fields.spp_batch_no || this.sublot_details.batch || this.sublot_details.sublot_batch,
-                    work_order_ref: additional_fields.work_order_ref || '',
-                    stock_entry_ref: additional_fields.stock_entry_ref || '',
-                    qty_after_rejection_nos: additional_fields.qty_after_rejection_nos || this.sublot_details.sublot_qty || 0,
-                    job_card: additional_fields.job_card || ''
-                }
-            },
-            callback: (r) => {
-                if (r.message) {
-                    // ✅ Auto-submit the document after creation
-                    this.submit_resource_tag(r.message, resolve, reject);
+                    const data = r.message.data;
+                    
+                    // Show success message with details
+                    frappe.show_alert({
+                        message: __("Resource tagging workflow completed! Created {0} resource tags, {1} job cards", 
+                            [data.resource_tags.length, data.job_cards.length]),
+                        indicator: 'green'
+                    }, 5);
+                    
+                    // Show detailed results
+                    this.showWorkflowResults(data);
+                    
+                    // Clear pending tags
+                    this.pending_tags = [];
+                    
+                    // Reload existing tags
+                    this.load_existing_tags(this.sublot_details.name);
+                    
+                    // Show close button
+                    progressDialog.$wrapper.find('.btn-primary').show();
+                    
+                } else if (r.message && r.message.status === "warning") {
+                    updateProgress(75, 'Completed with warnings', 'warning');
+                    
+                    frappe.msgprint({
+                        title: __('Partial Success'),
+                        message: r.message.message,
+                        indicator: 'orange'
+                    });
+                    
+                    // Reload tags anyway
+                    this.load_existing_tags(this.sublot_details.name);
+                    progressDialog.$wrapper.find('.btn-primary').show();
+                    
                 } else {
-                    reject(new Error('Failed to create resource tag'));
+                    updateProgress(0, 'Failed: ' + (r.message ? r.message.message : 'Unknown error'), 'error');
+                    
+                    frappe.msgprint({
+                        title: __('Error'),
+                        message: __('Failed to create workflow: ') + (r.message ? r.message.message : 'Unknown error'),
+                        indicator: 'red'
+                    });
+                    
+                    progressDialog.$wrapper.find('.btn-primary').show();
                 }
             },
             error: (err) => {
-                reject(new Error(err.message || 'Unknown error'));
+                updateProgress(0, 'Error: ' + (err.message || 'Unknown error'), 'error');
+                
+                frappe.msgprint({
+                    title: __('Error'),
+                    message: __('Failed to create workflow: ') + (err.message || 'Unknown error'),
+                    indicator: 'red'
+                });
+                
+                progressDialog.$wrapper.find('.btn-primary').show();
             }
         });
     }
     
-    // ✅ Submit resource tag document
-    submit_resource_tag(doc, resolve, reject) {
-        frappe.call({
-            method: "frappe.client.submit",
-            args: {
-                doc: doc
-            },
-            callback: (r) => {
-                if (r.message) {
-                    this.resource_tags.push(r.message);
-                    resolve();
-                } else {
-                    reject(new Error('Failed to submit resource tag'));
+    // ✅ NEW: Generate progress HTML for dialog
+    getProgressHTML(percent, message, stage = 'process') {
+        const stageIcons = {
+            'process': 'fa-cog fa-spin',
+            'complete': 'fa-check-circle',
+            'warning': 'fa-exclamation-triangle',
+            'error': 'fa-times-circle'
+        };
+        
+        const stageColors = {
+            'process': 'primary',
+            'complete': 'success',
+            'warning': 'warning',
+            'error': 'danger'
+        };
+        
+        const icon = stageIcons[stage] || 'fa-cog fa-spin';
+        const color = stageColors[stage] || 'primary';
+        
+        return `
+            <div class="text-center" style="padding: 20px;">
+                <div style="font-size: 48px; color: var(--bs-${color}); margin-bottom: 20px;">
+                    <i class="fa ${icon}"></i>
+                </div>
+                <h4 style="margin-bottom: 20px;">${message}</h4>
+                <div class="progress" style="height: 25px;">
+                    <div class="progress-bar progress-bar-striped ${stage === 'process' ? 'progress-bar-animated' : ''} bg-${color}" 
+                         role="progressbar" 
+                         style="width: ${percent}%;" 
+                         aria-valuenow="${percent}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        ${percent}%
+                    </div>
+                </div>
+                ${stage === 'process' ? '<p class="text-muted mt-3">Please wait, this may take a few moments...</p>' : ''}
+            </div>
+        `;
+    }
+    
+    // ✅ NEW: Show workflow results in a nice dialog
+    showWorkflowResults(data) {
+        const resultsDialog = new frappe.ui.Dialog({
+            title: __('Workflow Results'),
+            size: 'large',
+            fields: [
+                {
+                    fieldname: 'results_html',
+                    fieldtype: 'HTML',
+                    options: `
+                        <div class="workflow-results">
+                            <div class="alert alert-success">
+                                <i class="fa fa-check-circle mr-2"></i>
+                                <strong>Workflow completed successfully!</strong>
+                            </div>
+                            
+                            <h5 class="mt-4 mb-3">Created Documents:</h5>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="fa fa-file-text-o mr-2"></i>Sub Lot Process
+                                            </h6>
+                                            <p class="card-text">
+                                                <a href="/app/sub-lot-process/${data.sublot_process}" target="_blank">
+                                                    ${data.sublot_process}
+                                                </a>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                ${data.work_order ? `
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="fa fa-industry mr-2"></i>Work Order
+                                            </h6>
+                                            <p class="card-text">
+                                                <a href="/app/work-order/${data.work_order}" target="_blank">
+                                                    ${data.work_order}
+                                                </a>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="fa fa-tags mr-2"></i>Resource Tags
+                                            </h6>
+                                            <p class="card-text">
+                                                Created <strong>${data.resource_tags.length}</strong> resource tags
+                                            </p>
+                                            <ul class="list-unstyled mb-0">
+                                                ${data.resource_tags.map(tag => `
+                                                    <li>
+                                                        <a href="/app/lot-resource-tagging/${tag}" target="_blank">
+                                                            ${tag}
+                                                        </a>
+                                                    </li>
+                                                `).join('')}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                ${data.job_cards && data.job_cards.length > 0 ? `
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="fa fa-briefcase mr-2"></i>Job Cards
+                                            </h6>
+                                            <p class="card-text">
+                                                Created <strong>${data.job_cards.length}</strong> job cards
+                                            </p>
+                                            <ul class="list-unstyled mb-0">
+                                                ${data.job_cards.map(jc => `
+                                                    <li>
+                                                        <a href="/app/job-card/${jc}" target="_blank">
+                                                            ${jc}
+                                                        </a>
+                                                    </li>
+                                                `).join('')}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            
+                            ${data.inspection_entry ? `
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">
+                                                <i class="fa fa-check-square-o mr-2"></i>Inspection Entry
+                                            </h6>
+                                            <p class="card-text">
+                                                <a href="/app/spp-inspection-entry/${data.inspection_entry}" target="_blank">
+                                                    ${data.inspection_entry}
+                                                </a>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        <style>
+                            .workflow-results .card {
+                                margin-bottom: 10px;
+                                border: 1px solid #e0e0e0;
+                            }
+                            .workflow-results .card-title {
+                                color: #333;
+                                font-weight: 600;
+                                margin-bottom: 10px;
+                            }
+                            .workflow-results .card-text a {
+                                color: #2490ef;
+                                text-decoration: none;
+                            }
+                            .workflow-results .card-text a:hover {
+                                text-decoration: underline;
+                            }
+                        </style>
+                    `
                 }
-            },
-            error: (r) => {
-                reject(new Error(r.message || 'Unknown error'));
+            ],
+            primary_action_label: __('Close'),
+            primary_action: function() {
+                resultsDialog.hide();
             }
         });
+        
+        resultsDialog.show();
     }
     
     // ✅ Helper method to check if operation is in BOM
@@ -653,7 +955,7 @@ class ResourceTaggingPage {
                 frappe.call({
                     method: "frappe.client.delete",
                     args: {
-                        doctype: "Lot Resource Tagging",
+                        doctype: "SPP Lot Resource Tagging",  // ✅ FIXED: Changed from "Lot Resource Tagging"
                         name: tag_name
                     },
                     callback: (r) => {
@@ -671,5 +973,11 @@ class ResourceTaggingPage {
                 });
             }
         );
+    }
+    
+    // ✅ NEW: Generate random badge color
+    getRandomBadgeColor() {
+        const randomIndex = Math.floor(Math.random() * this.badgeColors.length);
+        return this.badgeColors[randomIndex];
     }
 }
