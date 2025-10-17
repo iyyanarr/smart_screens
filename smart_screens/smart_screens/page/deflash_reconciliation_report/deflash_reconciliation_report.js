@@ -283,10 +283,18 @@ me.hide_loading();
 			let scrap_diff_class = row.scrap_difference_kg > 0 ? 'text-danger' : (row.scrap_difference_kg < 0 ? 'text-success' : '');
 			let row_bg = index % 2 === 0 ? '#ffffff' : '#fafbfc';
 			
+			// Generate lot number cell with link to receipt entry if it exists
+			let lot_no_cell = '';
+			if (row.receipt_id) {
+				lot_no_cell = `<a href="/app/deflashing-receipt-entry/${row.receipt_id}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 500;">${row.lot_no || ''}</a>`;
+			} else {
+				lot_no_cell = `<span class="text-muted" style="font-style: italic;">${row.lot_no || ''}</span>`;
+			}
+			
 			table_html += `
 				<tr style="background: ${row_bg}; transition: all 0.2s;" onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='${row_bg}'">
 					<td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: 500; color: #2d3748;">${row.item || ''}</td>
-					<td style="padding: 10px; border: 1px solid #e2e8f0;"><a href="/app/deflashing-receipt-entry/${row.lot_no}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 500;">${row.lot_no || ''}</a></td>
+					<td style="padding: 10px; border: 1px solid #e2e8f0;">${lot_no_cell}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.date_sent ? frappe.datetime.str_to_user(row.date_sent) : ''}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.date_received ? frappe.datetime.str_to_user(row.date_received) : '<span class="text-muted" style="font-style: italic;">Pending</span>'}</td>
 					<td style="padding: 10px; border: 1px solid #e2e8f0; color: #4a5568;">${row.deflash_person || ''}</td>

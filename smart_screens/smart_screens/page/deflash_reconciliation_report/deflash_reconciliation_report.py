@@ -48,6 +48,7 @@ def get_deflash_reconciliation_data(date_type='sent', from_date=None, to_date=No
             SELECT 
                 DDEI.item as item,
                 DDEI.lot_number as lot_no,
+                DRE.name as receipt_id,
                 DDE.posting_date as date_sent,
                 DRE.posting_date as date_received,
                 DDE.scan_deflashing_vendor as deflash_person,
