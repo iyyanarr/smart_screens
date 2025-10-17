@@ -8,8 +8,27 @@ frappe.pages['bin_status_monitor'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
-	// Initialize the page
-	new BinStatusMonitorPage(page);
+	// Clean up any existing instance
+	if (wrapper.bin_status_monitor_instance) {
+		wrapper.bin_status_monitor_instance.cleanup();
+	}
+
+	// Initialize the page and store instance
+	wrapper.bin_status_monitor_instance = new BinStatusMonitorPage(page);
+};
+
+frappe.pages['bin_status_monitor'].on_page_show = function(wrapper) {
+	// Restart auto-refresh when page is shown
+	if (wrapper.bin_status_monitor_instance) {
+		wrapper.bin_status_monitor_instance.start_auto_refresh();
+	}
+};
+
+// Cleanup when navigating away
+frappe.pages['bin_status_monitor'].on_page_hide = function(wrapper) {
+	if (wrapper.bin_status_monitor_instance) {
+		wrapper.bin_status_monitor_instance.cleanup();
+	}
 };
 
 class BinStatusMonitorPage {
@@ -1081,7 +1100,7 @@ class BinStatusMonitorPage {
 		
 		// Back to dashboard button
 		$('#back-to-dashboard').on('click', () => {
-			frappe.set_route('bin_tracker_dashboard');
+			window.location.href = '/app/bin_tracker_dashboard';
 		});
 		
 		 // Status tab buttons
@@ -1134,13 +1153,23 @@ class BinStatusMonitorPage {
 		this.auto_refresh_interval = setInterval(() => {
 			this.load_bin_data(true); // Silent refresh
 		}, 30000);
-		
-		// Clear interval when navigating away
-		$(window).on('unload', () => {
-			if (this.auto_refresh_interval) {
-				clearInterval(this.auto_refresh_interval);
-			}
-		});
+	}
+
+	cleanup() {
+		// Clear auto-refresh interval
+		if (this.auto_refresh_interval) {
+			clearInterval(this.auto_refresh_interval);
+			this.auto_refresh_interval = null;
+		}
+
+		// Unbind all events
+		$('#back-to-dashboard').off('click');
+		$('.status-tab').off('click');
+		$('#search-input').off('input');
+		$('.view-btn').off('click');
+		$('#refresh-btn').off('click');
+		$('#export-btn').off('click');
+		$(document).off('click', '.bin-card');
 	}
 
 	load_bin_data(silent = false) {

@@ -8,7 +8,15 @@ frappe.pages['bin_tracker_dashboard'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
-	new BinTrackerDashboard(page);
+	page.dashboard_instance = new BinTrackerDashboard(page);
+};
+
+// Add on_page_show to handle navigation back to this page
+frappe.pages['bin_tracker_dashboard'].on_page_show = function(wrapper) {
+	// Refresh the page content when navigating back
+	if (wrapper.page && wrapper.page.dashboard_instance) {
+		wrapper.page.dashboard_instance.refresh();
+	}
 };
 
 class BinTrackerDashboard {
@@ -427,6 +435,11 @@ class BinTrackerDashboard {
 		});
 		
 		// Load stats on init
+		this.load_stats();
+	}
+
+	// Add refresh method to reload stats when page is shown
+	refresh() {
 		this.load_stats();
 	}
 

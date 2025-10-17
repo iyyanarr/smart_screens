@@ -8,7 +8,24 @@ frappe.pages['bin_check_in'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
-	new BinCheckInPage(page);
+	page.check_in_instance = new BinCheckInPage(page);
+};
+
+// Add on_page_show to handle navigation back to this page
+frappe.pages['bin_check_in'].on_page_show = function(wrapper) {
+	// Only reset the form if the instance already exists
+	// Don't reload HTML or rebind events
+	if (wrapper.page && wrapper.page.check_in_instance) {
+		wrapper.page.check_in_instance.reset_form();
+	}
+};
+
+// Add cleanup on page hide to prevent event conflicts
+frappe.pages['bin_check_in'].on_page_hide = function(wrapper) {
+	// Unbind all events to prevent conflicts when navigating away
+	if (wrapper.page && wrapper.page.check_in_instance) {
+		wrapper.page.check_in_instance.unbind_events();
+	}
 };
 
 class BinCheckInPage {
@@ -361,14 +378,17 @@ class BinCheckInPage {
 	bind_events() {
 		const self = this;
 		
+		 // Unbind any existing events first to prevent duplicates
+		this.unbind_events();
+		
 		// Back to dashboard button
-		$('#back-to-dashboard').on('click', () => {
+		this.page.main.find('#back-to-dashboard').on('click', () => {
 			frappe.set_route('bin_tracker_dashboard');
 		});
 		
 		// Auto-focus on batch barcode when page loads
 		setTimeout(() => {
-			$('#batch-barcode').focus();
+			this.page.main.find('#batch-barcode').focus();
 		}, 100);
 		
 		// Validation state
@@ -378,16 +398,16 @@ class BinCheckInPage {
 		};
 		
 		// Validate on blur or Enter key (single API call for both fields)
-		$('#batch-barcode').on('blur keypress', function(e) {
+		this.page.main.find('#batch-barcode').on('blur keypress', function(e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
-				$('#rack-barcode').focus();
+				self.page.main.find('#rack-barcode').focus();
 			}
 			self.validate_inputs();
 		});
 		
-		$('#rack-barcode').on('blur keypress', function(e) {
+		this.page.main.find('#rack-barcode').on('blur keypress', function(e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
@@ -399,9 +419,9 @@ class BinCheckInPage {
 		});
 		
 		// Clear validation when user starts typing
-		$('#batch-barcode, #rack-barcode').on('input', function() {
+		this.page.main.find('#batch-barcode, #rack-barcode').on('input', function() {
 			const field_type = $(this).attr('id') === 'batch-barcode' ? 'batch' : 'rack';
-			const icon = field_type === 'batch' ? $('#batch-validation-icon') : $('#rack-validation-icon');
+			const icon = field_type === 'batch' ? self.page.main.find('#batch-validation-icon') : self.page.main.find('#rack-validation-icon');
 			
 			icon.removeClass('show valid invalid');
 			$(this).removeClass('valid invalid');
@@ -414,30 +434,38 @@ class BinCheckInPage {
 			}
 			
 			// Update submit button state
-			$('#submit-check-in').prop('disabled', 
+			self.page.main.find('#submit-check-in').prop('disabled', 
 				!(self.validation_state.batch_valid && self.validation_state.rack_valid)
 			);
 		});
 		
 		// Submit button click
-		$('#submit-check-in').on('click', () => {
+		this.page.main.find('#submit-check-in').on('click', () => {
 			self.perform_check_in();
 		});
 	}
-	
+
+	unbind_events() {
+		// Unbind all events from the page to prevent memory leaks and conflicts
+		this.page.main.find('#back-to-dashboard').off('click');
+		this.page.main.find('#batch-barcode').off('blur keypress input');
+		this.page.main.find('#rack-barcode').off('blur keypress input');
+		this.page.main.find('#submit-check-in').off('click');
+	}
+
 	validate_inputs() {
-		const batch = $('#batch-barcode').val().trim();
-		const rack = $('#rack-barcode').val().trim();
+		const batch = this.page.main.find('#batch-barcode').val().trim();
+		const rack = this.page.main.find('#rack-barcode').val().trim();
 		
 		// Don't validate if both fields are empty
 		if (!batch && !rack) return;
 		
 		 // Show validating state
 		if (batch) {
-			$('#batch-validation-icon').addClass('show validating').removeClass('valid invalid');
+			this.page.main.find('#batch-validation-icon').addClass('show validating').removeClass('valid invalid');
 		}
 		if (rack) {
-			$('#rack-validation-icon').addClass('show validating').removeClass('valid invalid');
+			this.page.main.find('#rack-validation-icon').addClass('show validating').removeClass('valid invalid');
 		}
 		
 		const self = this;
@@ -456,8 +484,8 @@ class BinCheckInPage {
 					
 					// Update batch validation
 					if (batch) {
-						const batch_icon = $('#batch-validation-icon');
-						const batch_input = $('#batch-barcode');
+						const batch_icon = self.page.main.find('#batch-validation-icon');
+						const batch_input = self.page.main.find('#batch-barcode');
 						
 						batch_icon.removeClass('validating');
 						if (result.batch_valid) {
@@ -481,8 +509,8 @@ class BinCheckInPage {
 					
 					// Update rack validation
 					if (rack) {
-						const rack_icon = $('#rack-validation-icon');
-						const rack_input = $('#rack-barcode');
+						const rack_icon = self.page.main.find('#rack-validation-icon');
+						const rack_input = self.page.main.find('#rack-barcode');
 						
 						rack_icon.removeClass('validating');
 						if (result.rack_valid) {
@@ -508,36 +536,36 @@ class BinCheckInPage {
 					}
 					
 					// Enable submit button only if both are valid
-					$('#submit-check-in').prop('disabled', !result.can_submit);
+					self.page.main.find('#submit-check-in').prop('disabled', !result.can_submit);
 				}
 			},
 			error: () => {
 				// On error, mark as invalid
 				if (batch) {
-					$('#batch-validation-icon').removeClass('validating').addClass('invalid').html('✗');
-					$('#batch-barcode').addClass('invalid').removeClass('valid');
+					self.page.main.find('#batch-validation-icon').removeClass('validating').addClass('invalid').html('✗');
+					self.page.main.find('#batch-barcode').addClass('invalid').removeClass('valid');
 					self.validation_state.batch_valid = false;
 				}
 				if (rack) {
-					$('#rack-validation-icon').removeClass('validating').addClass('invalid').html('✗');
-					$('#rack-barcode').addClass('invalid').removeClass('valid');
+					self.page.main.find('#rack-validation-icon').removeClass('validating').addClass('invalid').html('✗');
+					self.page.main.find('#rack-barcode').addClass('invalid').removeClass('valid');
 					self.validation_state.rack_valid = false;
 				}
-				$('#submit-check-in').prop('disabled', true);
+				self.page.main.find('#submit-check-in').prop('disabled', true);
 			}
 		});
 	}
 	
 	perform_check_in() {
-		const batch = $('#batch-barcode').val().trim();
-		const rack = $('#rack-barcode').val().trim();
+		const batch = this.page.main.find('#batch-barcode').val().trim();
+		const rack = this.page.main.find('#rack-barcode').val().trim();
 		
 		 // Hide any previous error
-		$('#error-section').removeClass('show');
+		this.page.main.find('#error-section').removeClass('show');
 		
 		// Disable form during API call
-		$('#submit-check-in').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> CHECKING IN...');
-		$('#batch-barcode, #rack-barcode').prop('disabled', true);
+		this.page.main.find('#submit-check-in').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> CHECKING IN...');
+		this.page.main.find('#batch-barcode, #rack-barcode').prop('disabled', true);
 		
 		frappe.call({
 			method: 'smart_screens.smart_screens.api.bin_tracker.check_in_batch',
@@ -555,7 +583,7 @@ class BinCheckInPage {
 						message: `✅ CHECK-IN SUCCESSFUL!<br>
 							<strong>Item:</strong> ${data.item_code}<br>
 							<strong>Batch:</strong> ${batch}<br>
-							<strong>Rack:</strong> ${rack}<br>
+							<strong>Rack:</strong> ${this.rack_name || rack}<br>
 							<strong>Time:</strong> ${frappe.datetime.str_to_user(data.timestamp)}`,
 						indicator: 'green'
 					}, 5);
@@ -578,8 +606,8 @@ class BinCheckInPage {
 					frappe.utils.play_sound('error');
 					
 					// Show error in the error section
-					$('#error-message').text(error_msg);
-					$('#error-section').addClass('show');
+					this.page.main.find('#error-message').text(error_msg);
+					this.page.main.find('#error-section').addClass('show');
 					
 					// Re-enable form
 					this.enable_form();
@@ -597,8 +625,8 @@ class BinCheckInPage {
 				frappe.utils.play_sound('error');
 				
 				// Show detailed error in the error section
-				$('#error-message').html(`<strong>Error:</strong> ${error_details}`);
-				$('#error-section').addClass('show');
+				this.page.main.find('#error-message').html(`<strong>Error:</strong> ${error_details}`);
+				this.page.main.find('#error-section').addClass('show');
 				
 				this.enable_form();
 			}
@@ -606,22 +634,32 @@ class BinCheckInPage {
 	}
 	
 	reset_form() {
-		$('#batch-barcode').val('').prop('disabled', false);
-		$('#rack-barcode').val('').prop('disabled', false);
-		$('#submit-check-in').prop('disabled', true).html('<i class="fa fa-check-circle"></i> CHECK IN');
+		this.page.main.find('#batch-barcode').val('').prop('disabled', false).removeClass('valid invalid');
+		this.page.main.find('#rack-barcode').val('').prop('disabled', false).removeClass('valid invalid');
+		this.page.main.find('#submit-check-in').prop('disabled', true).html('<i class="fa fa-check-circle"></i> CHECK IN');
+		
+		// Reset validation icons
+		this.page.main.find('#batch-validation-icon').removeClass('show valid invalid');
+		this.page.main.find('#rack-validation-icon').removeClass('show valid invalid');
+		
+		// Reset validation state
+		this.validation_state = {
+			batch_valid: false,
+			rack_valid: false
+		};
 		
 		// Hide error message
-		$('#error-section').removeClass('show');
+		this.page.main.find('#error-section').removeClass('show');
 		
 		// Auto-focus back to batch field
 		setTimeout(() => {
-			$('#batch-barcode').focus();
+			this.page.main.find('#batch-barcode').focus();
 		}, 100);
 	}
 	
 	enable_form() {
-		$('#batch-barcode, #rack-barcode').prop('disabled', false);
-		$('#submit-check-in').prop('disabled', false).html('<i class="fa fa-check-circle"></i> CHECK IN');
-		$('#batch-barcode').focus();
+		this.page.main.find('#batch-barcode, #rack-barcode').prop('disabled', false);
+		this.page.main.find('#submit-check-in').prop('disabled', false).html('<i class="fa fa-check-circle"></i> CHECK IN');
+		this.page.main.find('#batch-barcode').focus();
 	}
 }

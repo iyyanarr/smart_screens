@@ -8,7 +8,24 @@ frappe.pages['bin_check_out'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
-	new BinCheckOutPage(page);
+	page.check_out_instance = new BinCheckOutPage(page);
+};
+
+// Add on_page_show to handle navigation back to this page
+frappe.pages['bin_check_out'].on_page_show = function(wrapper) {
+	// Only reset the form if the instance already exists
+	// Don't reload HTML or rebind events
+	if (wrapper.page && wrapper.page.check_out_instance) {
+		wrapper.page.check_out_instance.reset_form();
+	}
+};
+
+// Add cleanup on page hide to prevent event conflicts
+frappe.pages['bin_check_out'].on_page_hide = function(wrapper) {
+	// Unbind all events to prevent conflicts when navigating away
+	if (wrapper.page && wrapper.page.check_out_instance) {
+		wrapper.page.check_out_instance.unbind_events();
+	}
 };
 
 class BinCheckOutPage {
@@ -532,27 +549,30 @@ class BinCheckOutPage {
 	bind_events() {
 		const self = this;
 		
+		// Unbind any existing events first to prevent duplicates
+		this.unbind_events();
+		
 		// Back to dashboard button
-		$('#back-to-dashboard').on('click', () => {
+		this.page.main.find('#back-to-dashboard').on('click', () => {
 			frappe.set_route('bin_tracker_dashboard');
 		});
 		
 		// Auto-focus on batch barcode when page loads
 		setTimeout(() => {
-			$('#batch-barcode').focus();
+			this.page.main.find('#batch-barcode').focus();
 		}, 100);
 		
 		// Validate on blur or Enter key
-		$('#batch-barcode').on('blur keypress', function(e) {
+		this.page.main.find('#batch-barcode').on('blur keypress', function(e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
-				$('#rack-barcode').focus();
+				self.page.main.find('#rack-barcode').focus();
 			}
 			self.validate_inputs();
 		});
 		
-		$('#rack-barcode').on('blur keypress', function(e) {
+		this.page.main.find('#rack-barcode').on('blur keypress', function(e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
@@ -564,9 +584,9 @@ class BinCheckOutPage {
 		});
 		
 		// Clear validation when user starts typing
-		$('#batch-barcode, #rack-barcode').on('input', function() {
+		this.page.main.find('#batch-barcode, #rack-barcode').on('input', function() {
 			const field_type = $(this).attr('id') === 'batch-barcode' ? 'batch' : 'rack';
-			const icon = field_type === 'batch' ? $('#batch-validation-icon') : $('#rack-validation-icon');
+			const icon = field_type === 'batch' ? self.page.main.find('#batch-validation-icon') : self.page.main.find('#rack-validation-icon');
 			
 			icon.removeClass('show valid invalid');
 			$(this).removeClass('valid invalid');
@@ -579,20 +599,29 @@ class BinCheckOutPage {
 			}
 			
 			// Update submit button state
-			$('#submit-check-out').prop('disabled', 
+			self.page.main.find('#submit-check-out').prop('disabled', 
 				!(self.validation_state.batch_valid && self.validation_state.rack_valid)
 			);
 		});
 		
 		// Submit button click
-		$('#submit-check-out').on('click', () => {
+		this.page.main.find('#submit-check-out').on('click', () => {
 			self.perform_check_out();
 		});
 		
 		// Reset button click
-		$('#reset-btn').on('click', () => {
+		this.page.main.find('#reset-btn').on('click', () => {
 			self.reset_form();
 		});
+	}
+
+	unbind_events() {
+		// Unbind all events from the page to prevent memory leaks and conflicts
+		this.page.main.find('#back-to-dashboard').off('click');
+		this.page.main.find('#batch-barcode').off('blur keypress input');
+		this.page.main.find('#rack-barcode').off('blur keypress input');
+		this.page.main.find('#submit-check-out').off('click');
+		this.page.main.find('#reset-btn').off('click');
 	}
 
 	extract_warehouse_from_rack(rack_barcode) {
@@ -812,13 +841,15 @@ class BinCheckOutPage {
 			rack_valid: false
 		};
 		
-		// Clear and enable inputs
+		// Clear and enable inputs - remove all classes
 		$('#batch-barcode').val('').prop('disabled', false).removeClass('valid invalid');
 		$('#rack-barcode').val('').prop('disabled', false).removeClass('valid invalid');
 		$('#submit-check-out').prop('disabled', true).html('<i class="fa fa-sign-out"></i> CHECK OUT');
 		
-		// Hide validation icons
-		$('#batch-validation-icon, #rack-validation-icon').removeClass('show valid invalid');
+		// Hide and reset validation icons
+		$('#batch-validation-icon, #rack-validation-icon')
+			.removeClass('show valid invalid validating')
+			.html('');
 		
 		// Hide all message sections
 		$('#error-section, #success-section, #fifo-warning-section').removeClass('show').hide();
