@@ -731,7 +731,7 @@ class QualityInspectionPage {
         });
     }
     
-    // ✅ FIXED: Update submit method to use correct doctype
+    // ✅ ENHANCED: Updated submit method to include workflow completion
     submit_inspection_entry(doc) {
         frappe.call({
             method: "frappe.client.submit",
@@ -749,36 +749,13 @@ class QualityInspectionPage {
                         indicator: 'green'
                     }, 10);
                     
-                    // Show success dialog with option to view
-                    frappe.msgprint({
-                        title: __('Inspection Entry Created'),
-                        message: `
-                            <div class="text-center">
-                                <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
-                                <h4 class="mt-3">Inspection Entry Created & Submitted Successfully!</h4>
-                                <p><strong>Inspection ID:</strong> ${r.message.name}</p>
-                                <p><strong>Sub-Lot:</strong> ${this.sublot_details.sublot_number}</p>
-                                <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
-                                <p><strong>Type:</strong> ${r.message.inspection_type}</p>
-                                <p><strong>Inspection Qty:</strong> ${inspection_qty}</p>
-                                ${total_rejection > 0 ? `<p><strong>Rejection Qty:</strong> ${total_rejection}</p>` : ''}
-                                <p class="text-success"><strong>Final Qty:</strong> ${final_qty}</p>
-                                <p class="text-success mt-2"><i class="fa fa-check"></i> Document Status: <strong>Submitted</strong></p>
-                                ${this.rejection_details.length > 0 ? 
-                                    `<p class="mt-2"><strong>Defects:</strong> ${this.rejection_details.map(r => r.defect_type).join(', ')}</p>` : 
-                                    ''
-                                }
-                            </div>
-                        `,
-                        primary_action: {
-                            label: __('View Inspection Entry'),
-                            action: () => {
-                                frappe.set_route("Form", "SPP Inspection Entry", r.message.name);
-                            }
-                        }
-                    });
+                    // ✅ NEW: Check if this is Final Visual Inspection and complete workflow
+                    if (r.message.inspection_type === "Final Visual Inspection") {
+                        this.complete_manufacturing_workflow(r.message, final_qty, total_rejection);
+                    } else {
+                        this.show_inspection_success_dialog(r.message, inspection_qty, total_rejection, final_qty);
+                    }
                     
-                    this.reset_form();
                 } else {
                     frappe.msgprint({
                         title: __('Submission Failed'),
@@ -795,6 +772,396 @@ class QualityInspectionPage {
                 });
             }
         });
+    }
+    
+    // ✅ NEW: Complete manufacturing workflow for Final Visual Inspection
+    complete_manufacturing_workflow(inspection_doc, final_qty, total_rejection) {
+        // ✅ ENHANCED: Add comprehensive browser console debugging
+        console.group("🔄 MANUFACTURING WORKFLOW DEBUG");
+        console.log("📋 Starting manufacturing workflow completion");
+        console.log("🎯 Inspection Document:", inspection_doc);
+        console.log("📊 Final Qty:", final_qty);
+        console.log("❌ Total Rejection:", total_rejection);
+        console.log("🔍 Sub-lot Details:", this.sublot_details);
+        console.log("👤 Inspector Details:", this.inspector_details);
+        
+        // Show progress dialog
+        const progressDialog = new frappe.ui.Dialog({
+            title: __('Completing Manufacturing Workflow'),
+            fields: [
+                {
+                    fieldname: 'progress_html',
+                    fieldtype: 'HTML',
+                    options: this.getWorkflowProgressHTML(0, 'Starting workflow completion...', 'process')
+                }
+            ],
+            primary_action_label: __('Close'),
+            primary_action: function() {
+                progressDialog.hide();
+            }
+        });
+        
+        progressDialog.show();
+        progressDialog.$wrapper.find('.btn-primary').hide(); // Hide close button initially
+        
+        // Update progress function
+        const updateProgress = (percent, message, stage) => {
+            console.log(`📈 Progress Update: ${percent}% - ${message} (${stage})`);
+            progressDialog.fields_dict.progress_html.$wrapper.html(
+                this.getWorkflowProgressHTML(percent, message, stage)
+            );
+        };
+        
+        // Check workflow status first
+        updateProgress(20, 'Checking workflow status...', 'process');
+        console.log("🔍 STEP 1: Calling check_inspection_workflow_status API");
+        console.log("📝 API Parameters:", {
+            method: "smart_screens.smart_screens.api.quality_inspection.check_inspection_workflow_status",
+            args: {
+                lot_no: this.sublot_details.sublot_number
+            }
+        });
+        
+        frappe.call({
+            method: "smart_screens.smart_screens.api.quality_inspection.check_inspection_workflow_status",
+            args: {
+                lot_no: this.sublot_details.sublot_number
+            },
+            callback: (status_response) => {
+                console.log("✅ STEP 1 RESPONSE: Workflow status check completed");
+                console.log("📨 Full Response:", status_response);
+                
+                if (status_response.message && status_response.message.status === "success") {
+                    const workflow_data = status_response.message.data;
+                    
+                    console.log("✅ Workflow status check SUCCESS");
+                    console.log("📊 Workflow Data:", workflow_data);
+                    console.log("🏭 Work Order:", workflow_data.work_order);
+                    console.log("📋 Sub Lot Process:", workflow_data.sublot_process);
+                    console.log("🎯 Job Cards - Total:", workflow_data.total_job_cards, "Completed:", workflow_data.completed_job_cards);
+                    console.log("📦 Stock Entries - Material Transfer:", workflow_data.material_transfer_entries, "Manufacture:", workflow_data.manufacture_entries);
+                    console.log("✅ Workflow Completed:", workflow_data.workflow_completed);
+                    
+                    updateProgress(40, 'Workflow status checked successfully', 'process');
+                    
+                    if (workflow_data.workflow_completed) {
+                        console.log("ℹ️ Workflow already completed, showing completion dialog");
+                        updateProgress(100, 'Manufacturing workflow already completed!', 'complete');
+                        this.show_workflow_already_completed_dialog(inspection_doc, workflow_data);
+                        progressDialog.$wrapper.find('.btn-primary').show();
+                        console.groupEnd();
+                        return;
+                    }
+                    
+                    // Complete the workflow
+                    updateProgress(60, 'Completing job cards and creating stock entries...', 'process');
+                    console.log("🔄 STEP 2: Calling create_quality_inspection_workflow API");
+                    console.log("📝 API Parameters:", {
+                        method: "smart_screens.smart_screens.api.quality_inspection.create_quality_inspection_workflow",
+                        args: {
+                            inspection_entry_id: inspection_doc.name
+                        }
+                    });
+                    
+                    frappe.call({
+                        method: "smart_screens.smart_screens.api.quality_inspection.create_quality_inspection_workflow",
+                        args: {
+                            inspection_entry_id: inspection_doc.name
+                        },
+                        callback: (workflow_response) => {
+                            console.log("✅ STEP 2 RESPONSE: Workflow completion API call completed");
+                            console.log("📨 Full Response:", workflow_response);
+                            
+                            if (workflow_response.message && workflow_response.message.status === "success") {
+                                console.log("✅ Workflow completion SUCCESS");
+                                updateProgress(100, 'Manufacturing workflow completed successfully!', 'complete');
+                                
+                                const workflow_results = workflow_response.message.data;
+                                console.log("🎉 Workflow Results:", workflow_results);
+                                console.log("🔧 Job Cards Completed:", workflow_results.job_cards_completed);
+                                console.log("📦 Stock Entries Created:", workflow_results.stock_entries_created);
+                                console.log("🏭 Work Order Completed:", workflow_results.work_order_completed);
+                                
+                                // Show success message
+                                frappe.show_alert({
+                                    message: __("Manufacturing workflow completed! Job cards: {0}, Stock entries: {1}", 
+                                        [workflow_results.job_cards_completed.length, workflow_results.stock_entries_created.length]),
+                                    indicator: 'green'
+                                }, 5);
+                                
+                                // Show detailed results dialog
+                                this.show_workflow_completion_dialog(inspection_doc, workflow_results, final_qty, total_rejection);
+                                
+                                progressDialog.$wrapper.find('.btn-primary').show();
+                                console.log("🎉 Workflow completion process finished successfully");
+                                console.groupEnd();
+                                
+                            } else {
+                                console.warn("⚠️ Workflow completion returned non-success status");
+                                console.log("⚠️ Response message:", workflow_response.message);
+                                updateProgress(75, 'Workflow completed with warnings', 'warning');
+                                
+                                frappe.msgprint({
+                                    title: __('Partial Success'),
+                                    message: workflow_response.message ? workflow_response.message.message : 'Some workflow steps may not have completed',
+                                    indicator: 'orange'
+                                });
+                                
+                                // Still show the inspection success
+                                this.show_inspection_success_dialog(inspection_doc, inspection_doc.inspected_qty_nos, total_rejection, final_qty);
+                                progressDialog.$wrapper.find('.btn-primary').show();
+                                console.groupEnd();
+                            }
+                        },
+                        error: (workflow_error) => {
+                            console.error("❌ STEP 2 ERROR: Workflow completion API call failed");
+                            console.error("❌ Error Object:", workflow_error);
+                            console.error("❌ Error Message:", workflow_error.message);
+                            console.error("❌ Error Stack:", workflow_error.stack);
+                            
+                            updateProgress(0, 'Workflow completion failed: ' + (workflow_error.message || 'Unknown error'), 'error');
+                            
+                            frappe.msgprint({
+                                title: __('Workflow Error'),
+                                message: __('Inspection completed but manufacturing workflow failed: ') + (workflow_error.message || 'Unknown error'),
+                                indicator: 'red'
+                            });
+                            
+                            // Still show the inspection success
+                            this.show_inspection_success_dialog(inspection_doc, inspection_doc.inspected_qty_nos, total_rejection, final_qty);
+                            progressDialog.$wrapper.find('.btn-primary').show();
+                            console.groupEnd();
+                        }
+                    });
+                } else {
+                    console.error("❌ STEP 1 ERROR: Workflow status check failed");
+                    console.error("❌ Response status:", status_response.message ? status_response.message.status : 'No status');
+                    console.error("❌ Response message:", status_response.message ? status_response.message.message : 'No message');
+                    console.error("❌ Full response:", status_response);
+                    
+                    updateProgress(0, 'Failed to check workflow status', 'error');
+                    
+                    // Continue with basic inspection success
+                    this.show_inspection_success_dialog(inspection_doc, inspection_doc.inspected_qty_nos, total_rejection, final_qty);
+                    progressDialog.$wrapper.find('.btn-primary').show();
+                    console.groupEnd();
+                }
+            },
+            error: (status_error) => {
+                console.error("❌ STEP 1 CRITICAL ERROR: Status check API call failed");
+                console.error("❌ Error Object:", status_error);
+                console.error("❌ Error Message:", status_error.message);
+                console.error("❌ Error Response Text:", status_error.responseText);
+                console.error("❌ Error Status:", status_error.status);
+                console.error("❌ Error Stack:", status_error.stack);
+                
+                // Try to parse the error response for more details
+                if (status_error.responseText) {
+                    try {
+                        const errorData = JSON.parse(status_error.responseText);
+                        console.error("❌ Parsed Error Data:", errorData);
+                        if (errorData.exception) {
+                            console.error("❌ Exception Details:", errorData.exception);
+                        }
+                        if (errorData.exc) {
+                            console.error("❌ Exception String:", errorData.exc);
+                        }
+                    } catch (parseError) {
+                        console.error("❌ Could not parse error response:", parseError);
+                    }
+                }
+                
+                updateProgress(0, 'Status check failed: ' + (status_error.message || 'Unknown error'), 'error');
+                
+                // Continue with basic inspection success
+                this.show_inspection_success_dialog(inspection_doc, inspection_doc.inspected_qty_nos, total_rejection, final_qty);
+                progressDialog.$wrapper.find('.btn-primary').show();
+                console.groupEnd();
+            }
+        });
+    }
+    
+    // ✅ NEW: Generate workflow progress HTML
+    getWorkflowProgressHTML(percent, message, stage = 'process') {
+        const stageIcons = {
+            'process': 'fa-cogs fa-spin',
+            'complete': 'fa-check-circle',
+            'warning': 'fa-exclamation-triangle',
+            'error': 'fa-times-circle'
+        };
+        
+        const stageColors = {
+            'process': 'primary',
+            'complete': 'success',
+            'warning': 'warning',
+            'error': 'danger'
+        };
+        
+        const icon = stageIcons[stage] || 'fa-cogs fa-spin';
+        const color = stageColors[stage] || 'primary';
+        
+        return `
+            <div class="text-center" style="padding: 20px;">
+                <div style="font-size: 48px; color: var(--bs-${color}); margin-bottom: 20px;">
+                    <i class="fa ${icon}"></i>
+                </div>
+                <h4 style="margin-bottom: 20px;">${message}</h4>
+                <div class="progress" style="height: 25px;">
+                    <div class="progress-bar progress-bar-striped ${stage === 'process' ? 'progress-bar-animated' : ''} bg-${color}" 
+                         role="progressbar" 
+                         style="width: ${percent}%;" 
+                         aria-valuenow="${percent}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        ${percent}%
+                    </div>
+                </div>
+                ${stage === 'process' ? '<p class="text-muted mt-3">Please wait, completing manufacturing workflow...</p>' : ''}
+            </div>
+        `;
+    }
+    
+    // ✅ NEW: Show workflow completion dialog
+    show_workflow_completion_dialog(inspection_doc, workflow_results, final_qty, total_rejection) {
+        frappe.msgprint({
+            title: __('Complete Manufacturing Workflow Finished'),
+            message: `
+                <div class="text-center">
+                    <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
+                    <h4 class="mt-3">Manufacturing Workflow Completed Successfully!</h4>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fa fa-search mr-2"></i>Quality Inspection
+                                    </h6>
+                                    <p><strong>Inspection ID:</strong> ${inspection_doc.name}</p>
+                                    <p><strong>Type:</strong> ${inspection_doc.inspection_type}</p>
+                                    <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
+                                    <p><strong>Final Qty:</strong> ${final_qty}</p>
+                                    ${total_rejection > 0 ? `<p class="text-warning"><strong>Rejected:</strong> ${total_rejection}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fa fa-industry mr-2"></i>Manufacturing Completed
+                                    </h6>
+                                    <p><strong>Job Cards Completed:</strong> ${workflow_results.job_cards_completed.length}</p>
+                                    <p><strong>Stock Entries Created:</strong> ${workflow_results.stock_entries_created.length}</p>
+                                    <p><strong>Work Order:</strong> ${workflow_results.work_order_completed ? 'Completed' : 'In Progress'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-success mt-3">
+                        <i class="fa fa-check"></i> <strong>Complete manufacturing cycle finished successfully!</strong>
+                    </p>
+                </div>
+            `,
+            primary_action: {
+                label: __('View Inspection Entry'),
+                action: () => {
+                    frappe.set_route("Form", "SPP Inspection Entry", inspection_doc.name);
+                }
+            },
+            secondary_action: {
+                label: __('View Work Order'),
+                action: () => {
+                    if (workflow_results.job_cards_completed && workflow_results.job_cards_completed.length > 0) {
+                        // Get work order from job card
+                        frappe.call({
+                            method: "frappe.client.get_value",
+                            args: {
+                                doctype: "Job Card",
+                                fieldname: "work_order",
+                                filters: {"name": workflow_results.job_cards_completed[0]}
+                            },
+                            callback: (r) => {
+                                if (r.message && r.message.work_order) {
+                                    frappe.set_route("Form", "Work Order", r.message.work_order);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        
+        this.reset_form();
+    }
+    
+    // ✅ NEW: Show workflow already completed dialog
+    show_workflow_already_completed_dialog(inspection_doc, workflow_data) {
+        frappe.msgprint({
+            title: __('Workflow Already Completed'),
+            message: `
+                <div class="text-center">
+                    <i class="fa fa-info-circle text-info" style="font-size: 48px;"></i>
+                    <h4 class="mt-3">Manufacturing Workflow Already Completed</h4>
+                    <p><strong>Inspection Entry:</strong> ${inspection_doc.name}</p>
+                    <p><strong>Work Order:</strong> ${workflow_data.work_order} (${workflow_data.work_order_status})</p>
+                    <p><strong>Job Cards:</strong> ${workflow_data.completed_job_cards}/${workflow_data.total_job_cards} completed</p>
+                    <p><strong>Stock Entries:</strong> ${workflow_data.manufacture_entries} manufacture entries created</p>
+                    <p class="text-info mt-2">
+                        <i class="fa fa-check"></i> All manufacturing steps have been completed for this sub-lot.
+                    </p>
+                </div>
+            `,
+            primary_action: {
+                label: __('View Inspection Entry'),
+                action: () => {
+                    frappe.set_route("Form", "SPP Inspection Entry", inspection_doc.name);
+                }
+            }
+        });
+        
+        this.reset_form();
+    }
+    
+    // ✅ ENHANCED: Regular inspection success dialog (for non-Final Visual Inspection)
+    show_inspection_success_dialog(inspection_doc, inspection_qty, total_rejection, final_qty) {
+        frappe.msgprint({
+            title: __('Inspection Entry Created'),
+            message: `
+                <div class="text-center">
+                    <i class="fa fa-check-circle text-success" style="font-size: 48px;"></i>
+                    <h4 class="mt-3">Inspection Entry Created & Submitted Successfully!</h4>
+                    <p><strong>Inspection ID:</strong> ${inspection_doc.name}</p>
+                    <p><strong>Sub-Lot:</strong> ${this.sublot_details.sublot_number}</p>
+                    <p><strong>Inspector:</strong> ${this.inspector_details.employee.employee_name}</p>
+                    <p><strong>Type:</strong> ${inspection_doc.inspection_type}</p>
+                    <p><strong>Inspection Qty:</strong> ${inspection_qty}</p>
+                    ${total_rejection > 0 ? `<p><strong>Rejection Qty:</strong> ${total_rejection}</p>` : ''}
+                    <p class="text-success"><strong>Final Qty:</strong> ${final_qty}</p>
+                    <p class="text-success mt-2"><i class="fa fa-check"></i> Document Status: <strong>Submitted</strong></p>
+                    ${this.rejection_details.length > 0 ? 
+                        `<p class="mt-2"><strong>Defects:</strong> ${this.rejection_details.map(r => r.defect_type).join(', ')}</p>` : 
+                        ''
+                    }
+                    ${inspection_doc.inspection_type !== "Final Visual Inspection" ? 
+                        `<div class="alert alert-info mt-3">
+                            <i class="fa fa-info-circle mr-2"></i>
+                            <strong>Note:</strong> Complete manufacturing workflow will be triggered when "Final Visual Inspection" is performed.
+                        </div>` : ''
+                    }
+                </div>
+            `,
+            primary_action: {
+                label: __('View Inspection Entry'),
+                action: () => {
+                    frappe.set_route("Form", "SPP Inspection Entry", inspection_doc.name);
+                }
+            }
+        });
+        
+        this.reset_form();
     }
     
     reset_form() {

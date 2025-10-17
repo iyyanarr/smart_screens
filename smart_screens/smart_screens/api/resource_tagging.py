@@ -113,13 +113,14 @@ def get_sublot_entry_details(sublot_number):
             },
             fields=[
                 "name",
+                "item_code",  # ✅ FIXED: Added item_code field
                 "batch",
                 "sublot_batch",
                 "sublot_qty",
                 "final_sublot_qty",
                 "stockentry_ref",
-                "source_document",
-                "source_document_name"
+                "source_warehouse",  # ✅ FIXED: Use actual fields from DocType
+                "target_warehouse"   # ✅ FIXED: Use actual fields from DocType
             ],
             limit=1
         )
@@ -136,22 +137,25 @@ def get_sublot_entry_details(sublot_number):
 def get_work_order_from_sublot(sublot_entry_name):
     """Get work order reference from Sub Lot Process or Sub Lot Entry"""
     try:
-        # First check if there's a Sub Lot Process linked to this Sub Lot Entry
+        # Get the sublot entry document
         sublot_entry = frappe.get_doc("Sub Lot Entry", sublot_entry_name)
         
-        # Check if source document is Sub Lot Process
-        if sublot_entry.source_document == "Sub Lot Process" and sublot_entry.source_document_name:
-            # Get work order from Sub Lot Process
-            sublot_process = frappe.get_value(
-                "Sub Lot Process",
-                sublot_entry.source_document_name,
-                "work_order"
-            )
-            
-            if sublot_process:
-                return sublot_process
+        # ✅ FIXED: Since Sub Lot Entry doesn't have source_document fields,
+        # search for Sub Lot Process that references this sublot number
+        sublot_processes = frappe.get_all(
+            "Sub Lot Process",
+            filters={
+                "sub_lot_number": sublot_entry.sublot_number,
+                "docstatus": 1
+            },
+            fields=["name", "work_order"],
+            limit=1
+        )
         
-        # Alternative: Search for work orders that reference this sublot
+        if sublot_processes and sublot_processes[0].get("work_order"):
+            return sublot_processes[0].get("work_order")
+        
+        # Alternative: Search for work orders that reference this item
         work_orders = frappe.get_all(
             "Work Order",
             filters={
@@ -179,7 +183,7 @@ def create_resource_tagging_workflow(sublot_number, operations_data):
     This mirrors the Sub Lot Process on_submit() workflow
     
     Args:
-        sublot_number (str): Sub-lot number
+        sublot_number (str): Sub-lot number (directly from frontend scan)
         operations_data (str|list): List of operations with employee details
         
     Returns:
@@ -203,16 +207,32 @@ def create_resource_tagging_workflow(sublot_number, operations_data):
                 "message": "At least one operation is required"
             }
         
-        # 1. Get Sub Lot Entry details
+        # ✅ FIXED: Get Sub Lot Entry details for additional info, but use scanned sublot_number directly
         sublot_entry = get_sublot_entry_details(sublot_number)
-        if not sublot_entry:
-            return {
-                "status": "error",
-                "message": f"Sub Lot Entry not found for sublot number: {sublot_number}"
+        
+        # ✅ ENHANCED: Create sublot_entry_data using scanned sublot_number even if no Sub Lot Entry found
+        if sublot_entry:
+            # Use data from Sub Lot Entry if available
+            sublot_entry_data = sublot_entry
+        else:
+            # ✅ FIXED: Create minimal data structure using the scanned sublot_number
+            frappe.logger().info(f"No Sub Lot Entry found, using scanned sublot_number: {sublot_number}")
+            sublot_entry_data = {
+                "sublot_number": sublot_number,  # Use the scanned value directly
+                "item_code": "",  # Will be populated from operations if needed
+                "batch": "",
+                "sublot_batch": "",
+                "sublot_qty": 0,
+                "final_sublot_qty": 0,
+                "source_warehouse": "",
+                "target_warehouse": ""
             }
         
+        # ✅ FIXED: Always ensure sublot_number is the scanned value
+        sublot_entry_data["sublot_number"] = sublot_number
+        
         # 2. Get or create Sub Lot Process document
-        sublot_process = get_or_create_sublot_process(sublot_entry, operations_data)
+        sublot_process = get_or_create_sublot_process_with_scanned_number(sublot_entry_data, operations_data, sublot_number)
         if not sublot_process:
             return {
                 "status": "error",
@@ -228,6 +248,7 @@ def create_resource_tagging_workflow(sublot_number, operations_data):
         # Create a mock sublot_process object with required attributes
         class MockSubLotProcess:
             def __init__(self, doc_data):
+                self.doctype = "Sub Lot Process"  # ✅ FIXED: Add missing doctype attribute
                 self.name = doc_data.get("name")
                 self.sub_lot_number = doc_data.get("sub_lot_number")
                 self.item_code = doc_data.get("item_code")
@@ -274,17 +295,26 @@ def create_resource_tagging_workflow(sublot_number, operations_data):
             "message": f"Failed to create resource tagging workflow: {str(e)}"
         }
 
-def get_or_create_sublot_process(sublot_entry, operations_data):
+# ✅ NEW: Enhanced function that directly uses scanned sublot number
+def get_or_create_sublot_process_with_scanned_number(sublot_entry_data, operations_data, scanned_sublot_number):
     """
-    Get existing Sub Lot Process or create a new one
+    Get existing Sub Lot Process or create a new one using the scanned sublot number
     """
     try:
-        # Check if Sub Lot Process already exists for this sublot
-        existing_process = None
+        # ✅ ENHANCED: Search for existing Sub Lot Process using scanned sublot number
+        existing_processes = frappe.get_all(
+            "Sub Lot Process",
+            filters={
+                "sub_lot_number": scanned_sublot_number,  # Use scanned value directly
+                "docstatus": ["<", 2]  # Include draft and submitted, exclude cancelled
+            },
+            fields=["name", "docstatus"],
+            limit=1
+        )
         
-        if sublot_entry.get("source_document") == "Sub Lot Process" and sublot_entry.get("source_document_name"):
+        if existing_processes:
             try:
-                existing_process = frappe.get_doc("Sub Lot Process", sublot_entry.get("source_document_name"))
+                existing_process = frappe.get_doc("Sub Lot Process", existing_processes[0].name)
                 
                 # Update operations if needed
                 existing_ops = [op.operation for op in existing_process.operations]
@@ -305,17 +335,114 @@ def get_or_create_sublot_process(sublot_entry, operations_data):
             except frappe.DoesNotExistError:
                 pass
         
-        # Create new Sub Lot Process document
+        # ✅ FIXED: Create new Sub Lot Process document using scanned sublot number
         process_doc = frappe.new_doc("Sub Lot Process")
-        process_doc.spp_batch_number = sublot_entry.get("sublot_number")
-        process_doc.batch_no = sublot_entry.get("batch")
-        process_doc.sub_lot_number = sublot_entry.get("sublot_number")
+        
+        # ✅ FIXED: Use scanned sublot_number directly
+        process_doc.sub_lot_number = scanned_sublot_number  # ✅ USE SCANNED VALUE DIRECTLY
+        process_doc.spp_batch_number = sublot_entry_data.get("sublot_batch") or sublot_entry_data.get("batch") or scanned_sublot_number  # ✅ Fallback to scanned value
+        process_doc.batch_no = sublot_entry_data.get("batch") or ""
+        process_doc.sublot_batch_number = sublot_entry_data.get("sublot_batch") or sublot_entry_data.get("batch") or ""
+        process_doc.item_code = sublot_entry_data.get("item_code") or ""
+        process_doc.warehouse = sublot_entry_data.get("source_warehouse") or sublot_entry_data.get("target_warehouse") or ""
+        process_doc.barcode = sublot_entry_data.get("sublot_batch") or sublot_entry_data.get("batch") or scanned_sublot_number
+        process_doc.available_quantity = sublot_entry_data.get("sublot_qty") or 0
+        process_doc.sublot_qty = sublot_entry_data.get("final_sublot_qty") or sublot_entry_data.get("sublot_qty") or 0
+        process_doc.inspection_quantity = sublot_entry_data.get("final_sublot_qty") or sublot_entry_data.get("sublot_qty") or 0
+        
+        # ✅ ENHANCED: Add debug logging to verify field values
+        frappe.logger().info(f"Creating Sub Lot Process with SCANNED sublot number:")
+        frappe.logger().info(f"  - SCANNED sublot_number: {scanned_sublot_number}")
+        frappe.logger().info(f"  - sub_lot_number (field): {process_doc.sub_lot_number}")
+        frappe.logger().info(f"  - spp_batch_number: {process_doc.spp_batch_number}")
+        frappe.logger().info(f"  - batch_no: {process_doc.batch_no}")
+        frappe.logger().info(f"  - sublot_batch_number: {process_doc.sublot_batch_number}")
+        frappe.logger().info(f"  - item_code: {process_doc.item_code}")
+        frappe.logger().info(f"  - sublot_qty: {process_doc.sublot_qty}")
+        
+        # Add operations
+        for op_data in operations_data:
+            process_doc.append("operations", {
+                "operation": op_data.get("operation_type"),
+                "employee_code": op_data.get("operator_id"),
+                "employee_name": op_data.get("operator_name")
+            })
+        
+        # Insert the document (don't submit yet - let the workflow handle it)
+        process_doc.insert()
+        
+        frappe.logger().info(f"✅ SUCCESS: Created Sub Lot Process: {process_doc.name} with sublot_number: {process_doc.sub_lot_number}")
+        
+        return process_doc.as_dict()
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating Sub Lot Process with scanned number {scanned_sublot_number}: {str(e)}", "Resource Tagging Error")
+        frappe.logger().error(f"Exception details: {str(e)}")
+        return None
+
+def get_or_create_sublot_process(sublot_entry, operations_data):
+    """
+    Get existing Sub Lot Process or create a new one
+    """
+    try:
+        # ✅ FIXED: Search for existing Sub Lot Process by sublot number
+        # since Sub Lot Entry doesn't have source_document fields
+        existing_processes = frappe.get_all(
+            "Sub Lot Process",
+            filters={
+                "sub_lot_number": sublot_entry.get("sublot_number"),
+                "docstatus": ["<", 2]  # Include draft and submitted, exclude cancelled
+            },
+            fields=["name", "docstatus"],
+            limit=1
+        )
+        
+        if existing_processes:
+            try:
+                existing_process = frappe.get_doc("Sub Lot Process", existing_processes[0].name)
+                
+                # Update operations if needed
+                existing_ops = [op.operation for op in existing_process.operations]
+                for op_data in operations_data:
+                    if op_data.get("operation_type") not in existing_ops:
+                        existing_process.append("operations", {
+                            "operation": op_data.get("operation_type"),
+                            "employee_code": op_data.get("operator_id"),
+                            "employee_name": op_data.get("operator_name")
+                        })
+                
+                # Save if we added new operations
+                if len(existing_process.operations) > len(existing_ops):
+                    existing_process.save()
+                
+                return existing_process.as_dict()
+                
+            except frappe.DoesNotExistError:
+                pass
+        
+        # ✅ FIXED: Create new Sub Lot Process document with correct field mappings
+        process_doc = frappe.new_doc("Sub Lot Process")
+        
+        # ✅ FIXED: Correct field assignments based on DocType structure
+        process_doc.sub_lot_number = sublot_entry.get("sublot_number")  # Sub Lot Number field
+        process_doc.spp_batch_number = sublot_entry.get("sublot_batch") or sublot_entry.get("batch")  # SPP Batch Number field
+        process_doc.batch_no = sublot_entry.get("batch")  # Batch No field
+        process_doc.sublot_batch_number = sublot_entry.get("sublot_batch") or sublot_entry.get("batch")  # Sublot Batch Number (Link to Batch)
         process_doc.item_code = sublot_entry.get("item_code")
-        process_doc.warehouse = sublot_entry.get("warehouse")
-        process_doc.barcode = sublot_entry.get("sublot_batch")
+        process_doc.warehouse = sublot_entry.get("source_warehouse") or sublot_entry.get("target_warehouse")
+        process_doc.barcode = sublot_entry.get("sublot_batch") or sublot_entry.get("batch")
         process_doc.available_quantity = sublot_entry.get("sublot_qty")
         process_doc.sublot_qty = sublot_entry.get("final_sublot_qty") or sublot_entry.get("sublot_qty")
         process_doc.inspection_quantity = sublot_entry.get("final_sublot_qty") or sublot_entry.get("sublot_qty")
+        
+        # ✅ ENHANCED: Add debug logging to verify field values
+        frappe.logger().info(f"Creating Sub Lot Process with fields:")
+        frappe.logger().info(f"  - sub_lot_number: {process_doc.sub_lot_number}")
+        frappe.logger().info(f"  - spp_batch_number: {process_doc.spp_batch_number}")
+        frappe.logger().info(f"  - batch_no: {process_doc.batch_no}")
+        frappe.logger().info(f"  - sublot_batch_number: {process_doc.sublot_batch_number}")
+        frappe.logger().info(f"  - item_code: {process_doc.item_code}")
+        frappe.logger().info(f"  - sublot_qty: {process_doc.sublot_qty}")
         
         # Add operations
         for op_data in operations_data:
@@ -334,6 +461,7 @@ def get_or_create_sublot_process(sublot_entry, operations_data):
         
     except Exception as e:
         frappe.log_error(f"Error creating Sub Lot Process: {str(e)}", "Resource Tagging Error")
+        frappe.logger().error(f"Exception details: {str(e)}")
         return None
 
 def get_or_create_work_order(sublot_process):

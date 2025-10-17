@@ -431,8 +431,10 @@ class ResourceTaggingPage {
         frappe.call({
             method: "frappe.client.get_list",
             args: {
-                doctype: "SPP Lot Resource Tagging",  // ✅ FIXED: Changed from "Lot Resource Tagging"
-                filters: { scan_lot_no: this.sublot_details.sublot_number },
+                doctype: "SPP Lot Resource Tagging",
+                filters: { 
+                    spp_batch_no: this.sublot_details.sublot_number // ✅ FIXED: Use spp_batch_no instead of scan_lot_no
+                },
                 fields: ["name", "operation_type", "operator_id", "operator_name", "posting_date"]
             },
             callback: (r) => {
@@ -955,7 +957,7 @@ class ResourceTaggingPage {
                 frappe.call({
                     method: "frappe.client.delete",
                     args: {
-                        doctype: "SPP Lot Resource Tagging",  // ✅ FIXED: Changed from "Lot Resource Tagging"
+                        doctype: "SPP Lot Resource Tagging",
                         name: tag_name
                     },
                     callback: (r) => {

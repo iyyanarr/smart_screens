@@ -1,0 +1,31 @@
+{
+ "creation": "2024-10-16 10:30:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2024-10-16 10:30:00",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "sub-lot-process-center",
+ "owner": "Administrator",
+ "page_name": "sub-lot-process-center",
+ "roles": [
+  {
+   "role": "Manufacturing User"
+  },
+  {
+   "role": "Quality Inspector"
+  },
+  {
+   "role": "Production User"
+  },
+  {
+   "role": "Manufacturing Manager"
+  }
+ ],
+ "script": null,
+ "standard": "No",
+ "style": null,
+ "system_page": 0,
+ "title": "Sub-Lot Process Center"
+}
