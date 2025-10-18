@@ -19,6 +19,7 @@ class DeflashingOutstandingReport {
 		this.sort_column = null;
 		this.sort_direction = 'asc';
 		this.view_mode = 'compact_matrix'; // compact_matrix, datatable, list, chart
+		this.current_view_data = []; // Store current view data for sorting
 	}
 
 	add_export_button() {
@@ -47,6 +48,11 @@ class DeflashingOutstandingReport {
 			this.view_mode = 'chart';
 			this.render_report();
 		});
+
+		this.page.add_menu_item('Lot Number Outstanding', () => {
+			this.view_mode = 'lot_number_outstanding';
+			this.render_report();
+		});
 	}
 
 	make_filters() {
@@ -58,25 +64,8 @@ class DeflashingOutstandingReport {
 				<div class="row">
 					<div class="col-sm-2">
 						<div class="form-group">
-							<label class="control-label" style="font-size: 12px; color: #6c7b84;">Date Range</label>
-							<select class="form-control form-control-sm" id="date_range">
-								<option value="30">Last 30 Days</option>
-								<option value="60">Last 60 Days</option>
-								<option value="90">Last 90 Days</option>
-								<option value="custom">Custom Range</option>
-							</select>
-						</div>
-					</div>
-					<div class="col-sm-2" id="custom_date_section" style="display: none;">
-						<div class="form-group">
-							<label class="control-label" style="font-size: 12px; color: #6c7b84;">From Date</label>
-							<input type="date" class="form-control form-control-sm" id="from_date">
-						</div>
-					</div>
-					<div class="col-sm-2" id="custom_date_section_to" style="display: none;">
-						<div class="form-group">
-							<label class="control-label" style="font-size: 12px; color: #6c7b84;">To Date</label>
-							<input type="date" class="form-control form-control-sm" id="to_date">
+							<label class="control-label" style="font-size: 12px; color: #6c7b84;">As Of Date</label>
+							<input type="date" class="form-control form-control-sm" id="as_of_date">
 						</div>
 					</div>
 					<div class="col-sm-2">
@@ -93,8 +82,8 @@ class DeflashingOutstandingReport {
 					</div>
 					<div class="col-sm-2">
 						<div class="form-group">
-							<label class="control-label" style="font-size: 12px; color: #6c7b84;">Min Outstanding</label>
-							<input type="number" class="form-control form-control-sm" id="min_outstanding" placeholder="0.000" step="0.001">
+							<label class="control-label" style="font-size: 12px; color: #6c7b84;">Min Outstanding Days</label>
+							<input type="number" class="form-control form-control-sm" id="min_outstanding_days" placeholder="0" step="1" min="0">
 						</div>
 					</div>
 				</div>
@@ -127,19 +116,25 @@ class DeflashingOutstandingReport {
 			</div>
 		`).appendTo(this.parent);
 
-		// Bind events
-		$('#date_range').change(() => {
-			if ($('#date_range').val() === 'custom') {
-				$('#custom_date_section, #custom_date_section_to').show();
-			} else {
-				$('#custom_date_section, #custom_date_section_to').hide();
-				this.set_default_dates();
-			}
-		});
+		 // Set max date to today after the element is created
+		let today = frappe.datetime.get_today();
+		$('#as_of_date').attr('max', today);
 
+		// Bind events
 		$('#get_report').click(() => this.fetch_data());
 		$('#clear_filters').click(() => this.clear_filters());
 		$('#vendor_search, #item_search').on('input', () => this.apply_search_filters());
+
+		 // Add date validation on change
+		$('#as_of_date').on('change', function() {
+			let selected_date = $(this).val();
+			let today = frappe.datetime.get_today();
+			
+			if (selected_date > today) {
+				frappe.msgprint(__('Future dates are not allowed. Please select dates up to today only.'));
+				$(this).val(today);
+			}
+		});
 
 		// View toggle events
 		$('.view-toggle').click(function() {
@@ -149,16 +144,13 @@ class DeflashingOutstandingReport {
 			me.render_report();
 		});
 
-		// Set default dates
-		this.set_default_dates();
+		// Set default date to today
+		this.set_default_date();
 	}
 
-	set_default_dates() {
-		let days = parseInt($('#date_range').val()) || 30;
+	set_default_date() {
 		let today = frappe.datetime.get_today();
-		let start_date = frappe.datetime.add_days(today, -days);
-		$('#from_date').val(start_date);
-		$('#to_date').val(today);
+		$('#as_of_date').val(today);
 	}
 
 	make_result_area() {
@@ -171,47 +163,28 @@ class DeflashingOutstandingReport {
 	}
 
 	fetch_data() {
-		let me = this;
-		let from_date = $('#from_date').val();
-		let to_date = $('#to_date').val();
-
-		if (!from_date || !to_date) {
-			frappe.msgprint(__('Please select valid date range'));
+		let as_of_date = $('#as_of_date').val();
+		let min_outstanding_days = parseInt($('#min_outstanding_days').val()) || 0;
+		
+		if (!as_of_date) {
+			frappe.msgprint(__('Please select As Of Date'));
 			return;
 		}
 
-		let filters = {
-			from_date: from_date,
-			to_date: to_date,
-			vendor_search: $('#vendor_search').val(),
-			item_search: $('#item_search').val(),
-			min_outstanding: parseFloat($('#min_outstanding').val()) || 0,
-			outstanding_type: 'all'
-		};
-
-		// Show loading animation
-		me.show_loading();
-
+		this.parent.find('.report-content').html('<div class="text-center" style="padding: 50px;"><i class="fa fa-spinner fa-spin fa-2x"></i><br><br>Loading...</div>');
+		
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.deflashing_outstanding_report.deflashing_outstanding_report.get_deflashing_outstanding_data',
-			args: filters,
-			callback: function(r) {
-				me.hide_loading();
-				
-				if (r.message && r.message.status === 'success') {
-					me.raw_data = r.message.data;
-					me.vendors = r.message.vendors;
-					me.items = r.message.items;
-					me.summary = r.message.summary;
-					me.process_data();
-					me.render_report();
-				} else {
-					frappe.msgprint(__('Error fetching data: ' + (r.message.message || 'Unknown error')));
-				}
+			args: {
+				as_of_date: as_of_date,
+				min_outstanding_days: min_outstanding_days
 			},
-			error: function() {
-				me.hide_loading();
-				frappe.msgprint(__('An error occurred while fetching the report data.'));
+			callback: (r) => {
+				if (r.message) {
+					this.raw_data = r.message;
+					this.filtered_data = [...this.raw_data];
+					this.render_report();
+				}
 			}
 		});
 	}
@@ -237,6 +210,7 @@ class DeflashingOutstandingReport {
 		this.matrix_data = {};
 		this.vendor_totals = {};
 		this.item_totals = {};
+		this.days_pending_data = {}; // Add separate storage for days pending
 
 		this.raw_data.forEach(row => {
 			let vendor = row.vendor;
@@ -245,6 +219,7 @@ class DeflashingOutstandingReport {
 			if (!this.matrix_data[vendor]) {
 				this.matrix_data[vendor] = {};
 				this.vendor_totals[vendor] = { kg: 0, nos: 0 };
+				this.days_pending_data[vendor] = {}; // Initialize days pending for vendor
 			}
 			
 			if (!this.matrix_data[vendor][item]) {
@@ -255,15 +230,24 @@ class DeflashingOutstandingReport {
 				this.item_totals[item] = { kg: 0, nos: 0 };
 			}
 
+			if (!this.days_pending_data[vendor][item]) {
+				this.days_pending_data[vendor][item] = [];
+			}
+
 			// Add outstanding quantities
-			this.matrix_data[vendor][item].kg += parseFloat(row.outstanding_kg || 0);
+			this.matrix_data[vendor][item].kg += parseFloat(row.outstanding_qty || 0);
 			this.matrix_data[vendor][item].nos += parseFloat(row.outstanding_nos || 0);
 			
-			this.vendor_totals[vendor].kg += parseFloat(row.outstanding_kg || 0);
+			this.vendor_totals[vendor].kg += parseFloat(row.outstanding_qty || 0);
 			this.vendor_totals[vendor].nos += parseFloat(row.outstanding_nos || 0);
 			
-			this.item_totals[item].kg += parseFloat(row.outstanding_kg || 0);
+			this.item_totals[item].kg += parseFloat(row.outstanding_qty || 0);
 			this.item_totals[item].nos += parseFloat(row.outstanding_nos || 0);
+
+			// Store days pending data separately (don't sum these values)
+			if (row.days_pending && parseFloat(row.outstanding_qty || 0) > 0) {
+				this.days_pending_data[vendor][item].push(parseInt(row.days_pending));
+			}
 		});
 	}
 
@@ -280,6 +264,10 @@ class DeflashingOutstandingReport {
 			return;
 		}
 
+		// Process data first before rendering anything
+		this.process_data();
+		
+		// Then render summary and views
 		this.render_summary();
 		
 		if (this.view_mode === 'compact_matrix') {
@@ -288,12 +276,20 @@ class DeflashingOutstandingReport {
 			this.render_datatable_view();
 		} else if (this.view_mode === 'chart') {
 			this.render_chart_view();
+		} else if (this.view_mode === 'lot_number_outstanding') {
+			this.render_lot_number_outstanding();
 		} else {
 			this.render_list_view();
 		}
 	}
 
 	render_summary() {
+		// Safety check to ensure totals are initialized
+		if (!this.vendor_totals || !this.item_totals) {
+			this.result_area.find('.report-summary').html('');
+			return;
+		}
+
 		let total_vendors = Object.keys(this.vendor_totals).length;
 		let total_items = Object.keys(this.item_totals).length;
 		let total_outstanding_kg = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.kg, 0);
@@ -399,47 +395,45 @@ class DeflashingOutstandingReport {
 					</td>
 			`;
 
-			// Add item cells with vendor background and item border colors (no inner borders)
+			// Add item cells showing only "nos" quantities
 			items.forEach((item, itemIndex) => {
 				const itemBorderColor = this.generateItemBorderColor(item, itemIndex);
 				let cell_data = this.matrix_data[vendor] && this.matrix_data[vendor][item] 
 					? this.matrix_data[vendor][item] 
 					: { kg: 0, nos: 0 };
 				
-				let has_outstanding = cell_data.kg > 0 || cell_data.nos > 0;
+				let nos_value = cell_data.nos;
+				let has_outstanding = nos_value > 0;
 				
 				if (has_outstanding) {
-					// Show data with vendor background and item border (no inner borders)
 					matrix_html += `
-						<td style="padding: 2px 1px; text-align: center; border-bottom: 3px solid ${itemBorderColor}; background: ${vendorBgColor}; cursor: pointer; font-size: 8px; line-height: 1.1;" 
-							title="Item: ${item}\nVendor: ${vendor}\nOutstanding: ${cell_data.kg.toFixed(3)} Kg, ${cell_data.nos} Nos"
+						<td style="padding: 2px 1px; text-align: center; border-bottom: 3px solid ${itemBorderColor}; background: ${vendorBgColor}; cursor: pointer; font-size: 10px; line-height: 1.1;" 
+							title="Item: ${item}\nVendor: ${vendor}\nOutstanding: ${nos_value} Nos"
 							onclick="frappe.deflashing_outstanding_report.drill_down('${vendor}', '${item}')">
-							<div style="font-weight: 600; color: #2c3e50;">${cell_data.kg.toFixed(1)}</div>
-							<div style="color: #495057; font-size: 7px;">${cell_data.nos}</div>
+							<div style="font-weight: 700; color: #2c3e50;">${nos_value}</div>
 						</td>
 					`;
 				} else {
-					// Empty cell with vendor background and item border (no inner borders)
+					// Empty cell with vendor background and item border
 					matrix_html += `
 						<td style="padding: 2px 1px; text-align: center; border-bottom: 3px solid ${itemBorderColor}; background: ${vendorBgColor}; color: #6c757d; font-size: 8px; opacity: 0.6;">
-							-
+							
 						</td>
 					`;
 				}
 			});
 
-			// Add total cell with vendor background
+			// Add total cell showing only nos total
 			let vendor_total = this.vendor_totals[vendor];
 			matrix_html += `
-				<td style="padding: 4px 6px; text-align: center; font-weight: 700; background: ${vendorBgColor}; color: #2c3e50; border-left: 1px solid #34495e; font-size: 8px; line-height: 1.1;">
-					<div style="color: #495057;">${vendor_total.kg.toFixed(1)}</div>
-					<div style="color: #6c757d;">${vendor_total.nos}</div>
+				<td style="padding: 4px 6px; text-align: center; font-weight: 700; background: ${vendorBgColor}; color: #2c3e50; border-left: 1px solid #34495e; font-size: 10px; line-height: 1.1;">
+					<div style="color: #2c3e50; font-weight: 800;">${vendor_total.nos}</div>
 				</td>
 			</tr>
 			`;
 		});
 
-		// Add totals row with item border colors
+		// Add totals row showing only nos totals
 		matrix_html += `
 			<tr style="background: #e9ecef; font-weight: 700; height: 28px;">
 				<td style="padding: 4px 8px; color: #2c3e50; border-right: 1px solid #d1d8dd; position: sticky; left: 0; background: #e9ecef; z-index: 5; font-size: 9px;">
@@ -451,20 +445,17 @@ class DeflashingOutstandingReport {
 			const itemBorderColor = this.generateItemBorderColor(item, itemIndex);
 			let item_total = this.item_totals[item];
 			matrix_html += `
-				<td style="padding: 2px 1px; text-align: center; color: #2c3e50; border-bottom: 3px solid ${itemBorderColor}; font-size: 7px; line-height: 1.1;">
-					<div style="color: #495057;">${item_total.kg.toFixed(1)}</div>
-					<div style="color: #6c757d;">${item_total.nos}</div>
+				<td style="padding: 2px 1px; text-align: center; color: #2c3e50; border-bottom: 3px solid ${itemBorderColor}; font-size: 9px; line-height: 1.1;">
+					<div style="color: #2c3e50; font-weight: 800;">${item_total.nos}</div>
 				</td>
 			`;
 		});
 
-		let grand_total_kg = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.kg, 0);
 		let grand_total_nos = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.nos, 0);
 
 		matrix_html += `
-				<td style="padding: 4px 6px; text-align: center; background: #dee2e6; color: #2c3e50; border-left: 1px solid #34495e; font-size: 8px; line-height: 1.1;">
-					<div style="color: #495057; font-weight: 800;">${grand_total_kg.toFixed(1)}</div>
-					<div style="color: #6c757d; font-weight: 700;">${grand_total_nos}</div>
+				<td style="padding: 4px 6px; text-align: center; background: #dee2e6; color: #2c3e50; border-left: 1px solid #34495e; font-size: 10px; line-height: 1.1;">
+					<div style="color: #2c3e50; font-weight: 800;">${grand_total_nos}</div>
 				</td>
 			</tr>
 		</tbody>
@@ -496,7 +487,7 @@ class DeflashingOutstandingReport {
 			<div class="frappe-card">
 				<div id="deflashing-datatable" style="padding: 15px;"></div>
 			</div>
-		`;
+			`;
 
 		this.result_area.find('.report-content').html(datatable_html);
 
@@ -526,24 +517,39 @@ class DeflashingOutstandingReport {
 			return;
 		}
 
+		// Sort data based on current sort settings
+		let sorted_data = this.sort_data(this.raw_data, this.sort_column, this.sort_direction);
+
 		let list_html = `
 			<div class="frappe-card">
 				<div class="table-responsive">
-					<table class="table table-bordered table-hover" style="font-size: 12px; margin-bottom: 0;">
+					<table class="table table-bordered table-hover sortable-table" style="font-size: 12px; margin-bottom: 0;">
 						<thead style="background: #f8f9fa;">
 							<tr>
-								<th style="padding: 10px; font-weight: 600; color: #495057;">Vendor</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057;">Item</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Outstanding (Kg)</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Outstanding (Nos)</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; text-align: center;">Last Dispatch</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; text-align: center;">Days Pending</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="vendor" onclick="frappe.deflashing_outstanding_report.handle_sort('vendor')">
+									Vendor ${this.get_sort_indicator('vendor')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="item" onclick="frappe.deflashing_outstanding_report.handle_sort('item')">
+									Item ${this.get_sort_indicator('item')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_kg" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_kg')">
+									Outstanding (Kg) ${this.get_sort_indicator('outstanding_kg')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_nos" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_nos')">
+									Outstanding (Nos) ${this.get_sort_indicator('outstanding_nos')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="last_dispatch" onclick="frappe.deflashing_outstanding_report.handle_sort('last_dispatch')">
+									Last Dispatch ${this.get_sort_indicator('last_dispatch')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="days_pending" onclick="frappe.deflashing_outstanding_report.handle_sort('days_pending')">
+									Days Pending ${this.get_sort_indicator('days_pending')}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
 		`;
 
-		this.raw_data.forEach((row, index) => {
+		sorted_data.forEach((row, index) => {
 			let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
 			let days_pending = row.days_pending || 0;
 			let pending_class = days_pending > 30 ? 'text-danger' : (days_pending > 15 ? 'text-warning' : 'text-success');
@@ -893,7 +899,116 @@ class DeflashingOutstandingReport {
 			`;
 
 			$('#vendor-performance-table').html(table_html);
+			}
+
+	render_lot_number_outstanding() {
+		if (!this.raw_data || this.raw_data.length === 0) {
+			this.result_area.find('.report-content').html(`
+				<div class="text-center" style="padding: 40px;">
+					<i class="fa fa-inbox" style="font-size: 48px; color: #d1d8dd; margin-bottom: 15px;"></i>
+					<h5 style="color: #8d99a6;">No Outstanding Data Found</h5>
+					<p class="text-muted">No lot number outstanding records found for the selected filters.</p>
+				</div>
+			`);
+			return;
 		}
+
+		// Group data by lot numbers
+		let lot_data = {};
+		this.raw_data.forEach(row => {
+			if (row.lot_number) {
+				if (!lot_data[row.lot_number]) {
+					lot_data[row.lot_number] = {
+						lot_number: row.lot_number,
+						vendor: row.vendor,
+						item: row.item,
+						outstanding_kg: 0,
+						outstanding_nos: 0,
+						last_dispatch: row.last_dispatch,
+						days_pending: row.days_pending || 0
+					};
+				}
+				lot_data[row.lot_number].outstanding_kg += parseFloat(row.outstanding_kg || 0);
+				lot_data[row.lot_number].outstanding_nos += parseFloat(row.outstanding_nos || 0);
+			}
+		});
+
+		if (Object.keys(lot_data).length === 0) {
+			this.result_area.find('.report-content').html(`
+				<div class="text-center" style="padding: 40px;">
+					<i class="fa fa-exclamation-triangle" style="font-size: 48px; color: #f39c12; margin-bottom: 15px;"></i>
+					<h5 style="color: #8d99a6;">No Lot Numbers Found</h5>
+					<p class="text-muted">No lot number data available in the outstanding records.</p>
+				</div>
+			`);
+			return;
+		}
+
+		// Convert to array and sort
+		let lot_array = Object.values(lot_data);
+		let sorted_lots = this.sort_data(lot_array, this.sort_column || 'days_pending', this.sort_direction);
+
+		let lot_html = `
+			<div class="frappe-card">
+				<div class="table-responsive">
+					<table class="table table-bordered table-hover sortable-table" style="font-size: 12px; margin-bottom: 0;">
+						<thead style="background: #f8f9fa;">
+							<tr>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="lot_number" onclick="frappe.deflashing_outstanding_report.handle_sort('lot_number')">
+									Lot Number ${this.get_sort_indicator('lot_number')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="vendor" onclick="frappe.deflashing_outstanding_report.handle_sort('vendor')">
+									Vendor ${this.get_sort_indicator('vendor')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="item" onclick="frappe.deflashing_outstanding_report.handle_sort('item')">
+									Item ${this.get_sort_indicator('item')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_kg" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_kg')">
+									Outstanding (Kg) ${this.get_sort_indicator('outstanding_kg')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_nos" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_nos')">
+									Outstanding (Nos) ${this.get_sort_indicator('outstanding_nos')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="last_dispatch" onclick="frappe.deflashing_outstanding_report.handle_sort('last_dispatch')">
+									Last Dispatch ${this.get_sort_indicator('last_dispatch')}
+								</th>
+								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="days_pending" onclick="frappe.deflashing_outstanding_report.handle_sort('days_pending')">
+									Days Pending ${this.get_sort_indicator('days_pending')}
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+		`;
+
+		sorted_lots.forEach((lot_info, index) => {
+			let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
+			let days_pending = lot_info.days_pending;
+			let pending_class = days_pending > 30 ? 'text-danger' : (days_pending > 15 ? 'text-warning' : 'text-success');
+			
+			lot_html += `
+				<tr style="background: ${row_bg};">
+					<td style="padding: 8px 10px; font-weight: 600; color: #2980b9;">${lot_info.lot_number}</td>
+					<td style="padding: 8px 10px; font-weight: 600; color: #495057;">${lot_info.vendor}</td>
+					<td style="padding: 8px 10px; color: #6c757d;">${lot_info.item}</td>
+					<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #c0392b;">${lot_info.outstanding_kg.toFixed(3)}</td>
+					<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #2980b9;">${lot_info.outstanding_nos}</td>
+					<td style="padding: 8px 10px; text-align: center; color: #6c757d;">${lot_info.last_dispatch ? frappe.datetime.str_to_user(lot_info.last_dispatch) : '-'}</td>
+					<td style="padding: 8px 10px; text-align: center;" class="${pending_class}">
+						<span style="font-weight: 600;">${days_pending}</span> days
+					</td>
+				</tr>
+			`;
+		});
+
+		lot_html += `
+					</tbody>
+				</table>
+			</div>
+		</div>
+		`;
+
+		this.result_area.find('.report-content').html(lot_html);
+	}
 
 	apply_search_filters() {
 		// Re-render the current view with search filters applied
@@ -910,14 +1025,21 @@ class DeflashingOutstandingReport {
 			size: 'large'
 		});
 
+		 // Get the as_of_date from the filter
+		let as_of_date = $('#as_of_date').val();
+		
+		if (!as_of_date) {
+			frappe.msgprint(__('Please select As Of Date first'));
+			return;
+		}
+
 		// Fetch detailed data for this vendor-item combination
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.deflashing_outstanding_report.deflashing_outstanding_report.get_vendor_item_details',
 			args: {
 				vendor: vendor,
 				item: item,
-				from_date: $('#from_date').val(),
-				to_date: $('#to_date').val()
+				as_of_date: as_of_date
 			},
 			callback: function(r) {
 				if (r.message && r.message.status === 'success') {
@@ -939,6 +1061,8 @@ class DeflashingOutstandingReport {
 					
 					dialog.$body.html(details_html);
 					dialog.show();
+				} else {
+					frappe.msgprint(__('Failed to fetch vendor item details'));
 				}
 			}
 		});
@@ -947,10 +1071,8 @@ class DeflashingOutstandingReport {
 	clear_filters() {
 		$('#vendor_search').val('');
 		$('#item_search').val('');
-		$('#min_outstanding').val('');
-		$('#date_range').val('30');
-		$('#custom_date_section, #custom_date_section_to').hide();
-		this.set_default_dates();
+		$('#min_outstanding_days').val('');
+		 $('#as_of_date').val(frappe.datetime.get_today());
 		this.result_area.find('.report-content').html('');
 		this.result_area.find('.report-summary').html('');
 	}
@@ -972,5 +1094,61 @@ class DeflashingOutstandingReport {
 		}));
 
 		frappe.tools.downloadify(export_data, null, this);
+	}
+
+	handle_sort(column) {
+		// Toggle sort direction if same column clicked, otherwise set new column
+		if (this.sort_column === column) {
+			this.sort_direction = this.sort_direction === 'asc' ? 'desc' : 'asc';
+		} else {
+			this.sort_column = column;
+			this.sort_direction = 'asc';
+		}
+		
+		// Re-render the current view
+		this.render_report();
+	}
+
+	get_sort_indicator(column) {
+		if (this.sort_column !== column) {
+			return '<i class="fa fa-sort" style="color: #adb5bd; margin-left: 5px; opacity: 0.5;"></i>';
+		}
+		if (this.sort_direction === 'asc') {
+			return '<i class="fa fa-sort-up" style="color: #2980b9; margin-left: 5px;"></i>';
+		} else {
+			return '<i class="fa fa-sort-down" style="color: #2980b9; margin-left: 5px;"></i>';
+		}
+	}
+
+	sort_data(data, column, direction) {
+		if (!column) {
+			return data;
+		}
+
+		let sorted = [...data];
+		
+		sorted.sort((a, b) => {
+			let valueA = a[column];
+			let valueB = b[column];
+
+			// Handle null/undefined
+			if (valueA === null || valueA === undefined) valueA = '';
+			if (valueB === null || valueB === undefined) valueB = '';
+
+			// Convert to numbers if they are numeric
+			if (!isNaN(valueA) && valueA !== '') valueA = parseFloat(valueA);
+			if (!isNaN(valueB) && valueB !== '') valueB = parseFloat(valueB);
+
+			// Compare
+			if (valueA < valueB) {
+				return direction === 'asc' ? -1 : 1;
+			}
+			if (valueA > valueB) {
+				return direction === 'asc' ? 1 : -1;
+			}
+			return 0;
+		});
+
+		return sorted;
 	}
 }
