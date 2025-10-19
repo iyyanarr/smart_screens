@@ -240,7 +240,8 @@ def get_vendor_item_details(vendor, item, as_of_date):
 			ddei.batch_no,
 			dde.posting_date as dispatch_date,
 			ddei.qty as dispatched_kg,
-			ddei.qty_in_nos as dispatched_nos
+			ddei.qty_in_nos as dispatched_nos,
+			ddei.item
 		FROM 
 			`tabDeflashing Despatch Entry` dde
 		INNER JOIN 
@@ -257,6 +258,12 @@ def get_vendor_item_details(vendor, item, as_of_date):
 		
 		data = frappe.db.sql(query, [vendor, item, as_of_date], as_dict=True)
 		
+		if not data:
+			return {
+				'status': 'success',
+				'data': []
+			}
+		
 		# Get cached receipt data
 		receipt_summary = get_cached_receipt_summary(as_of_date)
 		
@@ -269,6 +276,8 @@ def get_vendor_item_details(vendor, item, as_of_date):
 			row['outstanding_kg'] = row['dispatched_kg'] - receipt['qty']
 			row['outstanding_nos'] = row['dispatched_nos'] - receipt['nos']
 			row['status'] = 'Received' if receipt['qty'] > 0 else 'Pending'
+			# Add lot_no alias for backward compatibility
+			row['lot_no'] = row['lot_number']
 		
 		return {
 			'status': 'success',
@@ -276,10 +285,10 @@ def get_vendor_item_details(vendor, item, as_of_date):
 		}
 		
 	except Exception as e:
-		frappe.log_error(f"Error in get_vendor_item_details: {str(e)}")
+		frappe.log_error(f"Error in get_vendor_item_details: {str(e)}", "Deflashing Outstanding Report")
 		return {
 			'status': 'error',
-			'message': str(e)
+			'message': f"Failed to fetch vendor item details: {str(e)}"
 		}
 
 # ============================================================================
