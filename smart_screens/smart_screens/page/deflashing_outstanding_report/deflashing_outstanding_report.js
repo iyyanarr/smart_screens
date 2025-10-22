@@ -727,21 +727,59 @@ class DeflashingOutstandingReport {
 			},
 			callback: function(r) {
 				if (r.message && r.message.status === 'success') {
-					let details_html = '<div class="row">';
-					r.message.data.forEach(detail => {
+					// Convert to TABLE VIEW instead of card view
+					let details_html = `
+						<div class="table-responsive">
+							<table class="table table-bordered table-hover" style="font-size: 13px; margin-bottom: 0;">
+								<thead style="background: #f8f9fa;">
+									<tr>
+										<th style="padding: 10px; font-weight: 600; color: #495057;">Lot Number</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057;">Dispatch Date</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Dispatched (Kg)</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Dispatched (Nos)</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Outstanding (Kg)</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057; text-align: right;">Outstanding (Nos)</th>
+										<th style="padding: 10px; font-weight: 600; color: #495057; text-align: center;">Status</th>
+									</tr>
+								</thead>
+								<tbody>
+					`;
+					
+					if (r.message.data.length === 0) {
 						details_html += `
-							<div class="col-md-6 mb-3">
-								<div class="card card-body">
-									<h6 class="card-title">Lot: ${detail.lot_no}</h6>
-									<p class="card-text" style="font-size: 12px;">
-										Dispatched: ${frappe.datetime.str_to_user(detail.dispatch_date)}<br>
-										Outstanding: ${detail.outstanding_kg} Kg, ${detail.outstanding_nos} Nos
-									</p>
-								</div>
-							</div>
+							<tr>
+								<td colspan="7" style="padding: 30px; text-align: center; color: #8d99a6;">
+									<i class="fa fa-check-circle" style="font-size: 32px; color: #2ecc71; margin-bottom: 10px;"></i><br>
+									All items received - No outstanding records
+								</td>
+							</tr>
 						`;
-					});
-					details_html += '</div>';
+					} else {
+						r.message.data.forEach((detail, index) => {
+							let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
+							let status_badge = detail.status === 'Pending Receipt' 
+								? '<span style="padding: 3px 8px; background: #ffebee; color: #c62828; border-radius: 3px; font-size: 11px; font-weight: 600;">PENDING</span>'
+								: '<span style="padding: 3px 8px; background: #e8f5e9; color: #2e7d32; border-radius: 3px; font-size: 11px; font-weight: 600;">RECEIVED</span>';
+							
+							details_html += `
+								<tr style="background: ${row_bg};">
+									<td style="padding: 8px 10px; font-weight: 600; color: #2980b9;">${detail.lot_no}</td>
+									<td style="padding: 8px 10px; color: #495057;">${frappe.datetime.str_to_user(detail.dispatch_date)}</td>
+									<td style="padding: 8px 10px; text-align: right; color: #495057;">${parseFloat(detail.dispatched_kg || 0).toFixed(3)}</td>
+									<td style="padding: 8px 10px; text-align: right; color: #495057;">${parseInt(detail.dispatched_nos || 0)}</td>
+									<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #c62828;">${parseFloat(detail.outstanding_kg || 0).toFixed(3)}</td>
+									<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #2980b9; font-size: 14px;">${parseInt(detail.outstanding_nos || 0)}</td>
+									<td style="padding: 8px 10px; text-align: center;">${status_badge}</td>
+								</tr>
+							`;
+						});
+					}
+					
+					details_html += `
+								</tbody>
+							</table>
+						</div>
+					`;
 					
 					dialog.$body.html(details_html);
 					dialog.show();

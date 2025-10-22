@@ -212,7 +212,7 @@ def get_lot_number_outstanding_summary(as_of_date, min_outstanding_days=0):
 def get_vendor_item_details(vendor, item, as_of_date):
 	"""
 	Get detailed breakdown for a specific vendor-item combination
-	OPTIMIZED: Simplified query with better filtering
+	NEW LOGIC: Only show dispatches with NO receipt entries (zero receipts)
 	"""
 	try:
 		query = """
@@ -249,21 +249,26 @@ def get_vendor_item_details(vendor, item, as_of_date):
 		# Get cached receipt data
 		receipt_summary = get_cached_receipt_summary(as_of_date)
 		
-		# Add receipt info to each record
+		 # NEW LOGIC: Filter to show ONLY items with zero receipts
+		filtered_data = []
 		for row in data:
 			key = (row['batch_no'], row['item'])
 			receipt = receipt_summary.get(key, {'qty': 0, 'nos': 0})
-			row['received_kg'] = receipt['qty']
-			row['received_nos'] = receipt['nos']
-			row['outstanding_kg'] = row['dispatched_kg'] - receipt['qty']
-			row['outstanding_nos'] = row['dispatched_nos'] - receipt['nos']
-			row['status'] = 'Received' if receipt['qty'] > 0 else 'Pending'
-			# Add lot_no alias for backward compatibility
-			row['lot_no'] = row['lot_number']
+			
+			# Only include if there's NO receipt entry at all
+			if receipt['qty'] == 0 and receipt['nos'] == 0:
+				row['received_kg'] = 0
+				row['received_nos'] = 0
+				row['outstanding_kg'] = row['dispatched_kg']
+				row['outstanding_nos'] = row['dispatched_nos']
+				row['status'] = 'Pending Receipt'
+				# Add lot_no alias for backward compatibility
+				row['lot_no'] = row['lot_number']
+				filtered_data.append(row)
 		
 		return {
 			'status': 'success',
-			'data': data
+			'data': filtered_data
 		}
 		
 	except Exception as e:
