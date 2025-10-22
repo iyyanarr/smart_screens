@@ -86,15 +86,14 @@ def get_deflashing_outstanding_data(as_of_date, min_outstanding_days=0):
 		key = (row['batch_no'], row['item'])
 		receipt = receipt_summary.get(key, {'qty': 0, 'nos': 0})
 		
-		outstanding_qty = row['dispatched_qty'] - receipt['qty']
-		outstanding_nos = row['dispatched_nos'] - receipt['nos']
-		
-		# Only include if there's actual outstanding
-		if outstanding_qty > 0 or outstanding_nos > 0:
-			row['received_qty'] = receipt['qty']
-			row['received_nos'] = receipt['nos']
-			row['outstanding_qty'] = outstanding_qty
-			row['outstanding_nos'] = outstanding_nos
+		# NEW LOGIC: Only include if there's NO receipt entry at all
+		# If ANY receipt exists (even partial), exclude the record
+		if receipt['qty'] == 0 and receipt['nos'] == 0:
+			# No receipt found - this is truly outstanding
+			row['received_qty'] = 0
+			row['received_nos'] = 0
+			row['outstanding_qty'] = row['dispatched_qty']
+			row['outstanding_nos'] = row['dispatched_nos']
 			
 			# Handle both string and date objects
 			posting_date = row['posting_date']
@@ -102,14 +101,7 @@ def get_deflashing_outstanding_data(as_of_date, min_outstanding_days=0):
 				posting_date = datetime.strptime(posting_date, '%Y-%m-%d').date()
 			
 			row['days_pending'] = (as_of_datetime - posting_date).days
-			
-			# Status calculation
-			if receipt['qty'] == 0 and receipt['nos'] == 0:
-				row['status'] = 'Pending Receipt'
-			elif outstanding_qty > 0 or outstanding_nos > 0:
-				row['status'] = 'Partial Receipt'
-			else:
-				row['status'] = 'Completed'
+			row['status'] = 'Pending Receipt'
 			
 			result.append(row)
 	
@@ -173,47 +165,37 @@ def get_lot_number_outstanding_data(as_of_date, min_outstanding_days=0):
 		key = (row['batch_no'], row['item'])
 		receipt = receipt_summary.get(key, {'qty': 0, 'nos': 0})
 		
-		outstanding_qty = row['dispatched_qty'] - receipt['qty']
-		outstanding_nos = row['dispatched_nos'] - receipt['nos']
-		
-		# Skip if no outstanding
-		if outstanding_qty <= 0 and outstanding_nos <= 0:
-			continue
-		
-		# Handle both string and date objects
-		posting_date = row['posting_date']
-		if isinstance(posting_date, str):
-			posting_date_dt = datetime.strptime(posting_date, '%Y-%m-%d')
-		else:
-			posting_date_dt = datetime.combine(posting_date, datetime.min.time())
-		
-		days_pending = (as_of_datetime - posting_date_dt).days
-		
-		row['received_qty'] = receipt['qty']
-		row['received_nos'] = receipt['nos']
-		row['outstanding_qty'] = outstanding_qty
-		row['outstanding_nos'] = outstanding_nos
-		row['days_pending'] = days_pending
-		
-		# Status
+		# NEW LOGIC: Only include if there's NO receipt entry at all
+		# If ANY receipt exists (even partial), exclude the record completely
 		if receipt['qty'] == 0 and receipt['nos'] == 0:
+			# No receipt found - this is truly outstanding
+			# Handle both string and date objects
+			posting_date = row['posting_date']
+			if isinstance(posting_date, str):
+				posting_date_dt = datetime.strptime(posting_date, '%Y-%m-%d')
+			else:
+				posting_date_dt = datetime.combine(posting_date, datetime.min.time())
+			
+			days_pending = (as_of_datetime - posting_date_dt).days
+			
+			row['received_qty'] = 0
+			row['received_nos'] = 0
+			row['outstanding_qty'] = row['dispatched_qty']
+			row['outstanding_nos'] = row['dispatched_nos']
+			row['days_pending'] = days_pending
 			row['status'] = 'Pending Receipt'
-		elif outstanding_qty > 0 or outstanding_nos > 0:
-			row['status'] = 'Partial Receipt'
-		else:
-			row['status'] = 'Completed'
-		
-		# Priority
-		if days_pending > 30:
-			row['priority'] = 'Critical'
-		elif days_pending > 15:
-			row['priority'] = 'High'
-		elif days_pending > 7:
-			row['priority'] = 'Medium'
-		else:
-			row['priority'] = 'Normal'
-		
-		result.append(row)
+			
+			# Priority based on days pending
+			if days_pending > 30:
+				row['priority'] = 'Critical'
+			elif days_pending > 15:
+				row['priority'] = 'High'
+			elif days_pending > 7:
+				row['priority'] = 'Medium'
+			else:
+				row['priority'] = 'Normal'
+			
+			result.append(row)
 	
 	return result
 
