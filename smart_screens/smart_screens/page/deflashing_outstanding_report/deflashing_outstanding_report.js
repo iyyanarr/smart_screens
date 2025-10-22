@@ -302,14 +302,37 @@ class DeflashingOutstandingReport {
 			items = items.filter(i => i.toLowerCase().includes(item_search));
 		}
 
+		// Apply sorting if sort column is set
+		if (this.sort_column === 'vendor') {
+			vendors.sort((a, b) => {
+				if (this.sort_direction === 'asc') {
+					return a.localeCompare(b);
+				} else {
+					return b.localeCompare(a);
+				}
+			});
+		} else if (this.sort_column === 'total') {
+			// Sort by total outstanding (nos)
+			vendors.sort((a, b) => {
+				let totalA = this.vendor_totals[a].nos;
+				let totalB = this.vendor_totals[b].nos;
+				if (this.sort_direction === 'asc') {
+					return totalA - totalB;
+				} else {
+					return totalB - totalA;
+				}
+			});
+		}
+
 		let matrix_html = `
 			<div style="border: 1px solid #d1d8dd; border-radius: 4px;">
 				<div style="overflow-x: auto; max-height: 70vh;">
 						<table class="table table-bordered" style="margin: 0; font-size: 13px; white-space: nowrap; border-collapse: collapse; width: 100%;">
 						<thead style="position: sticky; top: 0; z-index: 10; background: #2c3e50;">
 							<tr>
-								<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; min-width: 150px; position: sticky; left: 0; background: #2c3e50; z-index: 11; font-size: 13px;">
-									Vendor
+								<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; min-width: 150px; position: sticky; left: 0; background: #2c3e50; z-index: 11; font-size: 13px; cursor: pointer;" 
+									onclick="frappe.deflashing_outstanding_report.handle_matrix_sort('vendor')">
+									Vendor ${this.get_sort_indicator('vendor')}
 								</th>
 		`;
 
@@ -323,8 +346,9 @@ class DeflashingOutstandingReport {
 		});
 
 		matrix_html += `
-				<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; text-align: center; min-width: 100px; background: #1a252f; font-size: 13px;">
-					Total
+				<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; text-align: center; min-width: 100px; background: #1a252f; font-size: 13px; position: sticky; right: 0; z-index: 11; cursor: pointer;" 
+					onclick="frappe.deflashing_outstanding_report.handle_matrix_sort('total')">
+					Total ${this.get_sort_indicator('total')}
 				</th>
 			</tr>
 		</thead>
@@ -383,10 +407,10 @@ class DeflashingOutstandingReport {
 				}
 			});
 
-			// Add total cell showing only nos total
+			// Add total cell showing only nos total - STICKY on the right
 			let vendor_total = this.vendor_totals[vendor];
 			matrix_html += `
-				<td style="padding: 10px 12px; text-align: center; font-weight: 700; background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; font-size: 14px;">
+				<td style="padding: 10px 12px; text-align: center; font-weight: 700; background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; font-size: 14px; position: sticky; right: 0; z-index: 5;">
 					${vendor_total.nos}
 				</td>
 			</tr>
@@ -413,7 +437,7 @@ class DeflashingOutstandingReport {
 		let grand_total_nos = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.nos, 0);
 
 		matrix_html += `
-				<td style="padding: 10px 12px; text-align: center; background: #c5cae9; color: #283593; border: 1px solid #9fa8da; font-size: 14px; font-weight: 700;">
+				<td style="padding: 10px 12px; text-align: center; background: #c5cae9; color: #283593; border: 1px solid #9fa8da; font-size: 14px; font-weight: 700; position: sticky; right: 0; z-index: 5;">
 					${grand_total_nos}
 				</td>
 			</tr>
@@ -424,6 +448,19 @@ class DeflashingOutstandingReport {
 		`;
 
 		this.result_area.find('.report-content').html(matrix_html);
+	}
+
+	handle_matrix_sort(column) {
+		// Toggle sort direction if same column clicked, otherwise set new column
+		if (this.sort_column === column) {
+			this.sort_direction = this.sort_direction === 'asc' ? 'desc' : 'asc';
+		} else {
+			this.sort_column = column;
+			this.sort_direction = 'asc';
+		}
+		
+		// Re-render the matrix view
+		this.render_compact_matrix_view();
 	}
 
 	render_datatable_view() {
