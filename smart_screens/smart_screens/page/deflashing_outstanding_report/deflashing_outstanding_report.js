@@ -27,6 +27,32 @@ class DeflashingOutstandingReport {
 		this.page.set_primary_action('Export to Excel', () => {
 			this.export_to_excel();
 		}, 'export');
+
+		// Add secondary action for view toggle
+		this.page.add_menu_item('Compact Matrix', () => {
+			this.view_mode = 'compact_matrix';
+			this.render_report();
+		});
+		
+		this.page.add_menu_item('Data Table', () => {
+			this.view_mode = 'datatable';
+			this.render_report();
+		});
+		
+		this.page.add_menu_item('List View', () => {
+			this.view_mode = 'list';
+			this.render_report();
+		});
+
+		this.page.add_menu_item('Analytics Charts', () => {
+			this.view_mode = 'chart';
+			this.render_report();
+		});
+
+		this.page.add_menu_item('Lot Number Outstanding', () => {
+			this.view_mode = 'lot_number_outstanding';
+			this.render_report();
+		});
 	}
 
 	make_filters() {
@@ -74,9 +100,6 @@ class DeflashingOutstandingReport {
 						<div class="btn-group btn-group-sm" role="group" style="display: flex; flex-wrap: wrap; gap: 2px;">
 							<button type="button" class="btn btn-outline-dark view-toggle active" data-view="compact_matrix" title="Matrix View">
 								<i class="fa fa-th"></i> Matrix
-							</button>
-							<button type="button" class="btn btn-outline-dark view-toggle" data-view="datatable" title="Data Table View">
-								<i class="fa fa-table"></i> Table
 							</button>
 							<button type="button" class="btn btn-outline-dark view-toggle" data-view="list" title="List View">
 								<i class="fa fa-list"></i> List
@@ -1010,10 +1033,6 @@ class DeflashingOutstandingReport {
 			return;
 		}
 
-		 // Show loading state in dialog
-		dialog.$body.html('<div class="text-center" style="padding: 40px;"><i class="fa fa-spinner fa-spin fa-2x"></i><br><br>Loading details...</div>');
-		dialog.show();
-
 		// Fetch detailed data for this vendor-item combination
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.deflashing_outstanding_report.deflashing_outstanding_report.get_vendor_item_details',
@@ -1023,83 +1042,28 @@ class DeflashingOutstandingReport {
 				as_of_date: as_of_date
 			},
 			callback: function(r) {
-				if (r.message) {
-					if (r.message.status === 'success' && r.message.data && r.message.data.length > 0) {
-						let details_html = `
-							<div style="padding: 10px;">
-								<table class="table table-bordered table-hover" style="font-size: 11px; margin-bottom: 0;">
-									<thead style="background: #f8f9fa;">
-										<tr>
-											<th style="padding: 8px; font-weight: 600;">Lot Number</th>
-											<th style="padding: 8px; font-weight: 600;">Batch No</th>
-											<th style="padding: 8px; font-weight: 600; text-align: right;">Dispatched (Nos)</th>
-											<th style="padding: 8px; font-weight: 600; text-align: right;">Received (Nos)</th>
-											<th style="padding: 8px; font-weight: 600; text-align: right;">Outstanding (Nos)</th>
-											<th style="padding: 8px; font-weight: 600; text-align: center;">Dispatch Date</th>
-											<th style="padding: 8px; font-weight: 600; text-align: center;">Status</th>
-										</tr>
-									</thead>
-									<tbody>
-						`;
-
-						r.message.data.forEach((detail, index) => {
-							let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
-							let status_color = detail.status === 'Received' ? '#27ae60' : '#e74c3c';
-							let dispatch_date = detail.dispatch_date ? frappe.datetime.str_to_user(detail.dispatch_date) : '-';
-							
-							details_html += `
-								<tr style="background: ${row_bg};">
-									<td style="padding: 8px; font-weight: 600; color: #2980b9;">${detail.lot_number || detail.lot_no || '-'}</td>
-									<td style="padding: 8px; color: #6c757d;">${detail.batch_no || '-'}</td>
-									<td style="padding: 8px; text-align: right; font-weight: 600;">${parseInt(detail.dispatched_nos || 0)}</td>
-									<td style="padding: 8px; text-align: right; color: #27ae60;">${parseInt(detail.received_nos || 0)}</td>
-									<td style="padding: 8px; text-align: right; font-weight: 600; color: #c0392b;">${parseInt(detail.outstanding_nos || 0)}</td>
-									<td style="padding: 8px; text-align: center; color: #6c757d;">${dispatch_date}</td>
-									<td style="padding: 8px; text-align: center;">
-										<span style="background: ${status_color}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 10px; font-weight: 600;">
-											${detail.status || 'Unknown'}
-										</span>
-									</td>
-								</tr>
-							`;
-						});
-
+				if (r.message && r.message.status === 'success') {
+					let details_html = '<div class="row">';
+					r.message.data.forEach(detail => {
 						details_html += `
-									</tbody>
-								</table>
+							<div class="col-md-6 mb-3">
+								<div class="card card-body">
+									<h6 class="card-title">Lot: ${detail.lot_no}</h6>
+									<p class="card-text" style="font-size: 12px;">
+										Dispatched: ${frappe.datetime.str_to_user(detail.dispatch_date)}<br>
+										Outstanding: ${detail.outstanding_kg} Kg, ${detail.outstanding_nos} Nos
+									</p>
+								</div>
 							</div>
 						`;
-						
-						dialog.$body.html(details_html);
-					} else if (r.message.data && r.message.data.length === 0) {
-						dialog.$body.html(`
-							<div class="text-center" style="padding: 40px;">
-								<i class="fa fa-inbox" style="font-size: 36px; color: #d1d8dd; margin-bottom: 10px;"></i>
-								<h6 style="color: #8d99a6;">No Details Found</h6>
-								<p class="text-muted" style="font-size: 12px;">No dispatch records found for ${vendor} - ${item}</p>
-							</div>
-						`);
-					} else {
-						dialog.$body.html(`
-							<div class="alert alert-warning" style="margin: 15px;">
-								<strong>Error:</strong> ${r.message.message || 'Unable to fetch details'}
-							</div>
-						`);
-					}
+					});
+					details_html += '</div>';
+					
+					dialog.$body.html(details_html);
+					dialog.show();
 				} else {
-					dialog.$body.html(`
-						<div class="alert alert-danger" style="margin: 15px;">
-							<strong>Error:</strong> Failed to fetch vendor item details. Please try again.
-						</div>
-					`);
+					frappe.msgprint(__('Failed to fetch vendor item details'));
 				}
-			},
-			error: function(err) {
-				dialog.$body.html(`
-					<div class="alert alert-danger" style="margin: 15px;">
-						<strong>Error:</strong> ${err.statusText || 'Failed to fetch data'}
-					</div>
-				`);
 			}
 		});
 	}
