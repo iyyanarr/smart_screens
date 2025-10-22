@@ -27,32 +27,6 @@ class DeflashingOutstandingReport {
 		this.page.set_primary_action('Export to Excel', () => {
 			this.export_to_excel();
 		}, 'export');
-
-		// Add secondary action for view toggle
-		this.page.add_menu_item('Compact Matrix', () => {
-			this.view_mode = 'compact_matrix';
-			this.render_report();
-		});
-		
-		this.page.add_menu_item('Data Table', () => {
-			this.view_mode = 'datatable';
-			this.render_report();
-		});
-		
-		this.page.add_menu_item('List View', () => {
-			this.view_mode = 'list';
-			this.render_report();
-		});
-
-		this.page.add_menu_item('Analytics Charts', () => {
-			this.view_mode = 'chart';
-			this.render_report();
-		});
-
-		this.page.add_menu_item('Lot Number Outstanding', () => {
-			this.view_mode = 'lot_number_outstanding';
-			this.render_report();
-		});
 	}
 
 	make_filters() {
@@ -103,9 +77,6 @@ class DeflashingOutstandingReport {
 							</button>
 							<button type="button" class="btn btn-outline-dark view-toggle" data-view="list" title="List View">
 								<i class="fa fa-list"></i> List
-							</button>
-							<button type="button" class="btn btn-outline-dark view-toggle" data-view="chart" title="Analytics Charts">
-								<i class="fa fa-chart-bar"></i> Charts
 							</button>
 							<button type="button" class="btn btn-outline-dark view-toggle" data-view="lot_number_outstanding" title="Lot Numbers Outstanding">
 								<i class="fa fa-cube"></i> Lots
@@ -274,8 +245,6 @@ class DeflashingOutstandingReport {
 			this.render_compact_matrix_view();
 		} else if (this.view_mode === 'datatable') {
 			this.render_datatable_view();
-		} else if (this.view_mode === 'chart') {
-			this.render_chart_view();
 		} else if (this.view_mode === 'lot_number_outstanding') {
 			this.render_lot_number_outstanding();
 		} else {
@@ -316,26 +285,6 @@ class DeflashingOutstandingReport {
 		this.result_area.find('.report-summary').html(summary_html);
 	}
 
-	// Add color generation methods
-	generateVendorColor(vendor, index) {
-		// Generate unique colors for vendors using HSL
-		const hue = (index * 137.5) % 360; // Golden angle for better distribution
-		const saturation = 25 + (index % 3) * 10; // 25%, 35%, 45%
-		const lightness = 90 + (index % 2) * 5; // 90%, 95%
-		return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-	}
-
-	generateItemBorderColor(item, index) {
-		// Generate unique border colors for items
-		const colors = [
-			'#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
-			'#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#f1c40f',
-			'#16a085', '#c0392b', '#27ae60', '#d35400', '#8e44ad',
-			'#2c3e50', '#e8c547', '#bdc3c7', '#7f8c8d', '#a569bd'
-		];
-		return colors[index % colors.length];
-	}
-
 	render_compact_matrix_view() {
 		let me = this;
 		let vendors = Object.keys(this.vendor_totals).sort();
@@ -356,26 +305,25 @@ class DeflashingOutstandingReport {
 		let matrix_html = `
 			<div style="border: 1px solid #d1d8dd; border-radius: 4px;">
 				<div style="overflow-x: auto; max-height: 70vh;">
-					<table style="margin: 0; font-size: 10px; white-space: nowrap; border-collapse: collapse; width: 100%;">
+						<table class="table table-bordered" style="margin: 0; font-size: 13px; white-space: nowrap; border-collapse: collapse; width: 100%;">
 						<thead style="position: sticky; top: 0; z-index: 10; background: #2c3e50;">
 							<tr>
-								<th style="padding: 6px 8px; color: white; font-weight: 600; border: 1px solid #34495e; min-width: 120px; position: sticky; left: 0; background: #2c3e50; z-index: 11; font-size: 9px;">
+								<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; min-width: 150px; position: sticky; left: 0; background: #2c3e50; z-index: 11; font-size: 13px;">
 									Vendor
 								</th>
 		`;
 
-		// Add item headers with unique border colors
-		items.forEach((item, itemIndex) => {
-			const itemBorderColor = this.generateItemBorderColor(item, itemIndex);
+		// Add item headers - simple, clean design without excessive colors
+		items.forEach((item) => {
 			matrix_html += `
-				<th style="padding: 4px 2px; color: white; font-weight: 600; border: 1px solid #34495e; border-bottom: 3px solid ${itemBorderColor}; text-align: center; width: 60px; writing-mode: vertical-lr; text-orientation: mixed; font-size: 8px; line-height: 1;">
+				<th style="padding: 8px 4px; color: white; font-weight: 600; border: 1px solid #34495e; text-align: center; min-width: 80px; font-size: 13px;">
 					${item}
 				</th>
 			`;
 		});
 
 		matrix_html += `
-				<th style="padding: 6px 8px; color: white; font-weight: 600; border: 1px solid #34495e; text-align: center; width: 80px; background: #1a252f; font-size: 9px;">
+				<th style="padding: 10px 12px; color: white; font-weight: 600; border: 1px solid #34495e; text-align: center; min-width: 100px; background: #1a252f; font-size: 13px;">
 					Total
 				</th>
 			</tr>
@@ -383,21 +331,19 @@ class DeflashingOutstandingReport {
 		<tbody>
 		`;
 
-		// Add vendor rows with unique background colors
+		// Add vendor rows - simple alternating colors (white and light gray only)
 		vendors.forEach((vendor, vendorIndex) => {
-			const vendorBgColor = this.generateVendorColor(vendor, vendorIndex);
-			const vendorTextColor = '#2c3e50'; // Dark text for readability
+			const rowBg = vendorIndex % 2 === 0 ? '#ffffff' : '#f8f9fa';
 			
 			matrix_html += `
-				<tr style="background: ${vendorBgColor}; height: 32px;">
-					<td style="padding: 4px 8px; font-weight: 600; color: ${vendorTextColor}; border-right: 1px solid #d1d8dd; position: sticky; left: 0; background: ${vendorBgColor}; z-index: 5; font-size: 9px; max-width: 120px; overflow: hidden; text-overflow: ellipsis;">
+				<tr style="background: ${rowBg};">
+					<td style="padding: 10px 12px; font-weight: 600; color: #2c3e50; border: 1px solid #dee2e6; position: sticky; left: 0; background: ${rowBg}; z-index: 5; font-size: 13px;">
 						${vendor}
 					</td>
 			`;
 
 			// Add item cells showing only "nos" quantities
-			items.forEach((item, itemIndex) => {
-				const itemBorderColor = this.generateItemBorderColor(item, itemIndex);
+			items.forEach((item) => {
 				let cell_data = this.matrix_data[vendor] && this.matrix_data[vendor][item] 
 					? this.matrix_data[vendor][item] 
 					: { kg: 0, nos: 0 };
@@ -405,19 +351,33 @@ class DeflashingOutstandingReport {
 				let nos_value = cell_data.nos;
 				let has_outstanding = nos_value > 0;
 				
+				// Check days pending for this vendor-item combination
+				let days_pending_array = this.days_pending_data[vendor] && this.days_pending_data[vendor][item] 
+					? this.days_pending_data[vendor][item] 
+					: [];
+				let max_days = days_pending_array.length > 0 ? Math.max(...days_pending_array) : 0;
+				
+				// Highlight in RED only if > 7 days pending (more than 1 week)
+				let cellBg = rowBg;
+				let cellColor = '#2c3e50';
+				if (has_outstanding && max_days > 7) {
+					cellBg = '#ffebee'; // Light red background
+					cellColor = '#c62828'; // Dark red text
+				}
+				
 				if (has_outstanding) {
 					matrix_html += `
-						<td style="padding: 2px 1px; text-align: center; border-bottom: 3px solid ${itemBorderColor}; background: ${vendorBgColor}; cursor: pointer; font-size: 10px; line-height: 1.1;" 
-							title="Item: ${item}\nVendor: ${vendor}\nOutstanding: ${nos_value} Nos"
+						<td style="padding: 8px 4px; text-align: center; border: 1px solid #dee2e6; background: ${cellBg}; cursor: pointer; font-size: 14px; font-weight: 600;" 
+							title="Item: ${item}\nVendor: ${vendor}\nOutstanding: ${nos_value} Nos\nDays Pending: ${max_days}"
 							onclick="frappe.deflashing_outstanding_report.drill_down('${vendor}', '${item}')">
-							<div style="font-weight: 700; color: #2c3e50;">${nos_value}</div>
+							<span style="color: ${cellColor};">${nos_value}</span>
 						</td>
 					`;
 				} else {
-					// Empty cell with vendor background and item border
+					// Empty cell with simple dash
 					matrix_html += `
-						<td style="padding: 2px 1px; text-align: center; border-bottom: 3px solid ${itemBorderColor}; background: ${vendorBgColor}; color: #6c757d; font-size: 8px; opacity: 0.6;">
-							
+						<td style="padding: 8px 4px; text-align: center; border: 1px solid #dee2e6; background: ${rowBg}; color: #bdbdbd; font-size: 13px;">
+							-
 						</td>
 					`;
 				}
@@ -426,27 +386,26 @@ class DeflashingOutstandingReport {
 			// Add total cell showing only nos total
 			let vendor_total = this.vendor_totals[vendor];
 			matrix_html += `
-				<td style="padding: 4px 6px; text-align: center; font-weight: 700; background: ${vendorBgColor}; color: #2c3e50; border-left: 1px solid #34495e; font-size: 10px; line-height: 1.1;">
-					<div style="color: #2c3e50; font-weight: 800;">${vendor_total.nos}</div>
+				<td style="padding: 10px 12px; text-align: center; font-weight: 700; background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; font-size: 14px;">
+					${vendor_total.nos}
 				</td>
 			</tr>
 			`;
 		});
 
-		// Add totals row showing only nos totals
+		// Add totals row
 		matrix_html += `
-			<tr style="background: #e9ecef; font-weight: 700; height: 28px;">
-				<td style="padding: 4px 8px; color: #2c3e50; border-right: 1px solid #d1d8dd; position: sticky; left: 0; background: #e9ecef; z-index: 5; font-size: 9px;">
+			<tr style="background: #eceff1; font-weight: 700;">
+				<td style="padding: 10px 12px; color: #2c3e50; border: 1px solid #dee2e6; position: sticky; left: 0; background: #eceff1; z-index: 5; font-size: 13px;">
 					Total
 				</td>
 		`;
 
-		items.forEach((item, itemIndex) => {
-			const itemBorderColor = this.generateItemBorderColor(item, itemIndex);
+		items.forEach((item) => {
 			let item_total = this.item_totals[item];
 			matrix_html += `
-				<td style="padding: 2px 1px; text-align: center; color: #2c3e50; border-bottom: 3px solid ${itemBorderColor}; font-size: 9px; line-height: 1.1;">
-					<div style="color: #2c3e50; font-weight: 800;">${item_total.nos}</div>
+				<td style="padding: 8px 4px; text-align: center; color: #2c3e50; border: 1px solid #dee2e6; font-size: 14px; font-weight: 600;">
+					${item_total.nos}
 				</td>
 			`;
 		});
@@ -454,8 +413,8 @@ class DeflashingOutstandingReport {
 		let grand_total_nos = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.nos, 0);
 
 		matrix_html += `
-				<td style="padding: 4px 6px; text-align: center; background: #dee2e6; color: #2c3e50; border-left: 1px solid #34495e; font-size: 10px; line-height: 1.1;">
-					<div style="color: #2c3e50; font-weight: 800;">${grand_total_nos}</div>
+				<td style="padding: 10px 12px; text-align: center; background: #c5cae9; color: #283593; border: 1px solid #9fa8da; font-size: 14px; font-weight: 700;">
+					${grand_total_nos}
 				</td>
 			</tr>
 		</tbody>
@@ -578,329 +537,6 @@ class DeflashingOutstandingReport {
 		this.result_area.find('.report-content').html(list_html);
 	}
 
-	render_chart_view() {
-		let me = this;
-		
-			// Create simple HTML/CSS charts without Chart.js dependency
-			let chart_html = `
-				<div class="row">
-					<div class="col-md-6">
-						<div class="frappe-card" style="padding: 15px; margin-bottom: 15px; border: 1px solid #d1d8dd;">
-							<h6 style="color: #2c3e50; margin-bottom: 10px; font-weight: 600; font-size: 12px;">
-								<i class="fa fa-chart-bar" style="color: #3498db;"></i> Top 10 Vendors by Outstanding (Kg)
-							</h6>
-							<div id="vendor-chart-container" style="height: 200px; overflow-y: auto;"></div>
-						</div>
-					</div>
-					<div class="col-md-6">
-						<div class="frappe-card" style="padding: 15px; margin-bottom: 15px; border: 1px solid #d1d8dd;">
-							<h6 style="color: #2c3e50; margin-bottom: 10px; font-weight: 600; font-size: 12px;">
-								<i class="fa fa-chart-bar" style="color: #2ecc71;"></i> Top 10 Items by Outstanding (Kg)
-							</h6>
-							<div id="item-chart-container" style="height: 200px; overflow-y: auto;"></div>
-						</div>
-					</div>
-				</div>
-				<div class="row">
-					<div class="col-md-8">
-						<div class="frappe-card" style="padding: 15px; margin-bottom: 15px; border: 1px solid #d1d8dd;">
-							<h6 style="color: #2c3e50; margin-bottom: 10px; font-weight: 600; font-size: 12px;">
-								<i class="fa fa-clock" style="color: #f39c12;"></i> Outstanding by Days Pending (Risk Analysis)
-							</h6>
-							<div id="days-chart-container" style="height: 150px;"></div>
-						</div>
-					</div>
-					<div class="col-md-4">
-						<div class="frappe-card" style="padding: 15px; margin-bottom: 15px; border: 1px solid #d1d8dd;">
-							<h6 style="color: #2c3e50; margin-bottom: 10px; font-weight: 600; font-size: 12px;">
-								<i class="fa fa-exclamation-triangle" style="color: #e74c3c;"></i> Critical Alerts
-							</h6>
-							<div id="critical-alerts" style="max-height: 150px; overflow-y: auto;"></div>
-						</div>
-					</div>
-				</div>
-				<div class="row">
-					<div class="col-md-12">
-						<div class="frappe-card" style="padding: 15px; border: 1px solid #d1d8dd;">
-							<h6 style="color: #2c3e50; margin-bottom: 10px; font-weight: 600; font-size: 12px;">
-								<i class="fa fa-users" style="color: #9b59b6;"></i> Vendor Performance Summary
-							</h6>
-							<div id="vendor-performance-table" style="max-height: 200px; overflow-y: auto;"></div>
-						</div>
-					</div>
-				</div>
-			`;
-
-			this.result_area.find('.report-content').html(chart_html);
-			
-			// Render all charts immediately
-			this.render_vendor_bar_chart();
-			this.render_item_bar_chart();
-			this.render_days_pending_analysis();
-			this.render_critical_alerts();
-			this.render_vendor_performance_table();
-		}
-
-		render_vendor_bar_chart() {
-			// Get top 10 vendors by outstanding kg
-			let vendor_data = Object.entries(this.vendor_totals)
-				.sort((a, b) => b[1].kg - a[1].kg)
-				.slice(0, 10);
-
-			if (vendor_data.length === 0) {
-				$('#vendor-chart-container').html('<p class="text-muted text-center" style="padding: 50px; font-size: 11px;">No vendor data available</p>');
-				return;
-			}
-
-			let max_value = Math.max(...vendor_data.map(v => v[1].kg));
-			let vendor_html = '';
-
-			vendor_data.forEach((vendor, index) => {
-				let percentage = (vendor[1].kg / max_value) * 100;
-				let color = this.generateVendorColor(vendor[0], index);
-				
-				vendor_html += `
-					<div style="margin-bottom: 8px;">
-						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-							<span style="font-size: 10px; font-weight: 600; color: #2c3e50;">${vendor[0].substring(0, 25)}</span>
-							<span style="font-size: 10px; color: #6c757d;">${vendor[1].kg.toFixed(1)} Kg</span>
-						</div>
-						<div style="background: #ecf0f1; height: 12px; border-radius: 6px; overflow: hidden;">
-							<div style="background: ${color}; height: 100%; width: ${percentage}%; border-radius: 6px; transition: width 0.3s ease;"></div>
-						</div>
-					</div>
-				`;
-			});
-
-			$('#vendor-chart-container').html(vendor_html);
-		}
-
-		render_item_bar_chart() {
-			// Get top 10 items by outstanding kg
-			let item_data = Object.entries(this.item_totals)
-				.sort((a, b) => b[1].kg - a[1].kg)
-				.slice(0, 10);
-
-			if (item_data.length === 0) {
-				$('#item-chart-container').html('<p class="text-muted text-center" style="padding: 50px; font-size: 11px;">No item data available</p>');
-				return;
-			}
-
-			let max_value = Math.max(...item_data.map(i => i[1].kg));
-			let item_html = '';
-
-			item_data.forEach((item, index) => {
-				let percentage = (item[1].kg / max_value) * 100;
-				let color = this.generateItemBorderColor(item[0], index);
-				
-				item_html += `
-					<div style="margin-bottom: 8px;">
-						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-							<span style="font-size: 10px; font-weight: 600; color: #2c3e50;">${item[0]}</span>
-							<span style="font-size: 10px; color: #6c757d;">${item[1].kg.toFixed(1)} Kg</span>
-						</div>
-						<div style="background: #ecf0f1; height: 12px; border-radius: 6px; overflow: hidden;">
-							<div style="background: ${color}; height: 100%; width: ${percentage}%; border-radius: 6px; transition: width 0.3s ease;"></div>
-						</div>
-					</div>
-				`;
-			});
-
-			$('#item-chart-container').html(item_html);
-		}
-
-		render_days_pending_analysis() {
-			// Group data by days pending ranges
-			let ranges = {
-				'0-15 days': { kg: 0, count: 0, color: '#2ecc71', risk: 'Low' },
-				'16-30 days': { kg: 0, count: 0, color: '#f39c12', risk: 'Medium' },
-				'31-60 days': { kg: 0, count: 0, color: '#e67e22', risk: 'High' },
-				'61-90 days': { kg: 0, count: 0, color: '#e74c3c', risk: 'Critical' },
-				'90+ days': { kg: 0, count: 0, color: '#8e44ad', risk: 'Urgent' }
-			};
-
-			this.raw_data.forEach(row => {
-				let days = row.days_pending || 0;
-				let outstanding = parseFloat(row.outstanding_kg || 0);
-				
-				if (days <= 15) {
-					ranges['0-15 days'].kg += outstanding;
-					ranges['0-15 days'].count++;
-				} else if (days <= 30) {
-					ranges['16-30 days'].kg += outstanding;
-					ranges['16-30 days'].count++;
-				} else if (days <= 60) {
-					ranges['31-60 days'].kg += outstanding;
-					ranges['31-60 days'].count++;
-				} else if (days <= 90) {
-					ranges['61-90 days'].kg += outstanding;
-					ranges['61-90 days'].count++;
-				} else {
-					ranges['90+ days'].kg += outstanding;
-					ranges['90+ days'].count++;
-				}
-			});
-
-			let max_kg = Math.max(...Object.values(ranges).map(r => r.kg));
-			let days_html = '';
-
-			Object.entries(ranges).forEach(([range, data]) => {
-				let percentage = max_kg > 0 ? (data.kg / max_kg) * 100 : 0;
-				
-				days_html += `
-					<div style="margin-bottom: 6px;">
-						<div style="display: flex; justify-content: between; align-items: center; margin-bottom: 2px;">
-							<span style="font-size: 10px; font-weight: 600; color: #2c3e50; width: 70px;">${range}</span>
-							<span style="font-size: 9px; color: ${data.color}; font-weight: 600; width: 50px;">${data.risk}</span>
-							<span style="font-size: 10px; color: #6c757d; text-align: right; flex: 1;">${data.kg.toFixed(1)} Kg (${data.count} items)</span>
-						</div>
-						<div style="background: #ecf0f1; height: 10px; border-radius: 5px; overflow: hidden;">
-							<div style="background: ${data.color}; height: 100%; width: ${percentage}%; border-radius: 5px; transition: width 0.3s ease;"></div>
-						</div>
-					</div>
-				`;
-			});
-
-			$('#days-chart-container').html(days_html);
-		}
-
-		render_critical_alerts() {
-			// Analyze data for critical insights
-			let alerts = [];
-			
-			// Alert 1: High pending days
-			let high_pending = this.raw_data.filter(row => (row.days_pending || 0) > 60);
-			if (high_pending.length > 0) {
-				let high_pending_kg = high_pending.reduce((sum, row) => sum + parseFloat(row.outstanding_kg || 0), 0);
-				alerts.push({
-					type: 'danger',
-					icon: 'exclamation-triangle',
-					title: 'High Risk Items',
-					message: `${high_pending.length} items > 60 days`,
-					value: high_pending_kg.toFixed(1) + ' Kg'
-				});
-			}
-
-			// Alert 2: Top vendor concentration
-			if (Object.keys(this.vendor_totals).length > 0) {
-				let top_vendor = Object.entries(this.vendor_totals).sort((a, b) => b[1].kg - a[1].kg)[0];
-				let total_outstanding = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.kg, 0);
-				let concentration = (top_vendor[1].kg / total_outstanding * 100);
-				
-				if (concentration > 30) {
-					alerts.push({
-						type: 'warning',
-						icon: 'user-times',
-						title: 'Vendor Risk',
-						message: `${top_vendor[0].substring(0, 15)} has ${concentration.toFixed(0)}%`,
-						value: top_vendor[1].kg.toFixed(1) + ' Kg'
-					});
-				}
-			}
-
-			// Alert 3: Top item concentration
-			if (Object.keys(this.item_totals).length > 0) {
-				let top_item = Object.entries(this.item_totals).sort((a, b) => b[1].kg - a[1].kg)[0];
-				let total_outstanding = Object.values(this.vendor_totals).reduce((sum, v) => sum + v.kg, 0);
-				let item_concentration = (top_item[1].kg / total_outstanding * 100);
-				
-				if (item_concentration > 25) {
-					alerts.push({
-						type: 'info',
-						icon: 'cube',
-						title: 'Item Focus',
-						message: `${top_item[0]} is ${item_concentration.toFixed(0)}% of total`,
-						value: top_item[1].kg.toFixed(1) + ' Kg'
-					});
-				}
-			}
-
-			// Alert 4: System status
-			let total_vendors = Object.keys(this.vendor_totals).length;
-			alerts.push({
-				type: 'success',
-				icon: 'check-circle',
-				title: 'Active Vendors',
-				message: `${total_vendors} vendors with outstanding`,
-				value: total_vendors <= 10 ? 'Good' : 'Monitor'
-			});
-
-			// Render alerts
-			let alerts_html = '';
-			alerts.forEach(alert => {
-				alerts_html += `
-					<div class="alert alert-${alert.type}" style="padding: 6px 8px; margin-bottom: 6px; font-size: 10px; border-radius: 3px; border: none;">
-						<div style="display: flex; align-items: center; justify-content: space-between;">
-							<div style="display: flex; align-items: center;">
-								<i class="fa fa-${alert.icon}" style="margin-right: 6px; font-size: 10px;"></i>
-								<div>
-									<div style="font-weight: 600; margin-bottom: 1px; font-size: 10px;">${alert.title}</div>
-									<div style="font-size: 9px; opacity: 0.9;">${alert.message}</div>
-								</div>
-							</div>
-							<div style="font-weight: 700; font-size: 9px; text-align: right;">
-								${alert.value}
-							</div>
-						</div>
-					</div>
-				`;
-			});
-
-			$('#critical-alerts').html(alerts_html);
-		}
-
-		render_vendor_performance_table() {
-			// Create vendor performance summary table
-			let vendor_performance = Object.entries(this.vendor_totals)
-				.sort((a, b) => b[1].kg - a[1].kg)
-				.slice(0, 15);
-
-			if (vendor_performance.length === 0) {
-				$('#vendor-performance-table').html('<p class="text-muted text-center" style="padding: 30px; font-size: 11px;">No performance data available</p>');
-				return;
-			}
-
-			let table_html = `
-				<table style="width: 100%; font-size: 10px; border-collapse: collapse;">
-					<thead>
-						<tr style="background: #f8f9fa;">
-							<th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Vendor</th>
-							<th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Outstanding (Kg)</th>
-							<th style="padding: 6px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Items Count</th>
-							<th style="padding: 6px 8px; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; color: #495057;">Performance</th>
-						</tr>
-					</thead>
-					<tbody>
-			`;
-
-			let total_outstanding = vendor_performance.reduce((sum, v) => sum + v[1].kg, 0);
-
-			vendor_performance.forEach((vendor, index) => {
-				let item_count = Object.keys(this.matrix_data[vendor[0]] || {}).length;
-				let percentage = (vendor[1].kg / total_outstanding * 100);
-				let performance_class = percentage > 30 ? 'danger' : (percentage > 15 ? 'warning' : 'success');
-				let performance_text = percentage > 30 ? 'High Risk' : (percentage > 15 ? 'Monitor' : 'Normal');
-				
-				table_html += `
-					<tr style="background: ${index % 2 === 0 ? '#ffffff' : '#f8f9fa'};">
-						<td style="padding: 4px 8px; border-bottom: 1px solid #f1f3f4; font-weight: 600; color: #2c3e50; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${vendor[0]}</td>
-						<td style="padding: 4px 8px; border-bottom: 1px solid #f1f3f4; text-align: right; color: #6c757d;">${vendor[1].kg.toFixed(1)}</td>
-						<td style="padding: 4px 8px; border-bottom: 1px solid #f1f3f4; text-align: right; color: #6c757d;">${item_count}</td>
-						<td style="padding: 4px 8px; border-bottom: 1px solid #f1f3f4; text-align: center;">
-							<span class="badge badge-${performance_class}" style="font-size: 8px; padding: 2px 6px;">${performance_text}</span>
-						</td>
-					</tr>
-				`;
-			});
-
-			table_html += `
-					</tbody>
-				</table>
-			`;
-
-			$('#vendor-performance-table').html(table_html);
-			}
-
 	render_lot_number_outstanding() {
 		if (!this.raw_data || this.raw_data.length === 0) {
 			this.result_area.find('.report-content').html(`
@@ -913,10 +549,13 @@ class DeflashingOutstandingReport {
 			return;
 		}
 
-		// Group data by lot numbers
+		// Group data by lot numbers and filter ONLY PENDING items (outstanding > 0)
 		let lot_data = {};
 		this.raw_data.forEach(row => {
-			if (row.lot_number) {
+			// Only process if there's actual outstanding quantity (PENDING ONLY)
+			let has_outstanding = (parseFloat(row.outstanding_qty || 0) > 0) || (parseFloat(row.outstanding_nos || 0) > 0);
+			
+			if (row.lot_number && has_outstanding) {
 				if (!lot_data[row.lot_number]) {
 					lot_data[row.lot_number] = {
 						lot_number: row.lot_number,
@@ -928,7 +567,7 @@ class DeflashingOutstandingReport {
 						days_pending: row.days_pending || 0
 					};
 				}
-				lot_data[row.lot_number].outstanding_kg += parseFloat(row.outstanding_kg || 0);
+				lot_data[row.lot_number].outstanding_kg += parseFloat(row.outstanding_qty || 0);
 				lot_data[row.lot_number].outstanding_nos += parseFloat(row.outstanding_nos || 0);
 			}
 		});
@@ -936,43 +575,43 @@ class DeflashingOutstandingReport {
 		if (Object.keys(lot_data).length === 0) {
 			this.result_area.find('.report-content').html(`
 				<div class="text-center" style="padding: 40px;">
-					<i class="fa fa-exclamation-triangle" style="font-size: 48px; color: #f39c12; margin-bottom: 15px;"></i>
-					<h5 style="color: #8d99a6;">No Lot Numbers Found</h5>
-					<p class="text-muted">No lot number data available in the outstanding records.</p>
+					<i class="fa fa-check-circle" style="font-size: 48px; color: #2ecc71; margin-bottom: 15px;"></i>
+					<h5 style="color: #8d99a6;">All Lots Received</h5>
+					<p class="text-muted">No pending lot numbers found. All items have been received back from deflashing vendors.</p>
 				</div>
 			`);
 			return;
 		}
 
-		// Convert to array and sort
+		// Convert to array and sort by days pending (highest first)
 		let lot_array = Object.values(lot_data);
-		let sorted_lots = this.sort_data(lot_array, this.sort_column || 'days_pending', this.sort_direction);
+		let sorted_lots = this.sort_data(lot_array, this.sort_column || 'days_pending', this.sort_direction || 'desc');
 
 		let lot_html = `
 			<div class="frappe-card">
 				<div class="table-responsive">
-					<table class="table table-bordered table-hover sortable-table" style="font-size: 12px; margin-bottom: 0;">
+					<table class="table table-bordered table-hover sortable-table" style="font-size: 13px; margin-bottom: 0;">
 						<thead style="background: #f8f9fa;">
 							<tr>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="lot_number" onclick="frappe.deflashing_outstanding_report.handle_sort('lot_number')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" data-column="lot_number" onclick="frappe.deflashing_outstanding_report.handle_sort('lot_number')">
 									Lot Number ${this.get_sort_indicator('lot_number')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="vendor" onclick="frappe.deflashing_outstanding_report.handle_sort('vendor')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" data-column="vendor" onclick="frappe.deflashing_outstanding_report.handle_sort('vendor')">
 									Vendor ${this.get_sort_indicator('vendor')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer;" data-column="item" onclick="frappe.deflashing_outstanding_report.handle_sort('item')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" data-column="item" onclick="frappe.deflashing_outstanding_report.handle_sort('item')">
 									Item ${this.get_sort_indicator('item')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_kg" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_kg')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; text-align: right; font-size: 13px;" data-column="outstanding_kg" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_kg')">
 									Outstanding (Kg) ${this.get_sort_indicator('outstanding_kg')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: right;" data-column="outstanding_nos" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_nos')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; text-align: right; font-size: 13px;" data-column="outstanding_nos" onclick="frappe.deflashing_outstanding_report.handle_sort('outstanding_nos')">
 									Outstanding (Nos) ${this.get_sort_indicator('outstanding_nos')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="last_dispatch" onclick="frappe.deflashing_outstanding_report.handle_sort('last_dispatch')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; text-align: center; font-size: 13px;" data-column="last_dispatch" onclick="frappe.deflashing_outstanding_report.handle_sort('last_dispatch')">
 									Last Dispatch ${this.get_sort_indicator('last_dispatch')}
 								</th>
-								<th style="padding: 10px; font-weight: 600; color: #495057; cursor: pointer; text-align: center;" data-column="days_pending" onclick="frappe.deflashing_outstanding_report.handle_sort('days_pending')">
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; text-align: center; font-size: 13px;" data-column="days_pending" onclick="frappe.deflashing_outstanding_report.handle_sort('days_pending')">
 									Days Pending ${this.get_sort_indicator('days_pending')}
 								</th>
 							</tr>
@@ -983,18 +622,26 @@ class DeflashingOutstandingReport {
 		sorted_lots.forEach((lot_info, index) => {
 			let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
 			let days_pending = lot_info.days_pending;
-			let pending_class = days_pending > 30 ? 'text-danger' : (days_pending > 15 ? 'text-warning' : 'text-success');
+			
+			// Highlight ONLY items > 7 days in RED
+			let row_highlight = '';
+			let days_cell_style = 'padding: 10px 12px; text-align: center; font-size: 13px;';
+			
+			if (days_pending > 7) {
+				row_highlight = 'background: #ffebee;'; // Light red background for entire row
+				days_cell_style = 'padding: 10px 12px; text-align: center; font-weight: 700; color: #c62828; font-size: 14px;'; // Bold red text
+			}
 			
 			lot_html += `
-				<tr style="background: ${row_bg};">
-					<td style="padding: 8px 10px; font-weight: 600; color: #2980b9;">${lot_info.lot_number}</td>
-					<td style="padding: 8px 10px; font-weight: 600; color: #495057;">${lot_info.vendor}</td>
-					<td style="padding: 8px 10px; color: #6c757d;">${lot_info.item}</td>
-					<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #c0392b;">${lot_info.outstanding_kg.toFixed(3)}</td>
-					<td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #2980b9;">${lot_info.outstanding_nos}</td>
-					<td style="padding: 8px 10px; text-align: center; color: #6c757d;">${lot_info.last_dispatch ? frappe.datetime.str_to_user(lot_info.last_dispatch) : '-'}</td>
-					<td style="padding: 8px 10px; text-align: center;" class="${pending_class}">
-						<span style="font-weight: 600;">${days_pending}</span> days
+				<tr style="${row_highlight || 'background: ' + row_bg + ';'}">
+					<td style="padding: 10px 12px; font-weight: 600; color: #2980b9; font-size: 13px;">${lot_info.lot_number}</td>
+					<td style="padding: 10px 12px; font-weight: 600; color: #495057; font-size: 13px;">${lot_info.vendor}</td>
+					<td style="padding: 10px 12px; color: #495057; font-size: 13px;">${lot_info.item}</td>
+					<td style="padding: 10px 12px; text-align: right; font-weight: 600; color: #495057; font-size: 13px;">${lot_info.outstanding_kg.toFixed(3)}</td>
+					<td style="padding: 10px 12px; text-align: right; font-weight: 600; color: #2980b9; font-size: 14px;">${lot_info.outstanding_nos}</td>
+					<td style="padding: 10px 12px; text-align: center; color: #6c757d; font-size: 13px;">${lot_info.last_dispatch ? frappe.datetime.str_to_user(lot_info.last_dispatch) : '-'}</td>
+					<td style="${days_cell_style}">
+						${days_pending} days
 					</td>
 				</tr>
 			`;
