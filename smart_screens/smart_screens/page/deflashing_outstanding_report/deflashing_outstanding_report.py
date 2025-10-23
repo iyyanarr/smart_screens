@@ -60,6 +60,7 @@ def get_deflashing_outstanding_data(as_of_date, min_outstanding_days=0):
 			dde.posting_date,
 			dde.posting_date as last_dispatch,
 			ddei.item,
+			i.item_group,
 			ddei.qty as dispatched_qty,
 			ddei.qty_in_nos as dispatched_nos,
 			dde.warehouse as vendor
@@ -67,6 +68,8 @@ def get_deflashing_outstanding_data(as_of_date, min_outstanding_days=0):
 			`tabDeflashing Despatch Entry` dde
 		INNER JOIN 
 			`tabDeflashing Despatch Entry Item` ddei ON dde.name = ddei.parent
+		LEFT JOIN
+			`tabItem` i ON ddei.item = i.name
 		WHERE 
 			dde.docstatus = 1
 			AND dde.posting_date <= %s
@@ -427,3 +430,91 @@ def get_deflashing_item_analysis(as_of_date):
 def clear_deflashing_cache():
 	"""Call this from Receipt Entry doctype hook to clear cache"""
 	get_cached_receipt_summary.cache_clear()
+
+# ============================================================================
+# NEW: BATCH DETAILS VIEW - Item Group "Mat" from U2-Store Warehouse
+# ============================================================================
+
+@frappe.whitelist()
+def get_batch_details_mat_items(as_of_date):
+	"""
+	Get batch details for Item Group = "Mat" from U2-Store - SPP INDIA warehouse
+	Shows all batches currently in stock at the specified warehouse
+	OPTIMIZED: Fast query with proper error handling
+	"""
+	try:
+		# First, get the basic stock data (fast query - tested working)
+		query = """
+		SELECT 
+			sle.item_code as item,
+			sle.batch_no,
+			i.item_group,
+			SUM(sle.actual_qty) as pending_qty,
+			i.stock_uom as qty_uom
+		FROM 
+			`tabStock Ledger Entry` sle
+		INNER JOIN 
+			`tabItem` i ON sle.item_code = i.name
+		WHERE 
+			sle.posting_date <= %s
+			AND sle.warehouse = 'U2-Store - SPP INDIA'
+			AND i.item_group = 'Mat'
+			AND sle.is_cancelled = 0
+		GROUP BY 
+			sle.item_code, sle.batch_no, i.item_group, i.stock_uom
+		HAVING 
+			SUM(sle.actual_qty) > 0
+		ORDER BY 
+			sle.item_code, sle.batch_no
+		LIMIT 500
+		"""
+		
+		data = frappe.db.sql(query, [as_of_date], as_dict=True)
+		
+		if not data:
+			return {
+				'status': 'success',
+				'data': [],
+				'total_records': 0
+			}
+		
+		# Now fetch SPP batch numbers for these batches (fast individual lookups)
+		batch_nos = [row['batch_no'] for row in data if row['batch_no']]
+		
+		if batch_nos:
+			# Get SPP batch numbers in one query - using IN clause with placeholders
+			placeholders = ','.join(['%s'] * len(batch_nos))
+			spp_query = f"""
+			SELECT batch_no, spp_batch_number
+			FROM `tabStock Entry Detail`
+			WHERE batch_no IN ({placeholders})
+			AND spp_batch_number IS NOT NULL
+			GROUP BY batch_no
+			"""
+			
+			spp_data = frappe.db.sql(spp_query, tuple(batch_nos), as_dict=True)
+			
+			# Create a lookup dictionary
+			spp_lookup = {row['batch_no']: row['spp_batch_number'] for row in spp_data}
+			
+			# Add SPP batch numbers to the data
+			for row in data:
+				row['lot_number'] = spp_lookup.get(row['batch_no'], '-')
+		else:
+			for row in data:
+				row['lot_number'] = '-'
+		
+		return {
+			'status': 'success',
+			'data': data,
+			'total_records': len(data)
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Error in get_batch_details_mat_items: {str(e)}", "Batch Details View")
+		return {
+			'status': 'error',
+			'message': str(e),
+			'data': [],
+			'total_records': 0
+		}

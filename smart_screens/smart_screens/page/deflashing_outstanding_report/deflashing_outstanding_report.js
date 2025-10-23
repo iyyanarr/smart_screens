@@ -81,6 +81,9 @@ class DeflashingOutstandingReport {
 							<button type="button" class="btn btn-outline-dark view-toggle" data-view="lot_number_outstanding" title="Lot Numbers Outstanding">
 								<i class="fa fa-cube"></i> Lots
 							</button>
+							<button type="button" class="btn btn-outline-dark view-toggle" data-view="batch_details" title="Batch Details View">
+								<i class="fa fa-bars"></i> Batch Details
+							</button>
 						</div>
 					</div>
 				</div>
@@ -247,6 +250,8 @@ class DeflashingOutstandingReport {
 			this.render_datatable_view();
 		} else if (this.view_mode === 'lot_number_outstanding') {
 			this.render_lot_number_outstanding();
+		} else if (this.view_mode === 'batch_details') {
+			this.render_batch_details_view();
 		} else {
 			this.render_list_view();
 		}
@@ -692,6 +697,129 @@ class DeflashingOutstandingReport {
 		`;
 
 		this.result_area.find('.report-content').html(lot_html);
+	}
+
+	render_batch_details_view() {
+		// Show loading state
+		this.result_area.find('.report-content').html(`
+			<div class="text-center" style="padding: 40px;">
+				<i class="fa fa-spinner fa-spin fa-2x" style="color: #2980b9;"></i>
+				<p class="text-muted" style="margin-top: 15px;">Loading batch details for Item Group "Mat"...</p>
+			</div>
+		`);
+
+		// Get the as_of_date from filter
+		let as_of_date = $('#as_of_date').val();
+		
+		if (!as_of_date) {
+			frappe.msgprint(__('Please select As Of Date first'));
+			return;
+		}
+
+		 // Call new backend API to fetch Mat items from U2-Store warehouse
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.deflashing_outstanding_report.deflashing_outstanding_report.get_batch_details_mat_items',
+			args: {
+				as_of_date: as_of_date
+			},
+			callback: (r) => {
+				if (r.message && r.message.status === 'success') {
+					this.render_batch_details_table(r.message.data);
+				} else {
+					this.result_area.find('.report-content').html(`
+						<div class="text-center" style="padding: 40px;">
+							<i class="fa fa-exclamation-circle" style="font-size: 48px; color: #e74c3c; margin-bottom: 15px;"></i>
+							<h5 style="color: #8d99a6;">Error Loading Batch Details</h5>
+							<p class="text-muted">${r.message ? r.message.message : 'Unknown error occurred'}</p>
+						</div>
+					`);
+				}
+			}
+		});
+	}
+
+	render_batch_details_table(data) {
+		if (!data || data.length === 0) {
+			this.result_area.find('.report-content').html(`
+				<div class="text-center" style="padding: 40px;">
+					<i class="fa fa-inbox" style="font-size: 48px; color: #d1d8dd; margin-bottom: 15px;"></i>
+					<h5 style="color: #8d99a6;">No Batch Details Found</h5>
+					<p class="text-muted">No items with Item Group "Mat" found in warehouse "U2-Store - SPP INDIA"</p>
+				</div>
+			`);
+			return;
+		}
+
+		// Sort data if needed
+		let sorted_data = this.sort_data(data, this.sort_column || 'item', this.sort_direction || 'asc');
+
+		let batch_html = `
+			<div class="frappe-card">
+				<div style="padding: 10px 15px; background: #e3f2fd; border-bottom: 2px solid #2196f3; margin-bottom: 0;">
+					<span style="font-size: 12px; color: #1565c0; font-weight: 600;">
+						<i class="fa fa-filter"></i> Item Group = "Mat" | Warehouse = "U2-Store - SPP INDIA" | ${data.length} Records
+					</span>
+				</div>
+				<div class="table-responsive">
+					<table class="table table-bordered table-hover sortable-table" style="font-size: 13px; margin-bottom: 0;">
+						<thead style="background: #f8f9fa;">
+							<tr>
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" onclick="frappe.deflashing_outstanding_report.handle_sort('item')">
+									Item ${this.get_sort_indicator('item')}
+								</th>
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" onclick="frappe.deflashing_outstanding_report.handle_sort('batch_no')">
+									Batch No ${this.get_sort_indicator('batch_no')}
+								</th>
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; font-size: 13px;" onclick="frappe.deflashing_outstanding_report.handle_sort('lot_number')">
+									SPP Batch No ${this.get_sort_indicator('lot_number')}
+								</th>
+								<th style="padding: 12px; font-weight: 600; color: #495057; cursor: pointer; text-align: right; font-size: 13px;" onclick="frappe.deflashing_outstanding_report.handle_sort('pending_qty')">
+									Pending Qty ${this.get_sort_indicator('pending_qty')}
+								</th>
+								<th style="padding: 12px; font-weight: 600; color: #495057; text-align: center; font-size: 13px;">
+									Qty UoM
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+		`;
+
+		sorted_data.forEach((row, index) => {
+			let row_bg = index % 2 === 0 ? '#ffffff' : '#f8f9fa';
+			
+			batch_html += `
+				<tr style="background: ${row_bg};">
+					<td style="padding: 10px 12px; font-weight: 600; color: #495057; font-size: 13px;">${row.item || '-'}</td>
+					<td style="padding: 10px 12px; color: #2980b9; font-weight: 600; font-size: 13px;">${row.batch_no || '-'}</td>
+					<td style="padding: 10px 12px; color: #495057; font-size: 13px;">${row.lot_number || '-'}</td>
+					<td style="padding: 10px 12px; text-align: right; font-weight: 600; color: #c62828; font-size: 14px;">${parseFloat(row.pending_qty || 0).toFixed(3)}</td>
+					<td style="padding: 10px 12px; text-align: center; color: #495057; font-size: 13px;">${row.qty_uom || 'Kg'}</td>
+				</tr>
+			`;
+		});
+
+		// Add total row
+		let total_pending_qty = sorted_data.reduce((sum, row) => sum + parseFloat(row.pending_qty || 0), 0);
+
+		batch_html += `
+				<tr style="background: #eceff1; font-weight: 700;">
+					<td colspan="3" style="padding: 10px 12px; color: #2c3e50; border: 1px solid #dee2e6; text-align: right; font-size: 13px;">
+						Total:
+					</td>
+					<td style="padding: 10px 12px; text-align: right; color: #c62828; border: 1px solid #dee2e6; font-size: 14px; font-weight: 700;">
+						${total_pending_qty.toFixed(3)}
+					</td>
+					<td style="padding: 10px 12px; text-align: center; color: #2c3e50; border: 1px solid #dee2e6; font-size: 13px;">
+						Kg
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+</div>
+		`;
+
+		this.result_area.find('.report-content').html(batch_html);
 	}
 
 	apply_search_filters() {
