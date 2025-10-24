@@ -16,7 +16,8 @@ fixtures = [
                 "name",
                 "in",
                 [
-                    "Moulding Production Entry-downtime_minutes"
+                    "Moulding Production Entry-downtime_minutes",
+                    "Moulding Production Entry-reason_code"
                 ]
             ]
         ]

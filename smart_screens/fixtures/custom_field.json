@@ -1,0 +1,20 @@
+[
+  {
+    "doctype": "Custom Field",
+    "name": "Moulding Production Entry-reason_code",
+    "dt": "Moulding Production Entry",
+    "module": "Smart Screens",
+    "label": "Reason Code",
+    "fieldname": "reason_code",
+    "fieldtype": "Select",
+    "insert_after": "downtime_minutes",
+    "options": "COMPOUND SHORTAGE\nMACHINE BREAKDOWN\nMLD CHANGE\nMLD WASH / CLEAN\nOPERATOR ISSUE\nPLANNING\nQUALITY ISSUE\nTRIAL\nCOMPOUND ISSUE\nSHELL SHORTAGE\nSHELL QUALITY ISSUE\nOPERATOR DELAY\nLOADING PLATE NOT AVAILABLE\nMOULD ISSUE",
+    "reqd": 0,
+    "read_only": 0,
+    "in_list_view": 1,
+    "description": "Reason for downtime or production delay",
+    "allow_on_submit": 0,
+    "permlevel": 0,
+    "precision": ""
+  }
+]
