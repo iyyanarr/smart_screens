@@ -1,0 +1,23 @@
+{
+ "creation": "2025-01-23 10:00:00.000000",
+ "doctype": "Page",
+ "modified": "2025-01-23 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "oee-dashboard",
+ "owner": "Administrator",
+ "page_name": "oee-dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Production User"
+  }
+ ],
+ "standard": "No",
+ "title": "OEE Dashboard"
+}

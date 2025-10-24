@@ -5,6 +5,24 @@ app_description = "Smart Screens "
 app_email = "iyyanarr@alphaworkz.com"
 app_license = "mit"
 
+# Fixtures
+# --------
+# Export fixtures for the app
+fixtures = [
+    {
+        "dt": "Custom Field",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Moulding Production Entry-downtime_minutes"
+                ]
+            ]
+        ]
+    }
+]
+
 # Apps
 # ------------------
 
