@@ -101,6 +101,7 @@ def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_fi
             
             # Build result object
             result = {
+                'name': entry.get('name'),  # Include actual production entry ID
                 'production_date': adapter.get_production_date(entry),
                 'production_date_formatted': formatdate(adapter.get_production_date(entry)),
                 'shift_type': adapter.get_shift_type(entry),
@@ -207,6 +208,9 @@ def get_oee_summary(from_date=None, to_date=None, process_type='Moulding', shift
     total_inspected = sum(row['total_inspected'] for row in oee_data)
     overall_rejection_pct = (total_rejected_pieces / total_inspected * 100) if total_inspected > 0 else 0.0
     
+    # Production efficiency percentage (Produced / Planned * 100)
+    production_efficiency_pct = (total_produced_qty / total_planned_qty * 100) if total_planned_qty > 0 else 0.0
+    
     return {
         'total_records': total_records,
         'avg_availability': round(avg_availability * 100, 2),
@@ -217,7 +221,11 @@ def get_oee_summary(from_date=None, to_date=None, process_type='Moulding', shift
         'total_produced_qty': total_produced_qty,
         'total_good_pieces': total_good_pieces,
         'total_rejected_pieces': total_rejected_pieces,
-        'overall_rejection_pct': round(overall_rejection_pct, 2)
+        'overall_rejection_pct': round(overall_rejection_pct, 2),
+        # Additional metrics for Corrective Action Report
+        'total_planned_pieces': int(total_planned_qty),
+        'total_produced_pieces': int(total_produced_qty),
+        'production_efficiency_pct': round(production_efficiency_pct, 2)
     }
 
 

@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "creation": "2025-10-25 17:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "s_no",
+  "why_question"
+ ],
+ "fields": [
+  {
+   "fieldname": "s_no",
+   "fieldtype": "Int",
+   "label": "S.No",
+   "in_list_view": 1,
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "why_question",
+   "fieldtype": "Small Text",
+   "label": "Why?",
+   "in_list_view": 1,
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "modified": "2025-10-25 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "CAR Why Analysis",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

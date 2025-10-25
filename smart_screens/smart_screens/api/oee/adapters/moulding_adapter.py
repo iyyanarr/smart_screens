@@ -53,7 +53,8 @@ class MouldingAdapter(ProcessAdapter):
                 SUM(mpe.number_of_lifts) as total_production_lifts,
                 SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced,
                 AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime_minutes,
-                mpe.employee_name as operator_name
+                mpe.employee_name as operator_name,
+                GROUP_CONCAT(mpe.name ORDER BY mpe.creation SEPARATOR '|||') as production_entry_names
             FROM `tabMoulding Production Entry` mpe
             LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
@@ -116,6 +117,10 @@ class MouldingAdapter(ProcessAdapter):
         for prod in production_data:
             lot_no = prod['lot_number']
             
+            # Get first production entry name from the comma-separated list
+            production_entry_names = prod.get('production_entry_names', '')
+            first_production_entry = production_entry_names.split('|||')[0] if production_entry_names else f"{prod['production_date']}_{prod['shift_type']}_{lot_no}"
+            
             # Find matching work plan by lot number
             matched_work_plan = None
             if lot_no in work_plan_by_lot:
@@ -124,7 +129,7 @@ class MouldingAdapter(ProcessAdapter):
             if matched_work_plan:
                 # Merge production with work plan data
                 result = {
-                    'name': f"{prod['production_date']}_{prod['shift_type']}_{lot_no}",
+                    'name': first_production_entry,  # Use actual production entry ID
                     'production_date': prod['production_date'],
                     'shift_type': prod['shift_type'],
                     'mould_reference': prod['mould_ref'],
@@ -138,12 +143,13 @@ class MouldingAdapter(ProcessAdapter):
                     # Additional fields for OEE
                     'target_lifts': flt(matched_work_plan.get('target_lifts', 0)),
                     'total_pieces_produced': flt(prod['total_pieces_produced']),
-                    'work_plan_no': matched_work_plan.get('work_plan_no', '')
+                    'work_plan_no': matched_work_plan.get('work_plan_no', ''),
+                    'production_entry_names': production_entry_names  # All related entries
                 }
             else:
                 # No work plan found - use production data only
                 result = {
-                    'name': f"{prod['production_date']}_{prod['shift_type']}_{lot_no}",
+                    'name': first_production_entry,  # Use actual production entry ID
                     'production_date': prod['production_date'],
                     'shift_type': prod['shift_type'],
                     'mould_reference': prod['mould_ref'],
@@ -157,7 +163,8 @@ class MouldingAdapter(ProcessAdapter):
                     # Additional fields for OEE
                     'target_lifts': 0,
                     'total_pieces_produced': flt(prod['total_pieces_produced']),
-                    'work_plan_no': 'No Work Plan'
+                    'work_plan_no': 'No Work Plan',
+                    'production_entry_names': production_entry_names  # All related entries
                 }
             
             final_results.append(result)

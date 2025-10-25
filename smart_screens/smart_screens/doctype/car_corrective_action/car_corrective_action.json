@@ -1,0 +1,78 @@
+{
+ "actions": [],
+ "creation": "2025-10-25 17:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "s_no",
+  "corrective_action",
+  "scan_operator",
+  "target_date",
+  "column_break_1",
+  "status",
+  "completion_date",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "s_no",
+   "fieldtype": "Int",
+   "label": "S.No",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "corrective_action",
+   "fieldtype": "Small Text",
+   "label": "Corrective Action",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "scan_operator",
+   "fieldtype": "Link",
+   "label": "Scan Operator",
+   "options": "User",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "target_date",
+   "fieldtype": "Date",
+   "label": "Target Date",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nIn Progress\nCompleted",
+   "default": "Pending"
+  },
+  {
+   "fieldname": "completion_date",
+   "fieldtype": "Date",
+   "label": "Completion Date"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "istable": 1,
+ "modified": "2025-10-25 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "CAR Corrective Action",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

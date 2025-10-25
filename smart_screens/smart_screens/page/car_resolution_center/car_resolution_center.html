@@ -1,0 +1,269 @@
+<div class="car-resolution-center">
+    <!-- Header Section -->
+    <div class="car-header">
+        <div class="car-header-left">
+            <h2 class="car-title">
+                <i class="fa fa-clipboard-check"></i>
+                <span id="car-document-name">CAR Resolution Center</span>
+            </h2>
+            <div class="car-breadcrumb">
+                <span class="breadcrumb-item" id="car-breadcrumb"></span>
+            </div>
+        </div>
+        <div class="car-header-right">
+            <div class="car-progress-container">
+                <div class="progress-label">
+                    <span id="progress-text">0 of 0 Resolved</span>
+                    <span class="progress-percentage" id="progress-percentage">0%</span>
+                </div>
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar" id="resolution-progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="car-content-wrapper">
+        <!-- Left Panel: Records List -->
+        <div class="car-left-panel">
+            <div class="panel-header">
+                <h3>
+                    <i class="fa fa-list-ul"></i>
+                    Unresolved Records
+                </h3>
+                <div class="filter-controls">
+                    <button class="btn btn-xs btn-default filter-btn" id="filter-all">
+                        All <span class="badge" id="badge-all">0</span>
+                    </button>
+                    <button class="btn btn-xs btn-warning filter-btn" id="filter-pending">
+                        Pending <span class="badge badge-warning" id="badge-pending">0</span>
+                    </button>
+                    <button class="btn btn-xs btn-success filter-btn" id="filter-resolved">
+                        Resolved <span class="badge badge-success" id="badge-resolved">0</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="records-list" id="records-list">
+                <!-- Records will be dynamically loaded here -->
+                <div class="empty-state" id="empty-state">
+                    <i class="fa fa-inbox fa-3x"></i>
+                    <p>No CAR selected</p>
+                    <small>Please select a CAR document to view records</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Resolution Form -->
+        <div class="car-right-panel">
+            <div class="resolution-form-container" id="resolution-form-container">
+                <!-- Empty State -->
+                <div class="resolution-empty-state" id="resolution-empty-state">
+                    <i class="fa fa-hand-pointer-o fa-4x"></i>
+                    <h3>Select a Record to Resolve</h3>
+                    <p>Choose an unresolved production record from the left panel to start root cause analysis</p>
+                </div>
+
+                <!-- Resolution Form -->
+                <div class="resolution-form" id="resolution-form" style="display: none;">
+                    <!-- Production Info Card -->
+                    <div class="info-card">
+                        <div class="card-header">
+                            <h4><i class="fa fa-industry"></i> Production Information</h4>
+                            <div class="status-badge" id="record-status-badge">
+                                <span class="badge badge-warning">Pending</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <label>Production Entry</label>
+                                    <span id="info-production-entry">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Date</label>
+                                    <span id="info-production-date">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Shift</label>
+                                    <span id="info-shift">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Operator</label>
+                                    <span id="info-operator">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Machine/Press</label>
+                                    <span id="info-machine">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Item Code</label>
+                                    <span id="info-item-code">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Lot Number</label>
+                                    <span id="info-lot">-</span>
+                                </div>
+                            </div>
+
+                            <!-- Performance Metrics -->
+                            <div class="metrics-grid">
+                                <div class="metric-card metric-danger">
+                                    <label>OEE %</label>
+                                    <div class="metric-value" id="metric-oee">0%</div>
+                                </div>
+                                <div class="metric-card metric-warning">
+                                    <label>Production Efficiency %</label>
+                                    <div class="metric-value" id="metric-efficiency">0%</div>
+                                </div>
+                                <div class="metric-card metric-info">
+                                    <label>Rejection %</label>
+                                    <div class="metric-value" id="metric-rejection">0%</div>
+                                </div>
+                                <div class="metric-card">
+                                    <label>Target Qty</label>
+                                    <div class="metric-value" id="metric-target">0</div>
+                                </div>
+                                <div class="metric-card">
+                                    <label>Actual Qty</label>
+                                    <div class="metric-value" id="metric-actual">0</div>
+                                </div>
+                                <div class="metric-card metric-primary">
+                                    <label>Variance</label>
+                                    <div class="metric-value" id="metric-variance">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Root Cause Analysis Form -->
+                    <div class="info-card rca-card">
+                        <div class="card-header">
+                            <h4><i class="fa fa-search"></i> Root Cause Analysis</h4>
+                        </div>
+                        <div class="card-body">
+                            <!-- Reason Code -->
+                            <div class="form-group">
+                                <label class="required">Reason Code</label>
+                                <select class="form-control" id="reason-code" required>
+                                    <option value="">Select Reason Code</option>
+                                    <option value="COMPOUND SHORTAGE">COMPOUND SHORTAGE</option>
+                                    <option value="MACHINE BREAKDOWN">MACHINE BREAKDOWN</option>
+                                    <option value="MLD CHANGE">MLD CHANGE</option>
+                                    <option value="MLD WASH / CLEAN">MLD WASH / CLEAN</option>
+                                    <option value="OPERATOR ISSUE">OPERATOR ISSUE</option>
+                                    <option value="PLANNING">PLANNING</option>
+                                    <option value="QUALITY ISSUE">QUALITY ISSUE</option>
+                                    <option value="TRIAL">TRIAL</option>
+                                    <option value="COMPOUND ISSUE">COMPOUND ISSUE</option>
+                                    <option value="SHELL SHORTAGE">SHELL SHORTAGE</option>
+                                    <option value="SHELL QUALITY ISSUE">SHELL QUALITY ISSUE</option>
+                                    <option value="OPERATOR DELAY">OPERATOR DELAY</option>
+                                    <option value="LOADING PLATE NOT AVAILABLE">LOADING PLATE NOT AVAILABLE</option>
+                                    <option value="MOULD ISSUE">MOULD ISSUE</option>
+                                </select>
+                            </div>
+
+                            <!-- Problem Description -->
+                            <div class="form-group">
+                                <label class="required">Problem Description</label>
+                                <textarea class="form-control" id="problem-description" rows="3" 
+                                    placeholder="Describe the problem in detail..." required></textarea>
+                            </div>
+
+                            <!-- 5-Why Analysis -->
+                            <div class="why-analysis-section">
+                                <h5><i class="fa fa-question-circle"></i> 5-Why Analysis</h5>
+                                <div class="why-questions" id="why-questions">
+                                    <div class="why-item">
+                                        <label>Why 1?</label>
+                                        <input type="text" class="form-control why-input" data-why-no="1" 
+                                            placeholder="Why did this problem occur?" required>
+                                    </div>
+                                    <div class="why-item">
+                                        <label>Why 2?</label>
+                                        <input type="text" class="form-control why-input" data-why-no="2" 
+                                            placeholder="Why did that happen?" required>
+                                    </div>
+                                    <div class="why-item">
+                                        <label>Why 3?</label>
+                                        <input type="text" class="form-control why-input" data-why-no="3" 
+                                            placeholder="Why did that occur?" required>
+                                    </div>
+                                    <div class="why-item">
+                                        <label>Why 4?</label>
+                                        <input type="text" class="form-control why-input" data-why-no="4" 
+                                            placeholder="Why was that the case?" required>
+                                    </div>
+                                    <div class="why-item">
+                                        <label>Why 5?</label>
+                                        <input type="text" class="form-control why-input" data-why-no="5" 
+                                            placeholder="Why did the root cause exist?" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Root Cause -->
+                            <div class="form-group">
+                                <label class="required">Root Cause</label>
+                                <textarea class="form-control" id="root-cause" rows="3" 
+                                    placeholder="Based on the 5-Why analysis, what is the root cause?" required></textarea>
+                            </div>
+
+                            <!-- Corrective Actions -->
+                            <div class="corrective-actions-section">
+                                <div class="section-header">
+                                    <h5><i class="fa fa-wrench"></i> Corrective Action Plan</h5>
+                                    <button class="btn btn-sm btn-success" id="add-action-btn">
+                                        <i class="fa fa-plus"></i> Add Action
+                                    </button>
+                                </div>
+                                <div class="actions-table-wrapper">
+                                    <table class="table table-bordered actions-table" id="actions-table">
+                                        <thead>
+                                            <tr>
+                                                <th width="5%">#</th>
+                                                <th width="40%">Corrective Action</th>
+                                                <th width="20%">Responsible</th>
+                                                <th width="15%">Target Date</th>
+                                                <th width="15%">Status</th>
+                                                <th width="5%"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="actions-tbody">
+                                            <!-- Actions will be added dynamically -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Additional Details -->
+                            <div class="form-group">
+                                <label>Additional Remarks</label>
+                                <textarea class="form-control" id="remarks" rows="2" 
+                                    placeholder="Any additional information..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button class="btn btn-default" id="btn-previous">
+                            <i class="fa fa-arrow-left"></i> Previous
+                        </button>
+                        <button class="btn btn-primary" id="btn-save">
+                            <i class="fa fa-save"></i> Save Draft
+                        </button>
+                        <button class="btn btn-success" id="btn-resolve">
+                            <i class="fa fa-check"></i> Mark as Resolved
+                        </button>
+                        <button class="btn btn-info" id="btn-save-next">
+                            <i class="fa fa-arrow-right"></i> Save & Next
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

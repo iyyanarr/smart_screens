@@ -155,10 +155,166 @@ function loadData() {
 }
 
 function updateSummaryCards(summary) {
-    document.getElementById('avg-availability').textContent = summary.avg_availability + '%';
-    document.getElementById('avg-performance').textContent = summary.avg_performance + '%';
-    document.getElementById('avg-quality').textContent = summary.avg_quality + '%';
-    document.getElementById('avg-oee').textContent = summary.avg_oee + '%';
+    // Update inline header metrics
+    document.getElementById('avg-availability-inline').textContent = summary.avg_availability + '%';
+    document.getElementById('avg-performance-inline').textContent = summary.avg_performance + '%';
+    document.getElementById('avg-quality-inline').textContent = summary.avg_quality + '%';
+    document.getElementById('avg-oee-inline').textContent = summary.avg_oee + '%';
+    
+    // Update CAR metrics in table header
+    document.getElementById('car-total-planned').textContent = summary.total_planned_pieces || 0;
+    document.getElementById('car-total-produced').textContent = summary.total_produced_pieces || 0;
+    document.getElementById('car-production-eff').textContent = (summary.production_efficiency_pct || 0) + '%';
+}
+
+function generateCorrectiveActionReport() {
+    // Validate date range
+    const fromDate = document.getElementById('from_date').value;
+    const toDate = document.getElementById('to_date').value;
+    
+    if (!fromDate || !toDate) {
+        frappe.msgprint('Please select From Date and To Date');
+        return;
+    }
+    
+    // Check if there's any data to process
+    if (!currentData || currentData.length === 0) {
+        frappe.msgprint('No production records found. Please apply filters and load data first.');
+        return;
+    }
+    
+    // Get current filters
+    const shiftFilter = document.getElementById('shift_filter').value;
+    const machineFilter = document.getElementById('machine_filter').value;
+    const itemFilter = document.getElementById('item_filter').value;
+    
+    // Prepare production records data with all necessary fields
+    const production_records = currentData.map(row => ({
+        name: row.name,
+        production_date: row.production_date,
+        shift_type: row.shift_type || '',
+        operator_name: row.operator_name || '',
+        machine_reference: row.machine_reference || '',
+        item_code: row.item_code || '',
+        lot_number: row.lot_number || '',
+        target_quantity: row.target_quantity || 0,
+        actual_quantity: row.actual_quantity || 0,
+        variance_qty: (row.actual_quantity || 0) - (row.target_quantity || 0),
+        oee_pct: row.oee_pct || 0,
+        production_efficiency_pct: row.target_quantity > 0 ? ((row.actual_quantity / row.target_quantity) * 100) : 0,
+        rejection_percentage: row.rejection_percentage || 0,
+        availability_pct: row.availability_pct || 0,
+        performance_pct: row.performance_pct || 0,
+        quality_pct: row.quality_pct || 0
+    }));
+    
+    // Count how many records meet the criteria (OEE < 90% OR Production Efficiency < 100%)
+    const eligibleRecords = production_records.filter(record => 
+        record.oee_pct < 90 || record.production_efficiency_pct < 100
+    );
+    
+    if (eligibleRecords.length === 0) {
+        frappe.msgprint({
+            title: 'No Records Meet Criteria',
+            message: 'No production records found with:<br><strong>OEE < 90%</strong> OR <strong>Production Efficiency < 100%</strong>',
+            indicator: 'orange'
+        });
+        return;
+    }
+    
+    // Calculate average metrics for display
+    const avgOEE = (eligibleRecords.reduce((sum, r) => sum + r.oee_pct, 0) / eligibleRecords.length).toFixed(2);
+    const avgEfficiency = (eligibleRecords.reduce((sum, r) => sum + r.production_efficiency_pct, 0) / eligibleRecords.length).toFixed(2);
+    
+    // Confirm with user
+    frappe.confirm(
+        `<div class="car-confirmation">
+            <h5>Generate Corrective Action Report (CAR)?</h5>
+            <hr>
+            <div class="row">
+                <div class="col-6">
+                    <strong>Total Records:</strong> ${eligibleRecords.length}
+                </div>
+                <div class="col-6">
+                    <strong>Avg OEE:</strong> ${avgOEE}%
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-6">
+                    <strong>Date Range:</strong> ${frappe.datetime.str_to_user(fromDate)} to ${frappe.datetime.str_to_user(toDate)}
+                </div>
+                <div class="col-6">
+                    <strong>Avg Efficiency:</strong> ${avgEfficiency}%
+                </div>
+            </div>
+            <hr>
+            <p class="text-muted"><small>CAR will be created for all records with <strong>OEE < 90%</strong> OR <strong>Production Efficiency < 100%</strong></small></p>
+        </div>`,
+        () => {
+            // Show loading indicator
+            showLoading();
+            
+            // Call backend to generate CAR
+            frappe.call({
+                method: 'smart_screens.smart_screens.doctype.corrective_action_unresolved.corrective_action_unresolved.generate_car_from_oee_dashboard',
+                args: {
+                    filters: {
+                        from_date: fromDate,
+                        to_date: toDate,
+                        shift_filter: shiftFilter,
+                        machine_filter: machineFilter,
+                        item_filter: itemFilter,
+                        production_records: production_records
+                    }
+                },
+                callback: function(r) {
+                    hideLoading();
+                    if (r.message) {
+                        const car_name = r.message;
+                        
+                        // Show success message with action buttons
+                        frappe.msgprint({
+                            title: '✅ CAR Created Successfully!',
+                            message: `
+                                <div class="car-success">
+                                    <p><strong>CAR Document:</strong> <a href="/app/corrective-action-unresolved/${car_name}" target="_blank">${car_name}</a></p>
+                                    <p><strong>Total Records:</strong> ${eligibleRecords.length}</p>
+                                    <p><strong>Status:</strong> <span class="badge badge-warning">Pending Resolution</span></p>
+                                    <hr>
+                                    <p class="text-muted"><small>Use the <strong>CAR Resolution Center</strong> to resolve each record with root cause analysis and corrective actions.</small></p>
+                                </div>
+                            `,
+                            indicator: 'green',
+                            primary_action: {
+                                label: 'Open Resolution Center',
+                                action: function() {
+                                    frappe.set_route('car_resolution_center', {car: car_name});
+                                }
+                            },
+                            secondary_action: {
+                                label: 'View CAR Document',
+                                action: function() {
+                                    frappe.set_route('Form', 'Corrective Action Unresolved', car_name);
+                                }
+                            }
+                        });
+                        
+                        // Reload the table to show updated data
+                        loadData();
+                    }
+                },
+                error: function(err) {
+                    hideLoading();
+                    console.error('Error generating CAR:', err);
+                    frappe.msgprint({
+                        title: 'Error',
+                        message: err.message || 'Failed to generate Corrective Action Report. Please try again.',
+                        indicator: 'red'
+                    });
+                }
+            });
+        }
+    );
 }
 
 function updateTable(data) {
@@ -293,7 +449,7 @@ function initializeTableSorting() {
                 if (currentSort.direction === 'asc') {
                     return aVal > bVal ? 1 : -1;
                 } else {
-                    return aVal < bVal ? 1 : -1;
+                    return aVal < bVal ? -1 : 1;
                 }
             });
             

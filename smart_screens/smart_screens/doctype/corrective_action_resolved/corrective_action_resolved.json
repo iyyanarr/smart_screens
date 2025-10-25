@@ -1,0 +1,329 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2025-10-25 17:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "reference_section",
+  "parent_car_unresolved",
+  "production_entry",
+  "column_break_ref",
+  "production_date",
+  "resolved_date",
+  "resolved_by",
+  "production_data_section",
+  "shift_type",
+  "operator_name",
+  "machine_reference",
+  "item_code",
+  "lot_number",
+  "column_break_prod",
+  "target_quantity",
+  "actual_quantity",
+  "variance_qty",
+  "oee_pct",
+  "production_efficiency_pct",
+  "rejection_percentage",
+  "root_cause_section",
+  "reason_code",
+  "problem_description",
+  "why_analysis_section",
+  "why_analysis",
+  "root_cause",
+  "corrective_actions_section",
+  "corrective_actions",
+  "tracking_section",
+  "scan_operator",
+  "target_date",
+  "column_break_tracking",
+  "status",
+  "completion_date",
+  "remarks_section",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CAR-RESOLVED-.YYYY.-",
+   "set_only_once": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "parent_car_unresolved",
+   "fieldtype": "Link",
+   "label": "Parent CAR",
+   "options": "Corrective Action Unresolved",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "production_entry",
+   "fieldtype": "Link",
+   "label": "Moulding Production Entry",
+   "options": "Moulding Production Entry",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "production_date",
+   "fieldtype": "Date",
+   "label": "Production Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_date",
+   "fieldtype": "Date",
+   "label": "Resolved Date",
+   "default": "Today",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Resolved By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "production_data_section",
+   "fieldtype": "Section Break",
+   "label": "Production Data",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "shift_type",
+   "fieldtype": "Data",
+   "label": "Shift Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operator_name",
+   "fieldtype": "Data",
+   "label": "Operator Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "machine_reference",
+   "fieldtype": "Data",
+   "label": "Machine/Press",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item Code",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lot_number",
+   "fieldtype": "Data",
+   "label": "Lot Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_prod",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_quantity",
+   "fieldtype": "Float",
+   "label": "Target Quantity",
+   "read_only": 1,
+   "precision": 0
+  },
+  {
+   "fieldname": "actual_quantity",
+   "fieldtype": "Float",
+   "label": "Actual Quantity",
+   "read_only": 1,
+   "precision": 0
+  },
+  {
+   "fieldname": "variance_qty",
+   "fieldtype": "Float",
+   "label": "Variance",
+   "read_only": 1,
+   "precision": 0
+  },
+  {
+   "fieldname": "oee_pct",
+   "fieldtype": "Percent",
+   "label": "OEE %",
+   "read_only": 1,
+   "precision": 2,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "production_efficiency_pct",
+   "fieldtype": "Percent",
+   "label": "Production Efficiency %",
+   "read_only": 1,
+   "precision": 2
+  },
+  {
+   "fieldname": "rejection_percentage",
+   "fieldtype": "Percent",
+   "label": "Rejection %",
+   "read_only": 1,
+   "precision": 2
+  },
+  {
+   "fieldname": "root_cause_section",
+   "fieldtype": "Section Break",
+   "label": "Root Cause Analysis"
+  },
+  {
+   "fieldname": "reason_code",
+   "fieldtype": "Select",
+   "label": "Reason Code",
+   "options": "COMPOUND SHORTAGE\nMACHINE BREAKDOWN\nMLD CHANGE\nMLD WASH / CLEAN\nOPERATOR ISSUE\nPLANNING\nQUALITY ISSUE\nTRIAL\nCOMPOUND ISSUE\nSHELL SHORTAGE\nSHELL QUALITY ISSUE\nOPERATOR DELAY\nLOADING PLATE NOT AVAILABLE\nMOULD ISSUE",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "problem_description",
+   "fieldtype": "Text Editor",
+   "label": "Problem Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "why_analysis_section",
+   "fieldtype": "Section Break",
+   "label": "Why-Why Analysis"
+  },
+  {
+   "fieldname": "why_analysis",
+   "fieldtype": "Table",
+   "label": "Why Analysis (5 Rows Mandatory)",
+   "options": "CAR Why Analysis",
+   "reqd": 1
+  },
+  {
+   "fieldname": "root_cause",
+   "fieldtype": "Text Editor",
+   "label": "Root Cause",
+   "reqd": 1
+  },
+  {
+   "fieldname": "corrective_actions_section",
+   "fieldtype": "Section Break",
+   "label": "Corrective Action Plan"
+  },
+  {
+   "fieldname": "corrective_actions",
+   "fieldtype": "Table",
+   "label": "Corrective Actions",
+   "options": "CAR Corrective Action",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tracking_section",
+   "fieldtype": "Section Break",
+   "label": "Tracking"
+  },
+  {
+   "fieldname": "scan_operator",
+   "fieldtype": "Link",
+   "label": "Scan Operator (Responsible)",
+   "options": "User"
+  },
+  {
+   "fieldname": "target_date",
+   "fieldtype": "Date",
+   "label": "Target Completion Date"
+  },
+  {
+   "fieldname": "column_break_tracking",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Resolved\nVerified\nClosed",
+   "default": "Resolved",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "completion_date",
+   "fieldtype": "Date",
+   "label": "Actual Completion Date"
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Text Editor",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Corrective Action Resolved",
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2025-10-25 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Corrective Action Resolved",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2025-10-25 16:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "report_info_section",
+  "report_date",
+  "from_date",
+  "to_date",
+  "column_break_filters",
+  "shift_filter",
+  "machine_filter",
+  "item_filter",
+  "operator_filter",
+  "production_records_section",
+  "unresolved_production_records",
+  "summary_section",
+  "total_records",
+  "resolved_records",
+  "pending_records",
+  "column_break_summary",
+  "resolution_progress_pct",
+  "status",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CAR-UNRESOLVED-.YYYY.-",
+   "set_only_once": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "report_info_section",
+   "fieldtype": "Section Break",
+   "label": "Report Information"
+  },
+  {
+   "fieldname": "report_date",
+   "fieldtype": "Date",
+   "label": "Report Generated Date",
+   "default": "Today",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_filters",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shift_filter",
+   "fieldtype": "Data",
+   "label": "Shift Filter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "machine_filter",
+   "fieldtype": "Data",
+   "label": "Machine Filter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_filter",
+   "fieldtype": "Data",
+   "label": "Item Filter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operator_filter",
+   "fieldtype": "Data",
+   "label": "Operator Filter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "production_records_section",
+   "fieldtype": "Section Break",
+   "label": "Low OEE Production Records"
+  },
+  {
+   "fieldname": "unresolved_production_records",
+   "fieldtype": "Table",
+   "label": "Unresolved Production Records",
+   "options": "Unresolved Production Record",
+   "reqd": 1
+  },
+  {
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "total_records",
+   "fieldtype": "Int",
+   "label": "Total Records",
+   "read_only": 1,
+   "default": 0
+  },
+  {
+   "fieldname": "resolved_records",
+   "fieldtype": "Int",
+   "label": "Resolved Records",
+   "read_only": 1,
+   "default": 0
+  },
+  {
+   "fieldname": "pending_records",
+   "fieldtype": "Int",
+   "label": "Pending Records",
+   "read_only": 1,
+   "default": 0
+  },
+  {
+   "fieldname": "column_break_summary",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "resolution_progress_pct",
+   "fieldtype": "Percent",
+   "label": "Resolution Progress %",
+   "read_only": 1,
+   "precision": 2
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Progress\nCompleted\nSubmitted",
+   "default": "Draft",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Corrective Action Unresolved",
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-10-25 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Corrective Action Unresolved",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

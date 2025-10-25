@@ -1,0 +1,23 @@
+{
+ "creation": "2025-10-25 18:00:00.000000",
+ "doctype": "Page",
+ "icon": "fa fa-clipboard-check",
+ "idx": 0,
+ "modified": "2025-10-25 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "car_resolution_center",
+ "owner": "Administrator",
+ "page_name": "CAR Resolution Center",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "User"
+  }
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "CAR Resolution Center"
+}
