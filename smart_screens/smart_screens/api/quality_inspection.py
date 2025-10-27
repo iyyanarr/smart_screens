@@ -82,6 +82,75 @@ def create_quality_inspection_workflow(inspection_entry_id):
         }
 
 @frappe.whitelist()
+def complete_final_visual_inspection_workflow(lot_no, inspector_id, inspected_qty, rejected_qty, rejection_items=None, warehouse=None):
+    """
+    Direct workflow completion for Final Visual Inspection
+    Called from frontend when user wants to create inspection entry and complete workflow in one step
+    This bypasses duplicate SPP Inspection Entry creation
+    
+    Args:
+        lot_no: Sub-lot number
+        inspector_id: Inspector employee ID
+        inspected_qty: Quantity inspected
+        rejected_qty: Total rejected quantity
+        rejection_items: List of rejection items with defect types and quantities
+        warehouse: Warehouse for inspection (optional)
+    
+    Returns:
+        {
+            "status": "success",
+            "message": "Final visual inspection workflow completed",
+            "data": {
+                "inspection_entry": "INSP-0001",
+                "job_cards_completed": ["JOB-0001"],
+                "stock_entries_created": ["STE-0001", "STE-0002"],
+                "work_order_completed": True
+            }
+        }
+    """
+    try:
+        # Parse rejection_items if it's a JSON string
+        if isinstance(rejection_items, str):
+            rejection_items = json.loads(rejection_items)
+        if rejection_items is None:
+            rejection_items = []
+        
+        frappe.logger().info("="*80)
+        frappe.logger().info("🔍 DIRECT FINAL VISUAL INSPECTION WORKFLOW")
+        frappe.logger().info("="*80)
+        frappe.logger().info(f"📥 Lot: {lot_no}, Inspector: {inspector_id}")
+        frappe.logger().info(f"📊 Inspected: {inspected_qty}, Rejected: {rejected_qty}")
+        frappe.logger().info(f"📋 Rejection Items: {len(rejection_items)}")
+        
+        # Prepare data for the main workflow
+        data = {
+            "lot_no": lot_no,
+            "inspector_id": inspector_id,
+            "inspected_qty": flt(inspected_qty),
+            "rejected_qty": flt(rejected_qty),
+            "rejection_items": rejection_items
+        }
+        
+        # Call the main quality inspection workflow
+        result = complete_quality_inspection(data)
+        
+        if result.get("status") == "success":
+            frappe.logger().info("✅ Direct workflow completed successfully")
+            return result
+        else:
+            frappe.logger().error(f"❌ Workflow failed: {result.get('message')}")
+            return result
+        
+    except Exception as e:
+        frappe.logger().error(f"❌ Error in direct workflow: {str(e)}")
+        import traceback
+        frappe.logger().error(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": f"Failed to complete direct workflow: {str(e)}"
+        }
+
+@frappe.whitelist()
 def complete_quality_inspection(data):
     """
     Main API endpoint called from frontend after quality inspection is done
