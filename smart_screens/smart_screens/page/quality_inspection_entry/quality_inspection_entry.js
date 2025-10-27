@@ -710,7 +710,7 @@ class QualityInspectionPage {
                     scan_inspector: this.inspector_details.employee.name,
                     inspector_code: this.inspector_details.employee.name,
                     inspector_name: this.inspector_details.employee.employee_name,
-                    scan_production_lot: this.sublot_details.sublot_number,
+                    scan_production_lot: this.sublot_details.batch,  // ✅ FIXED: Use parent batch number
                     lot_no: this.sublot_details.sublot_number,
                     product_ref_no: this.sublot_details.item_code,
                     batch_no: this.sublot_details.sublot_batch || this.sublot_details.batch,
