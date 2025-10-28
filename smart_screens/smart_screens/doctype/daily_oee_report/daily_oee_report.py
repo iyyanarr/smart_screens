@@ -9,12 +9,30 @@ class DailyOEEReport(Document):
     Provides summary statistics for daily OEE performance
     """
     
+    def autoname(self):
+        """Set document name with production date"""
+        if self.production_date:
+            # Format: DAILY-OEE-2025-10-28-00001
+            date_part = getdate(self.production_date).strftime("%Y-%m-%d")
+            self.name = f"DAILY-OEE-{date_part}-.###"
+        else:
+            # Fallback if no production date
+            self.name = "DAILY-OEE-.####"
+    
     def validate(self):
         """Validation on save"""
+        # Validate production date is required
+        if not self.production_date:
+            frappe.throw("Production Date is required")
+        
         # Validate production date
         if self.production_date:
             if getdate(self.production_date) > getdate():
                 frappe.throw("Production Date cannot be in the future")
+        
+        # Set report_date if not set
+        if not self.report_date:
+            self.report_date = frappe.utils.today()
         
         # Calculate summary fields
         self.calculate_summary()
