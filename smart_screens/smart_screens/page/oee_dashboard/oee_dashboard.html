@@ -1,13 +1,13 @@
 <div class="oee-dashboard-container">
-    <!-- Compact Header with Actions -->
+    <!-- Header -->
     <div class="page-header">
         <div class="row align-items-center">
             <div class="col-md-6">
-                <h4 class="mb-0">📊 OEE Dashboard</h4>
+                <h4 class="mb-0">📊 OEE Report Generator</h4>
                 <small class="text-muted">Overall Equipment Effectiveness Analysis</small>
             </div>
             <div class="col-md-6 text-right">
-                <!-- Summary Metrics Inline -->
+                <!-- Summary Metrics -->
                 <span class="metric-badge">
                     <small>Availability:</small> <strong id="avg-availability-inline">0%</strong>
                 </span>
@@ -24,63 +24,50 @@
         </div>
     </div>
 
-    <!-- Toolbar with Filters and Actions -->
+    <!-- Filters Section -->
     <div class="toolbar-section card">
         <div class="card-body py-2">
-            <div class="row align-items-center">
-                <!-- Compact Filters -->
-                <div class="col-md-9">
-                    <div class="d-flex flex-wrap align-items-center">
-                        <div class="filter-item">
-                            <label>From</label>
-                            <input type="date" id="from_date" class="form-control form-control-sm">
-                        </div>
-                        <div class="filter-item">
-                            <label>To</label>
-                            <input type="date" id="to_date" class="form-control form-control-sm">
-                        </div>
-                        <div class="filter-item">
-                            <label>Process</label>
-                            <select id="process_filter" class="form-control form-control-sm">
-                                <option value="Moulding">Moulding</option>
-                            </select>
-                        </div>
-                        <div class="filter-item">
-                            <label>Shift</label>
-                            <select id="shift_filter" class="form-control form-control-sm">
-                                <option value="all">All Shifts</option>
-                            </select>
-                        </div>
-                        <div class="filter-item">
-                            <label>Machine</label>
-                            <input type="text" id="machine_filter" class="form-control form-control-sm" placeholder="Machine...">
-                        </div>
-                        <div class="filter-item">
-                            <label>Lot</label>
-                            <input type="text" id="lot_filter" class="form-control form-control-sm" placeholder="Lot...">
-                        </div>
-                        <div class="filter-item">
-                            <label>Item</label>
-                            <input type="text" id="item_filter" class="form-control form-control-sm" placeholder="Item...">
-                        </div>
-                        <div class="filter-item">
-                            <button class="btn btn-primary btn-sm" onclick="applyFilters()">
-                                <i class="fa fa-filter"></i> Apply
-                            </button>
-                        </div>
+            <div class="d-flex align-items-end justify-content-between flex-wrap">
+                <div class="d-flex align-items-end flex-wrap flex-grow-1">
+                    <div class="filter-item">
+                        <label>Production Date</label>
+                        <input type="date" id="production_date" class="form-control form-control-sm">
+                    </div>
+                    <div class="filter-item">
+                        <label>Process</label>
+                        <select id="process_filter" class="form-control form-control-sm">
+                            <option value="Moulding">Moulding</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label>Shift</label>
+                        <select id="shift_filter" class="form-control form-control-sm">
+                            <option value="all">All Shifts</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label>Machine</label>
+                        <input type="text" id="machine_filter" class="form-control form-control-sm" placeholder="Machine...">
+                    </div>
+                    <div class="filter-item">
+                        <button class="btn btn-primary btn-sm" id="generate-report-btn" onclick="generateReport()" style="margin-bottom: 0;">
+                            <i class="fa fa-file-text"></i> Generate Report
+                        </button>
+                    </div>
+                    <div class="filter-item" id="report-action-buttons" style="display: none;">
+                        <button class="btn btn-success btn-sm" id="submit-report-btn" onclick="submitReport()" style="margin-bottom: 0; margin-right: 8px;">
+                            <i class="fa fa-check"></i> Submit Report
+                        </button>
+                        <button class="btn btn-info btn-sm" id="save-report-btn" onclick="saveReport()" style="margin-bottom: 0;">
+                            <i class="fa fa-save"></i> Save Report
+                        </button>
                     </div>
                 </div>
                 
                 <!-- Action Buttons -->
-                <div class="col-md-3 text-right">
-                    <button class="btn btn-warning btn-sm" onclick="generateCorrectiveActionReport()" title="Generate Corrective Action Report">
-                        <i class="fa fa-file-text-o"></i> CAR
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="refreshData()">
-                        <i class="fa fa-refresh"></i>
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="exportData()">
-                        <i class="fa fa-download"></i>
+                <div class="d-flex align-items-end flex-wrap" style="gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()">
+                        <i class="fa fa-refresh"></i> Refresh
                     </button>
                 </div>
             </div>
@@ -90,20 +77,7 @@
     <!-- Data Table Section -->
     <div class="table-section card">
         <div class="card-header py-2">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <h6 class="mb-0">Production Records</h6>
-                </div>
-                <div class="col-md-6 text-right">
-                    <small class="text-muted">
-                        <span id="car-metrics">
-                            Planned: <strong id="car-total-planned">0</strong> | 
-                            Produced: <strong id="car-total-produced">0</strong> | 
-                            Efficiency: <strong id="car-production-eff">0%</strong>
-                        </span>
-                    </small>
-                </div>
-            </div>
+            <h6 class="mb-0">Production Records</h6>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -129,25 +103,22 @@
                                 Lot <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="text-right sortable" data-column="actual_quantity" data-type="number">
-                                PL <i class="fa fa-sort sort-icon"></i>
+                                Quantity <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="text-right sortable" data-column="target_quantity" data-type="number">
-                                TL <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="availability_pct" data-type="number">
+                                Availability % <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="text-right sortable" data-column="no_of_cavities" data-type="number">
-                                Cavities <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="performance_pct" data-type="number">
+                                Performance % <i class="fa fa-sort sort-icon"></i>
                             </th>
-                            <th class="text-right sortable" data-column="cycle_time_seconds" data-type="number">
-                                Cycle (s) <i class="fa fa-sort sort-icon"></i>
-                            </th>
-                            <th class="text-right sortable" data-column="variance_qty" data-type="number">
-                                Var <i class="fa fa-sort sort-icon"></i>
-                            </th>
-                            <th class="text-right sortable" data-column="rejection_percentage" data-type="number">
-                                Rej % <i class="fa fa-sort sort-icon"></i>
+                            <th class="text-right sortable" data-column="quality_pct" data-type="number">
+                                Quality % <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="text-right sortable" data-column="oee_pct" data-type="number">
                                 <strong>OEE %</strong> <i class="fa fa-sort sort-icon"></i>
+                            </th>
+                            <th class="text-center">
+                                Action
                             </th>
                         </tr>
                     </thead>
@@ -159,114 +130,68 @@
         </div>
     </div>
 
-    <!-- OEE Drill-Down Modal -->
-    <div class="modal fade" id="oeeDetailModal" tabindex="-1" role="dialog" aria-labelledby="oeeDetailModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="oeeDetailModalLabel">OEE Breakdown Details</h5>
-                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-8">
-                            <h6><strong>Production Details</strong></h6>
-                            <p class="mb-1"><small><strong>Date:</strong> <span id="modal-date"></span></small></p>
-                            <p class="mb-1"><small><strong>Shift:</strong> <span id="modal-shift"></span></small></p>
-                            <p class="mb-1"><small><strong>Lot:</strong> <span id="modal-lot"></span></small></p>
-                            <p class="mb-1"><small><strong>Item:</strong> <span id="modal-item"></span></small></p>
-                            <p class="mb-1"><small><strong>Operator:</strong> <span id="modal-operator"></span></small></p>
-                        </div>
-                        <div class="col-md-4">
-                            <h6><strong>OEE Score</strong></h6>
-                            <div class="text-center">
-                                <h2 id="modal-oee-score" style="color: #28a745;"><strong>0%</strong></h2>
-                                <small class="text-muted">Overall Equipment Effectiveness</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <!-- Availability Section -->
-                    <div class="row mb-4">
-                        <div class="col-md-12">
-                            <h6 class="bg-light p-2"><i class="fa fa-clock-o"></i> <strong>Availability</strong></h6>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h4 id="modal-availability-pct" class="text-primary">0%</h4>
-                                    <small>Availability %</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <p class="mb-1"><small><strong>Planned Time:</strong> <span id="modal-planned-time">450</span> min</small></p>
-                            <p class="mb-1"><small><strong>Downtime:</strong> <span id="modal-downtime">0</span> min</small></p>
-                            <p class="mb-1"><small><strong>Available Time:</strong> <span id="modal-available-time">450</span> min</small></p>
-                            <p class="mb-1"><small><strong>Formula:</strong> (450 - Downtime) / 450</small></p>
-                        </div>
-                    </div>
-
-                    <!-- Performance Section -->
-                    <div class="row mb-4">
-                        <div class="col-md-12">
-                            <h6 class="bg-light p-2"><i class="fa fa-tachometer"></i> <strong>Performance</strong></h6>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h4 id="modal-performance-pct" class="text-info">0%</h4>
-                                    <small>Performance %</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <p class="mb-1"><small><strong>Cycle Time:</strong> <span id="modal-cycle-time">0</span> sec/piece</small></p>
-                            <p class="mb-1"><small><strong>Actual Qty:</strong> <span id="modal-actual-qty">0</span> pieces</small></p>
-                            <p class="mb-1"><small><strong>Available Time:</strong> <span id="modal-perf-available-time">450</span> min</small></p>
-                            <p class="mb-1"><small><strong>Formula:</strong> (Cycle Time × Actual) / (Available Time × 60)</small></p>
-                        </div>
-                    </div>
-
-                    <!-- Quality Section -->
-                    <div class="row mb-4">
-                        <div class="col-md-12">
-                            <h6 class="bg-light p-2"><i class="fa fa-star"></i> <strong>Quality</strong></h6>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h4 id="modal-quality-pct" class="text-warning">0%</h4>
-                                    <small>Quality %</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <p class="mb-1"><small><strong>Good Pieces:</strong> <span id="modal-good-pieces">0</span></small></p>
-                            <p class="mb-1"><small><strong>Total Inspected:</strong> <span id="modal-total-inspected">0</span></small></p>
-                            <p class="mb-1"><small><strong>Rejected:</strong> <span id="modal-rejected-pieces">0</span></small></p>
-                            <p class="mb-1"><small><strong>Formula:</strong> Good Pieces / Total Inspected</small></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                </div>
-            </div>
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="text-center py-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
         </div>
+        <p class="mt-2 text-muted">Loading OEE data...</p>
     </div>
 
-    <!-- Loading Indicator -->
-    <div id="loading" class="loading-overlay" style="display: none;">
-        <div class="loading-content">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
+    <!-- No Data Message -->
+    <div id="no-data-message" class="text-center py-5" style="display: none;">
+        <i class="fa fa-search fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No data found</h5>
+        <p class="text-muted">Try adjusting your filters or date range</p>
+    </div>
+
+    <!-- Slide-out Resolution Panel -->
+    <div id="resolution-overlay" style="display:none;"></div>
+    <div id="resolution-panel" class="resolution-panel" aria-hidden="true">
+        <div class="resolution-panel__header">
+            <div>
+                <h5 class="mb-0">Resolve Low OEE Record</h5>
+                <small id="res-prod-summary" class="text-muted">Lot: - | Date: - | Shift: - | OEE: -</small>
             </div>
-            <p class="mt-2">Calculating OEE data...</p>
+            <button id="resolution-close-btn" class="btn btn-sm btn-light" title="Close">✕</button>
+        </div>
+        <div class="resolution-panel__body">
+            <form id="resolution-form">
+                <div class="form-group">
+                    <label for="res-reason-code">Reason Code</label>
+                    <select id="res-reason-code" class="form-control" required>
+                        <option value="">Select Reason</option>
+                        <!-- options will be loaded dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="res-problem">Problem Description</label>
+                    <textarea id="res-problem" class="form-control" rows="2" placeholder="Describe the problem..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="res-corrective">Corrective Action</label>
+                    <textarea id="res-corrective" class="form-control" rows="2" placeholder="Describe corrective action..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-7">
+                        <label for="res-responsible">Responsible Person</label>
+                        <input id="res-responsible" type="text" class="form-control" placeholder="User ID or Name">
+                    </div>
+                    <div class="form-group col-md-5">
+                        <label for="res-target-date">Target Date</label>
+                        <input id="res-target-date" type="date" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group mb-2">
+                    <label for="res-remarks">Remarks</label>
+                    <textarea id="res-remarks" class="form-control" rows="2" placeholder="Additional remarks (optional)"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="resolution-panel__footer">
+            <button id="res-save-draft" class="btn btn-outline-secondary btn-sm">Save Draft</button>
+            <button id="res-save-next" class="btn btn-primary btn-sm">Save & Next</button>
+            <button id="res-cancel" class="btn btn-link btn-sm">Cancel</button>
         </div>
     </div>
 </div>
@@ -281,14 +206,23 @@
 .page-header {
     margin-bottom: 15px;
     padding: 15px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #2c3e50;
     color: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .page-header h4 {
     font-weight: 600;
+    color: white !important;
+}
+
+.page-header small {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.page-header .text-muted {
+    color: rgba(255, 255, 255, 0.85) !important;
 }
 
 .metric-badge {
@@ -335,7 +269,7 @@
 
 .filter-item .form-control-sm {
     width: auto;
-    min-width: 100px;
+    min-width: 120px;
     height: 32px;
     font-size: 13px;
 }
@@ -348,14 +282,6 @@
 .table-section .card-header {
     background-color: #f8f9fa;
     border-bottom: 2px solid #dee2e6;
-}
-
-#car-metrics {
-    font-size: 12px;
-}
-
-#car-metrics strong {
-    color: #495057;
 }
 
 .table th {
@@ -425,12 +351,38 @@
     z-index: 9999;
 }
 
-.loading-content {
-    background-color: white;
-    padding: 30px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+/* Generate CAR button styling - RED by default, BLUE on hover */
+.car-button {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: white !important;
+}
+
+.car-button:hover {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Remarks button styling - GREEN by default, darker GREEN on hover */
+.remarks-button {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+}
+
+.remarks-button:hover {
+    background-color: #218838 !important;
+    border-color: #1e7e34 !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
 }
 
 @media (max-width: 768px) {
@@ -449,6 +401,184 @@
     
     .filter-item {
         margin-bottom: 10px;
+    }
+}
+
+/* Slide-out Resolution Panel Styles */
+#resolution-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1040;
+}
+
+.resolution-panel {
+    position: fixed;
+    top: 0;
+    right: -480px;
+    width: 480px;
+    max-width: 90vw;
+    height: 100vh;
+    background: #fff;
+    box-shadow: -2px 0 15px rgba(0, 0, 0, 0.15);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s ease;
+    border-left: 1px solid #d1d8dd;
+}
+
+.resolution-panel.open { 
+    right: 0;
+}
+
+.resolution-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 20px;
+    border-bottom: 1px solid #d1d8dd;
+    background: #f7f7f7;
+}
+
+.resolution-panel__header h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #36414c;
+}
+
+.resolution-panel__header small {
+    color: #6c757d;
+    font-size: 12px;
+    display: block;
+    margin-top: 3px;
+}
+
+#resolution-close-btn {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+}
+
+#resolution-close-btn:hover {
+    background: #e8e9ea;
+    color: #36414c;
+}
+
+.resolution-panel__body {
+    padding: 20px;
+    overflow: auto;
+    flex: 1;
+    background: #fff;
+}
+
+.resolution-panel__body .form-group {
+    margin-bottom: 15px;
+}
+
+.resolution-panel__body label {
+    font-weight: 500;
+    font-size: 13px;
+    color: #36414c;
+    margin-bottom: 6px;
+}
+
+.resolution-panel__body .form-control {
+    border: 1px solid #d1d8dd;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #36414c;
+}
+
+.resolution-panel__body select.form-control {
+    height: 38px;
+    line-height: 1.5;
+    padding: 8px 30px 8px 10px;
+    background-color: #fff;
+}
+
+.resolution-panel__body .form-control:focus {
+    border-color: #2490ef;
+    box-shadow: 0 0 0 3px rgba(36, 144, 239, 0.1);
+    outline: none;
+}
+
+.resolution-panel__body textarea.form-control {
+    resize: vertical;
+    min-height: 70px;
+}
+
+.resolution-panel__footer {
+    padding: 15px 20px;
+    border-top: 1px solid #d1d8dd;
+    background: #f7f7f7;
+    display: flex;
+    gap: 8px;
+}
+
+.resolution-panel__footer button {
+    padding: 7px 14px;
+    font-weight: 500;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#res-save-draft {
+    background: #fff;
+    color: #36414c;
+    border: 1px solid #d1d8dd;
+    flex: 0.9;
+}
+
+#res-save-draft:hover {
+    background: #f7f7f7;
+}
+
+#res-save-next {
+    background: #2490ef;
+    color: white;
+    border: 1px solid #2490ef;
+    flex: 1.1;
+}
+
+#res-save-next:hover {
+    background: #1e7dc4;
+}
+
+#res-cancel {
+    color: #6c757d;
+    background: transparent;
+    border: none;
+    flex: 0.7;
+}
+
+#res-cancel:hover {
+    color: #36414c;
+    background: #e8e9ea;
+}
+
+@media (max-width: 576px) {
+    .resolution-panel { 
+        width: 100vw;
+    }
+    
+    .resolution-panel__footer {
+        flex-wrap: wrap;
+    }
+    
+    .resolution-panel__footer button {
+        flex: 1 1 100%;
+        margin-bottom: 8px;
     }
 }
 </style>

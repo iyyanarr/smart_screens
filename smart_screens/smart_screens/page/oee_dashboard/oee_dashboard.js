@@ -2,47 +2,67 @@
 let currentData = [];
 let sortedData = [];
 let currentSort = { column: null, direction: 'asc' };
+let reportGenerated = false; // Track if report has been generated
+let reportData = null; // Store report data for submission/saving
 
 // Initialize the page
 frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
-        title: 'OEE Dashboard',
+        title: 'OEE Report Generator',
         single_column: true
     });
     
     page.main.html(frappe.render_template('oee_dashboard'));
     
-    // Initialize date filters with default values (last 7 days)
-    initializeDateFilters();
-    
-    // Initialize table sorting
-    initializeTableSorting();
-    
-    // Load available processes
-    loadProcessOptions();
-    
-    // Load shift options
-    loadShiftOptions();
-    
-    // Load initial data
-    loadData();
+    // Initialize date filters with default values (latest available)
+    initializeDateFilters().then(() => {
+        // Initialize table sorting
+        initializeTableSorting();
+        // Load available processes
+        loadProcessOptions();
+        // Load shift options only (don't auto-load data)
+        loadShiftOptions();
+        // Don't call loadData() automatically - user must click Generate Report
+    });
 };
 
 function initializeDateFilters() {
-    const today = new Date();
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
-    document.getElementById('to_date').value = today.toISOString().split('T')[0];
-    document.getElementById('from_date').value = weekAgo.toISOString().split('T')[0];
+    return new Promise((resolve) => {
+        try {
+            const processType = (document.getElementById('process_filter')?.value) || 'Moulding';
+            frappe.call({
+                method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_latest_production_date',
+                args: { process_type: processType },
+                callback: function(r) {
+                    const d = (r && r.message) || new Date().toISOString().split('T')[0];
+                    const el = document.getElementById('production_date');
+                    if (el) el.value = d;
+                    resolve();
+                },
+                error: function() {
+                    const el = document.getElementById('production_date');
+                    if (el) el.value = new Date().toISOString().split('T')[0];
+                    resolve();
+                }
+            });
+        } catch (e) {
+            const el = document.getElementById('production_date');
+            if (el) el.value = new Date().toISOString().split('T')[0];
+            resolve();
+        }
+    });
 }
 
+// Adjust loading spinner helpers to use correct element ID
 function showLoading() {
-    document.getElementById('loading').style.display = 'flex';
+    const el = document.getElementById('loading-spinner') || document.getElementById('loading');
+    if (el) el.style.display = 'block';
 }
 
 function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
+    const el = document.getElementById('loading-spinner') || document.getElementById('loading');
+    if (el) el.style.display = 'none';
 }
 
 function loadProcessOptions() {
@@ -65,15 +85,13 @@ function loadProcessOptions() {
 }
 
 function loadShiftOptions() {
-    const fromDate = document.getElementById('from_date').value;
-    const toDate = document.getElementById('to_date').value;
+    const productionDate = document.getElementById('production_date').value;
     const processType = document.getElementById('process_filter').value;
     
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_shift_options',
         args: {
-            from_date: fromDate,
-            to_date: toDate,
+            production_date: productionDate,
             process_type: processType
         },
         callback: function(r) {
@@ -95,20 +113,19 @@ function loadShiftOptions() {
 function loadData() {
     showLoading();
     
-    const fromDate = document.getElementById('from_date').value;
-    const toDate = document.getElementById('to_date').value;
+    const productionDate = document.getElementById('production_date').value;
     const processType = document.getElementById('process_filter').value;
     const shiftFilter = document.getElementById('shift_filter').value;
     const machineFilter = document.getElementById('machine_filter').value;
-    const lotFilter = document.getElementById('lot_filter').value;
-    const itemFilter = document.getElementById('item_filter').value;
+    // Lot and Item filters have been removed from UI
+    const lotFilter = null;
+    const itemFilter = null;
     
     // Load main OEE data
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_data',
         args: {
-            from_date: fromDate,
-            to_date: toDate,
+            production_date: productionDate,
             process_type: processType,
             shift_filter: shiftFilter,
             machine_filter: machineFilter,
@@ -133,8 +150,7 @@ function loadData() {
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_summary',
         args: {
-            from_date: fromDate,
-            to_date: toDate,
+            production_date: productionDate,
             process_type: processType,
             shift_filter: shiftFilter,
             machine_filter: machineFilter,
@@ -160,187 +176,247 @@ function updateSummaryCards(summary) {
     document.getElementById('avg-performance-inline').textContent = summary.avg_performance + '%';
     document.getElementById('avg-quality-inline').textContent = summary.avg_quality + '%';
     document.getElementById('avg-oee-inline').textContent = summary.avg_oee + '%';
-    
-    // Update CAR metrics in table header
-    document.getElementById('car-total-planned').textContent = summary.total_planned_pieces || 0;
-    document.getElementById('car-total-produced').textContent = summary.total_produced_pieces || 0;
-    document.getElementById('car-production-eff').textContent = (summary.production_efficiency_pct || 0) + '%';
 }
 
-function generateCorrectiveActionReport() {
-    // Validate date range
-    const fromDate = document.getElementById('from_date').value;
-    const toDate = document.getElementById('to_date').value;
-    
-    if (!fromDate || !toDate) {
-        frappe.msgprint('Please select From Date and To Date');
-        return;
+// Helper: simple status meta based on OEE and resolution_status
+function getStatusMeta(row) {
+    const status = row.resolution_status || '';
+    if (status === 'Resolved') return { color: '#28a745', emoji: '🟢', text: 'Resolved' };
+    if (status === 'In Progress') return { color: '#ffc107', emoji: '🟡', text: 'In Progress' };
+    if ((row.oee_pct || 0) < 90) return { color: '#dc3545', emoji: '🔴', text: 'Needs Resolution' };
+    return { color: '#adb5bd', emoji: '⚪', text: 'OK' };
+}
+
+// Resolution Panel Controller
+class ResolutionPanel {
+    constructor() {
+        this.panel = document.getElementById('resolution-panel');
+        this.overlay = document.getElementById('resolution-overlay');
+        this.closeBtn = document.getElementById('resolution-close-btn');
+        this.summaryEl = document.getElementById('res-prod-summary');
+        this.form = document.getElementById('resolution-form');
+        this.btnSaveDraft = document.getElementById('res-save-draft');
+        this.btnSaveNext = document.getElementById('res-save-next');
+        this.btnCancel = document.getElementById('res-cancel');
+        this.reasonSelect = document.getElementById('res-reason-code');
+        this.inputs = {
+            reason_code: document.getElementById('res-reason-code'),
+            problem_description: document.getElementById('res-problem'),
+            corrective_action: document.getElementById('res-corrective'),
+            responsible_person: document.getElementById('res-responsible'),
+            target_completion_date: document.getElementById('res-target-date'),
+            resolution_remarks: document.getElementById('res-remarks')
+        };
+        this.currentIndex = null;
+        this.reasonCodesLoaded = false;
+        this._bind();
     }
-    
-    // Check if there's any data to process
-    if (!currentData || currentData.length === 0) {
-        frappe.msgprint('No production records found. Please apply filters and load data first.');
-        return;
+
+    _bind() {
+        if (this.closeBtn) this.closeBtn.addEventListener('click', () => this.close());
+        if (this.overlay) this.overlay.addEventListener('click', () => this.close());
+        if (this.btnCancel) this.btnCancel.addEventListener('click', (e) => { e.preventDefault(); this.close(); });
+        if (this.btnSaveDraft) this.btnSaveDraft.addEventListener('click', (e) => { e.preventDefault(); this.save(true, false); });
+        if (this.btnSaveNext) this.btnSaveNext.addEventListener('click', (e) => { e.preventDefault(); this.save(false, true); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.isOpen()) this.close(); });
     }
-    
-    // Get current filters
-    const shiftFilter = document.getElementById('shift_filter').value;
-    const machineFilter = document.getElementById('machine_filter').value;
-    const itemFilter = document.getElementById('item_filter').value;
-    
-    // Prepare production records data with all necessary fields
-    const production_records = currentData.map(row => ({
-        name: row.name,
-        production_date: row.production_date,
-        shift_type: row.shift_type || '',
-        operator_name: row.operator_name || '',
-        machine_reference: row.machine_reference || '',
-        item_code: row.item_code || '',
-        lot_number: row.lot_number || '',
-        target_quantity: row.target_quantity || 0,
-        actual_quantity: row.actual_quantity || 0,
-        variance_qty: (row.actual_quantity || 0) - (row.target_quantity || 0),
-        oee_pct: row.oee_pct || 0,
-        production_efficiency_pct: row.target_quantity > 0 ? ((row.actual_quantity / row.target_quantity) * 100) : 0,
-        rejection_percentage: row.rejection_percentage || 0,
-        availability_pct: row.availability_pct || 0,
-        performance_pct: row.performance_pct || 0,
-        quality_pct: row.quality_pct || 0
-    }));
-    
-    // Count how many records meet the criteria (OEE < 90% OR Production Efficiency < 100%)
-    const eligibleRecords = production_records.filter(record => 
-        record.oee_pct < 90 || record.production_efficiency_pct < 100
-    );
-    
-    if (eligibleRecords.length === 0) {
-        frappe.msgprint({
-            title: 'No Records Meet Criteria',
-            message: 'No production records found with:<br><strong>OEE < 90%</strong> OR <strong>Production Efficiency < 100%</strong>',
-            indicator: 'orange'
-        });
-        return;
+
+    isOpen() { return this.panel && this.panel.classList.contains('open'); }
+
+    async open(index) {
+        this.currentIndex = index;
+        const row = sortedData[index];
+        if (!row) return;
+
+        // Load reason codes once
+        await this.ensureReasonCodes();
+
+        // Fill summary
+        const lot = row.lot_number || '-';
+        const date = row.production_date_formatted || '-';
+        const shift = row.shift_type || '-';
+        const oee = (row.oee_pct != null ? row.oee_pct : '-') + '%';
+        this.summaryEl.textContent = `Lot: ${lot} | Date: ${date} | Shift: ${shift} | OEE: ${oee}`;
+
+        // Prefill form if data exists
+        this.inputs.reason_code.value = row.reason_code || '';
+        this.inputs.problem_description.value = row.problem_description || '';
+        this.inputs.corrective_action.value = row.corrective_action || '';
+        this.inputs.responsible_person.value = row.responsible_person || '';
+        this.inputs.target_completion_date.value = row.target_completion_date || '';
+        this.inputs.resolution_remarks.value = row.resolution_remarks || '';
+
+        // Show panel
+        if (this.overlay) this.overlay.style.display = 'block';
+        if (this.panel) this.panel.classList.add('open');
+        this.panel?.setAttribute('aria-hidden', 'false');
     }
-    
-    // Calculate average metrics for display
-    const avgOEE = (eligibleRecords.reduce((sum, r) => sum + r.oee_pct, 0) / eligibleRecords.length).toFixed(2);
-    const avgEfficiency = (eligibleRecords.reduce((sum, r) => sum + r.production_efficiency_pct, 0) / eligibleRecords.length).toFixed(2);
-    
-    // Confirm with user
-    frappe.confirm(
-        `<div class="car-confirmation">
-            <h5>Generate Corrective Action Report (CAR)?</h5>
-            <hr>
-            <div class="row">
-                <div class="col-6">
-                    <strong>Total Records:</strong> ${eligibleRecords.length}
-                </div>
-                <div class="col-6">
-                    <strong>Avg OEE:</strong> ${avgOEE}%
-                </div>
-            </div>
-            <div class="row mt-2">
-                <div class="col-6">
-                    <strong>Date Range:</strong> ${frappe.datetime.str_to_user(fromDate)} to ${frappe.datetime.str_to_user(toDate)}
-                </div>
-                <div class="col-6">
-                    <strong>Avg Efficiency:</strong> ${avgEfficiency}%
-                </div>
-            </div>
-            <hr>
-            <p class="text-muted"><small>CAR will be created for all records with <strong>OEE < 90%</strong> OR <strong>Production Efficiency < 100%</strong></small></p>
-        </div>`,
-        () => {
-            // Show loading indicator
-            showLoading();
-            
-            // Call backend to generate CAR
-            frappe.call({
-                method: 'smart_screens.smart_screens.doctype.corrective_action_unresolved.corrective_action_unresolved.generate_car_from_oee_dashboard',
-                args: {
-                    filters: {
-                        from_date: fromDate,
-                        to_date: toDate,
-                        shift_filter: shiftFilter,
-                        machine_filter: machineFilter,
-                        item_filter: itemFilter,
-                        production_records: production_records
-                    }
-                },
-                callback: function(r) {
-                    hideLoading();
-                    if (r.message) {
-                        const car_name = r.message;
-                        
-                        // Show success message with action buttons
-                        frappe.msgprint({
-                            title: '✅ CAR Created Successfully!',
-                            message: `
-                                <div class="car-success">
-                                    <p><strong>CAR Document:</strong> <a href="/app/corrective-action-unresolved/${car_name}" target="_blank">${car_name}</a></p>
-                                    <p><strong>Total Records:</strong> ${eligibleRecords.length}</p>
-                                    <p><strong>Status:</strong> <span class="badge badge-warning">Pending Resolution</span></p>
-                                    <hr>
-                                    <p class="text-muted"><small>Use the <strong>CAR Resolution Center</strong> to resolve each record with root cause analysis and corrective actions.</small></p>
-                                </div>
-                            `,
-                            indicator: 'green',
-                            primary_action: {
-                                label: 'Open Resolution Center',
-                                action: function() {
-                                    frappe.set_route('car_resolution_center', {car: car_name});
-                                }
-                            },
-                            secondary_action: {
-                                label: 'View CAR Document',
-                                action: function() {
-                                    frappe.set_route('Form', 'Corrective Action Unresolved', car_name);
-                                }
-                            }
-                        });
-                        
-                        // Reload the table to show updated data
-                        loadData();
-                    }
-                },
-                error: function(err) {
-                    hideLoading();
-                    console.error('Error generating CAR:', err);
-                    frappe.msgprint({
-                        title: 'Error',
-                        message: err.message || 'Failed to generate Corrective Action Report. Please try again.',
-                        indicator: 'red'
-                    });
-                }
+
+    close() {
+        if (this.panel) this.panel.classList.remove('open');
+        if (this.overlay) this.overlay.style.display = 'none';
+        this.panel?.setAttribute('aria-hidden', 'true');
+        this.currentIndex = null;
+    }
+
+    async ensureReasonCodes() {
+        if (this.reasonCodesLoaded) return;
+        try {
+            const r = await new Promise((resolve, reject) => {
+                frappe.call({
+                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_reason_codes',
+                    callback: resolve,
+                    error: reject
+                });
             });
+            const codes = (r && r.message) || [];
+            // Populate select
+            if (this.reasonSelect) {
+                // preserve first placeholder
+                this.reasonSelect.querySelectorAll('option:not(:first-child)')?.forEach(o => o.remove());
+                codes.forEach(code => {
+                    const opt = document.createElement('option');
+                    opt.value = code;
+                    opt.textContent = code;
+                    this.reasonSelect.appendChild(opt);
+                });
+            }
+            this.reasonCodesLoaded = true;
+        } catch (e) {
+            console.error('Failed to load reason codes', e);
         }
-    );
+    }
+
+    getFormData() {
+        return {
+            reason_code: this.inputs.reason_code.value || '',
+            problem_description: this.inputs.problem_description.value || '',
+            corrective_action: this.inputs.corrective_action.value || '',
+            responsible_person: this.inputs.responsible_person.value || '',
+            target_completion_date: this.inputs.target_completion_date.value || '',
+            resolution_remarks: this.inputs.resolution_remarks.value || ''
+        };
+    }
+
+    async save(isDraft, goNext) {
+        const index = this.currentIndex;
+        const row = sortedData[index];
+        if (!row) return;
+        const data = this.getFormData();
+
+        // Validate minimal requirement when not draft
+        if (!isDraft && !data.reason_code) {
+            frappe.msgprint('Please select a Reason Code.');
+            return;
+        }
+
+        try {
+            showLoading();
+            const r = await new Promise((resolve, reject) => {
+                frappe.call({
+                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.save_production_resolution',
+                    args: {
+                        production_entry: row.name,
+                        resolution_data: data,
+                        is_draft: isDraft
+                    },
+                    callback: resolve,
+                    error: reject
+                });
+            });
+            hideLoading();
+            if (r && r.message && r.message.success) {
+                // Update local row
+                const status = r.message.resolution_status || (isDraft ? 'In Progress' : 'Resolved');
+                const updated = { ...row, ...data, resolution_status: status };
+                // Update both currentData and sortedData
+                const updateByName = (arr) => {
+                    const i = arr.findIndex(x => x.name === row.name);
+                    if (i >= 0) arr[i] = updated;
+                };
+                updateByName(currentData);
+                updateByName(sortedData);
+                updateTable(sortedData);
+
+                if (goNext) {
+                    const nextIndex = this.findNextUnresolved(index + 1);
+                    if (nextIndex >= 0) {
+                        this.open(nextIndex);
+                    } else {
+                        frappe.msgprint('All low OEE records are processed.');
+                        this.close();
+                    }
+                } else {
+                    frappe.show_alert({ message: 'Resolution saved', indicator: 'green' });
+                    this.close();
+                }
+            } else {
+                const msg = (r && r.message && r.message.error) || 'Failed to save resolution';
+                frappe.msgprint(msg);
+            }
+        } catch (e) {
+            hideLoading();
+            console.error('Save resolution error', e);
+            frappe.msgprint('Error while saving resolution.');
+        }
+    }
+
+    findNextUnresolved(start) {
+        for (let i = start; i < sortedData.length; i++) {
+            const r = sortedData[i];
+            const status = (r.resolution_status || '').toLowerCase();
+            if ((r.oee_pct || 0) < 90 && status !== 'resolved') return i;
+        }
+        return -1;
+    }
 }
 
+let resolutionPanel;
+
+// Extend updateTable to render Action column with status indicator and button
 function updateTable(data) {
     const tableBody = document.getElementById('oee-table-body');
     tableBody.innerHTML = '';
 
     if (!data || data.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="13" class="text-center">No OEE data found for the selected criteria</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="12" class="text-center">No OEE data found for the selected criteria</td></tr>';
         return;
     }
     
     data.forEach((row, index) => {
         const tr = document.createElement('tr');
+        let oeeClass = row.oee_pct >= 90 ? 'oee-excellent' : 'oee-poor';
+        const statusMeta = getStatusMeta(row);
         
-        // Calculate Variance (Actual - Target)
-        const variance = (row.actual_quantity || 0) - (row.target_quantity || 0);
-        const varianceClass = variance > 0 ? 'text-success' : (variance < 0 ? 'text-danger' : 'text-muted');
+        // Check lot inspection status
+        const lotInspectionStatus = row.lot_inspection_status || 'Not Found';
+        const hasLotInspection = lotInspectionStatus !== 'Not Found';
         
-        // Determine OEE color class based on percentage
-        let oeeClass = 'oee-poor';
-        if (row.oee_pct >= 85) {
-            oeeClass = 'oee-excellent';
-        } else if (row.oee_pct >= 70) {
-            oeeClass = 'oee-good';
-        } else if (row.oee_pct >= 50) {
-            oeeClass = 'oee-fair';
+        // Can only resolve if:
+        // 1. OEE < 90% AND
+        // 2. Not already resolved AND
+        // 3. Lot inspection exists (Submitted or Pending)
+        const canResolve = (row.oee_pct || 0) < 90 && 
+                          (row.resolution_status || '').toLowerCase() !== 'resolved' &&
+                          hasLotInspection;
+        
+        let inspectionDisplay = '';
+        let actionButton = '';
+        
+        if (!hasLotInspection) {
+            // No inspection found - show warning badge, no resolve button
+            inspectionDisplay = '<div style="margin-bottom: 4px;"><span class="badge badge-danger" style="font-size: 10px;">✗ Lot Inspection Pending</span></div>';
+            // No button shown when inspection is pending
+            actionButton = '<small class="text-muted" style="font-size: 10px;">Not Eligible</small>';
+        } else {
+            // Inspection exists - show appropriate button
+            if (canResolve) {
+                // Generate CAR button - RED by default, BLUE on hover
+                actionButton = `<button class="btn btn-xs car-button" data-action="resolve" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Generate CAR</button>`;
+            } else {
+                // Remarks button without status indicator - GREEN background
+                actionButton = `<button class="btn btn-xs remarks-button" data-action="view" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Remarks</button>`;
+            }
         }
         
         tr.innerHTML = `
@@ -351,28 +427,35 @@ function updateTable(data) {
             <td><small><strong>${row.item_code || ''}</strong></small></td>
             <td><small><span class="badge badge-info">${row.lot_number || ''}</span></small></td>
             <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>
-            <td class="text-right"><small>${row.target_quantity || 0}</small></td>
-            <td class="text-right"><small>${row.no_of_cavities || 0}</small></td>
-            <td class="text-right"><small>${row.cycle_time_seconds ? row.cycle_time_seconds.toFixed(1) : '0.0'}</small></td>
-            <td class="text-right ${varianceClass}"><small><strong>${variance >= 0 ? '+' : ''}${variance}</strong></small></td>
-            <td class="text-right"><small>${row.rejection_percentage || 0}%</small></td>
+            <td class="text-right"><small>${row.availability_pct || 0}%</small></td>
+            <td class="text-right"><small>${row.performance_pct || 0}%</small></td>
+            <td class="text-right"><small>${row.quality_pct || 0}%</small></td>
             <td class="text-right ${oeeClass} oee-clickable" onclick="showOEEDetails(event, ${index})"><strong>${row.oee_pct || 0}%</strong></td>
+            <td class="text-center" style="vertical-align: middle;">
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    ${inspectionDisplay}
+                    ${actionButton}
+                </div>
+            </td>
         `;
-        
-        // Store row data in the DOM for later retrieval
         tr.dataset.rowData = JSON.stringify(row);
         tr.dataset.rowIndex = index;
         
-        // Add hover effect
-        tr.addEventListener('mouseenter', function() {
-            this.style.backgroundColor = '#f8f9fa';
-        });
-        
-        tr.addEventListener('mouseleave', function() {
-            this.style.backgroundColor = '';
-        });
+        tr.addEventListener('mouseenter', function() { this.style.backgroundColor = '#f8f9fa'; });
+        tr.addEventListener('mouseleave', function() { this.style.backgroundColor = ''; });
         
         tableBody.appendChild(tr);
+    });
+
+    // Delegate action buttons
+    tableBody.querySelectorAll('button[data-action]')?.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+            const action = e.currentTarget.getAttribute('data-action');
+            if (!resolutionPanel) resolutionPanel = new ResolutionPanel();
+            if (action === 'resolve') return resolutionPanel.open(idx);
+            if (action === 'view') return resolutionPanel.open(idx);
+        });
     });
 }
 
@@ -442,8 +525,8 @@ function initializeTableSorting() {
                     aVal = new Date(aVal);
                     bVal = new Date(bVal);
                 } else {
-                    aVal = (aVal || '').toString().toLowerCase();
-                    bVal = (bVal || '').toString().toLowerCase();
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
                 }
                 
                 if (currentSort.direction === 'asc') {
@@ -456,84 +539,282 @@ function initializeTableSorting() {
             // Update table
             updateTable(sortedData);
             
-            // Update sort icons
-            updateSortIcons();
+            // Update sort indicators
+            updateSortIndicators();
         });
     });
 }
 
-function updateSortIcons() {
+function updateSortIndicators() {
+    // Clear all sort indicators
     document.querySelectorAll('.sortable').forEach(header => {
-        const icon = header.querySelector('.sort-icon');
-        const column = header.getAttribute('data-column');
-        
-        header.classList.remove('sorted');
-        
-        if (column === currentSort.column) {
-            header.classList.add('sorted');
-            if (currentSort.direction === 'asc') {
-                icon.className = 'fa fa-sort-up sort-icon';
-            } else {
-                icon.className = 'fa fa-sort-down sort-icon';
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Add indicator to current sorted column
+    if (currentSort.column) {
+        const header = document.querySelector(`.sortable[data-column="${currentSort.column}"]`);
+        if (header) {
+            header.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    }
+}
+
+// Event listeners for filter changes
+document.addEventListener('DOMContentLoaded', function() {
+    // Only reload shift options when date or process changes, don't auto-load data
+    const productionDateEl = document.getElementById('production_date');
+    const processFilterEl = document.getElementById('process_filter');
+    
+    if (productionDateEl) {
+        productionDateEl.addEventListener('change', function() {
+            loadShiftOptions();
+            // Don't auto-load data - user must click Generate Report
+        });
+    }
+    
+    if (processFilterEl) {
+        processFilterEl.addEventListener('change', function() {
+            loadShiftOptions();
+            // Don't auto-load data - user must click Generate Report
+        });
+    }
+
+    // Remove auto-load for other filters as well
+    // User must click Generate Report to load data
+
+    // Ensure panel exists on DOM ready
+    if (!resolutionPanel) resolutionPanel = new ResolutionPanel();
+});
+
+// Utility functions used by HTML buttons
+function generateReport() {
+    // Validate filters
+    const productionDate = document.getElementById('production_date').value;
+    if (!productionDate) {
+        frappe.msgprint('Please select a production date');
+        return;
+    }
+    
+    // Load data and mark report as generated
+    showLoading();
+    
+    const processType = document.getElementById('process_filter').value;
+    const shiftFilter = document.getElementById('shift_filter').value;
+    const machineFilter = document.getElementById('machine_filter').value;
+    // Lot and Item filters have been removed from UI
+    const lotFilter = null;
+    const itemFilter = null;
+    
+    // Load main OEE data
+    frappe.call({
+        method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_data',
+        args: {
+            production_date: productionDate,
+            process_type: processType,
+            shift_filter: shiftFilter,
+            machine_filter: machineFilter,
+            lot_filter: lotFilter,
+            item_filter: itemFilter
+        },
+        callback: function(r) {
+            if (r.message) {
+                currentData = r.message;
+                sortedData = [...currentData];
+                updateTable(sortedData);
+                
+                // Load summary statistics
+                frappe.call({
+                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_summary',
+                    args: {
+                        production_date: productionDate,
+                        process_type: processType,
+                        shift_filter: shiftFilter,
+                        machine_filter: machineFilter,
+                        lot_filter: lotFilter,
+                        item_filter: itemFilter
+                    },
+                    callback: function(summary_r) {
+                        hideLoading();
+                        
+                        if (summary_r.message) {
+                            updateSummaryCards(summary_r.message);
+                            
+                            // Store report data
+                            reportData = {
+                                filters: {
+                                    production_date: productionDate,
+                                    process_type: processType,
+                                    shift_filter: shiftFilter,
+                                    machine_filter: machineFilter,
+                                    lot_filter: lotFilter,
+                                    item_filter: itemFilter
+                                },
+                                data: currentData,
+                                summary: summary_r.message,
+                                generated_at: new Date().toISOString()
+                            };
+                            
+                            // Mark report as generated and show action buttons
+                            reportGenerated = true;
+                            showReportActionButtons();
+                            
+                            frappe.show_alert({
+                                message: `Report generated successfully with ${currentData.length} records`,
+                                indicator: 'green'
+                            });
+                        }
+                    },
+                    error: function(err) {
+                        console.error('Error loading summary:', err);
+                        hideLoading();
+                        frappe.msgprint('Error generating report summary. Please try again.');
+                    }
+                });
             }
-        } else {
-            icon.className = 'fa fa-sort sort-icon';
+        },
+        error: function(err) {
+            console.error('Error loading OEE data:', err);
+            hideLoading();
+            frappe.msgprint('Error generating report. Please try again.');
+        }
+    });
+}
+
+function showReportActionButtons() {
+    const actionButtonsDiv = document.getElementById('report-action-buttons');
+    if (actionButtonsDiv) {
+        actionButtonsDiv.style.display = 'block';
+    }
+}
+
+function hideReportActionButtons() {
+    const actionButtonsDiv = document.getElementById('report-action-buttons');
+    if (actionButtonsDiv) {
+        actionButtonsDiv.style.display = 'none';
+    }
+}
+
+function submitReport() {
+    if (!reportGenerated || !reportData) {
+        frappe.msgprint('Please generate a report first');
+        return;
+    }
+    
+    // Confirm submission
+    frappe.confirm(
+        'Are you sure you want to submit this OEE report? This action cannot be undone.',
+        function() {
+            // User confirmed
+            showLoading();
+            
+            frappe.call({
+                method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.submit_oee_report',
+                args: {
+                    report_data: reportData
+                },
+                callback: function(r) {
+                    hideLoading();
+                    
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: 'Report submitted successfully',
+                            indicator: 'green'
+                        });
+                        
+                        // Reset report state
+                        reportGenerated = false;
+                        reportData = null;
+                        hideReportActionButtons();
+                        
+                        // Optionally show the report document
+                        if (r.message.report_name) {
+                            frappe.msgprint({
+                                title: 'Report Submitted',
+                                message: `Report "${r.message.report_name}" has been submitted successfully.`,
+                                primary_action: {
+                                    label: 'View Report',
+                                    action: function() {
+                                        frappe.set_route('Form', 'OEE Report', r.message.report_name);
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        const error_msg = (r.message && r.message.error) || 'Failed to submit report';
+                        frappe.msgprint(error_msg);
+                    }
+                },
+                error: function(err) {
+                    hideLoading();
+                    console.error('Error submitting report:', err);
+                    frappe.msgprint('Error submitting report. Please try again.');
+                }
+            });
+        }
+    );
+}
+
+function saveReport() {
+    if (!reportGenerated || !reportData) {
+        frappe.msgprint('Please generate a report first');
+        return;
+    }
+    
+    // Save as draft
+    showLoading();
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.save_oee_report',
+        args: {
+            report_data: reportData
+        },
+        callback: function(r) {
+            hideLoading();
+            
+            if (r.message && r.message.success) {
+                frappe.show_alert({
+                    message: 'Report saved successfully',
+                    indicator: 'blue'
+                });
+                
+                // Show the report document
+                if (r.message.report_name) {
+                    frappe.msgprint({
+                        title: 'Report Saved',
+                        message: `Report "${r.message.report_name}" has been saved as draft.`,
+                        primary_action: {
+                            label: 'View Report',
+                            action: function() {
+                                frappe.set_route('Form', 'OEE Report', r.message.report_name);
+                            }
+                        }
+                    });
+                }
+            } else {
+                const error_msg = (r.message && r.message.error) || 'Failed to save report';
+                frappe.msgprint(error_msg);
+            }
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error saving report:', err);
+            frappe.msgprint('Error saving report. Please try again.');
         }
     });
 }
 
 function applyFilters() {
-    loadData();
+    // Redirect to generateReport function
+    generateReport();
 }
 
 function refreshData() {
+    // Reset report state
+    reportGenerated = false;
+    reportData = null;
+    hideReportActionButtons();
+    
+    // Reload data
     loadData();
-}
-
-function exportData() {
-    const dataToExport = sortedData.length > 0 ? sortedData : currentData;
-    
-    if (!dataToExport || dataToExport.length === 0) {
-        frappe.msgprint('No data to export');
-        return;
-    }
-    
-    // Create CSV content
-    const headers = [
-        'Date', 'Shift', 'Process', 'Machine', 'Lot No', 'Item', 
-        'Target Qty', 'Actual Qty', 'Availability %', 'Performance %', 
-        'Quality %', 'OEE %'
-    ];
-    
-    let csvContent = headers.join(',') + '\n';
-    
-    dataToExport.forEach(row => {
-        const csvRow = [
-            row.production_date_formatted || '',
-            row.shift_type || '',
-            row.process_type || '',
-            row.machine_reference || '',
-            row.lot_number || '',
-            row.item_code || '',
-            row.target_quantity || 0,
-            row.actual_quantity || 0,
-            row.availability_pct || 0,
-            row.performance_pct || 0,
-            row.quality_pct || 0,
-            row.oee_pct || 0
-        ];
-        
-        csvContent += csvRow.map(field => `"${field}"`).join(',') + '\n';
-    });
-    
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `oee_dashboard_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
 }

@@ -1,6 +1,6 @@
 """
-OEE Dashboard Backend API
-Main API endpoints for the OEE Dashboard page
+OEE Report Generator Backend API
+Main API endpoints for the OEE Report Generator page
 """
 
 import frappe
@@ -17,15 +17,19 @@ PROCESS_ADAPTERS = {
     # 'Batching': BatchingAdapter,
 }
 
+# Map process type to underlying production entry DocType for resolution fields
+PRODUCTION_ENTRY_DOCTYPE = {
+    'Moulding': 'Moulding Production Entry',
+}
+
 @frappe.whitelist()
-def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_filter=None, 
+def get_oee_data(production_date=None, process_type='Moulding', shift_filter=None, 
                  machine_filter=None, lot_filter=None, item_filter=None):
     """
     Main API to get OEE data for any manufacturing process
     
     Args:
-        from_date: Start date (YYYY-MM-DD)
-        to_date: End date (YYYY-MM-DD)
+        production_date: Production date (YYYY-MM-DD) - defaults to today
         process_type: Process name (Moulding, Blanking, etc.)
         shift_filter: Shift filter (A, B, C, all)
         machine_filter: Machine/Equipment filter
@@ -36,11 +40,9 @@ def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_fi
         list: OEE data with all calculations
     """
     
-    # Default dates
-    if not from_date:
-        from_date = today()
-    if not to_date:
-        to_date = today()
+    # Default to today if no date provided
+    if not production_date:
+        production_date = today()
     
     # Get the appropriate process adapter
     adapter_class = PROCESS_ADAPTERS.get(process_type)
@@ -58,8 +60,8 @@ def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_fi
         'item': item_filter
     }
     
-    # Get production data
-    production_data = adapter.get_production_data(from_date, to_date, filters)
+    # Get production data for the single date
+    production_data = adapter.get_production_data(production_date, production_date, filters)
     
     # Calculate OEE for each production entry
     oee_results = []
@@ -147,6 +149,39 @@ def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_fi
                 '_quality': quality,
             }
             
+            # Include resolution fields if present (use correct DocType per process)
+            production_entry_name = entry.get('name')
+            if production_entry_name:
+                try:
+                    doctype = PRODUCTION_ENTRY_DOCTYPE.get(process_type)
+                    if doctype:
+                        production_entry_doc = frappe.get_doc(doctype, production_entry_name)
+                        result.update({
+                            'reason_code': production_entry_doc.get('reason_code'),
+                            'problem_description': production_entry_doc.get('problem_description'),
+                            'root_cause': production_entry_doc.get('root_cause'),
+                            'corrective_action': production_entry_doc.get('corrective_action'),
+                            'responsible_person': production_entry_doc.get('responsible_person'),
+                            'target_completion_date': production_entry_doc.get('target_completion_date'),
+                            'resolution_remarks': production_entry_doc.get('resolution_remarks'),
+                            'resolution_status': production_entry_doc.get('resolution_status'),
+                            'resolved_by': production_entry_doc.get('resolved_by'),
+                            'resolved_on': production_entry_doc.get('resolved_on'),
+                        })
+                except Exception:
+                    # Don't fail the entire row if resolution fields can't be fetched
+                    pass
+            
+            # Check lot inspection status
+            lot_number = adapter.get_lot_number(entry)
+            inspection_status = check_lot_inspection_status(lot_number, process_type)
+            result.update({
+                'lot_inspection_status': inspection_status.get('status'),
+                'lot_inspection_name': inspection_status.get('inspection_name'),
+                'has_lot_inspection': inspection_status.get('has_inspection'),
+                'lot_inspection_submitted': inspection_status.get('is_submitted')
+            })
+
             oee_results.append(result)
             
         except Exception as e:
@@ -157,10 +192,10 @@ def get_oee_data(from_date=None, to_date=None, process_type='Moulding', shift_fi
 
 
 @frappe.whitelist()
-def get_oee_summary(from_date=None, to_date=None, process_type='Moulding', shift_filter=None,
+def get_oee_summary(production_date=None, process_type='Moulding', shift_filter=None,
                     machine_filter=None, lot_filter=None, item_filter=None):
     """
-    Get summary statistics for OEE Dashboard
+    Get summary statistics for OEE Report Generator
     
     Returns:
         dict: Summary metrics (averages, totals, etc.)
@@ -168,8 +203,7 @@ def get_oee_summary(from_date=None, to_date=None, process_type='Moulding', shift
     
     # Get OEE data
     oee_data = get_oee_data(
-        from_date=from_date,
-        to_date=to_date,
+        production_date=production_date,
         process_type=process_type,
         shift_filter=shift_filter,
         machine_filter=machine_filter,
@@ -241,17 +275,15 @@ def get_available_processes():
 
 
 @frappe.whitelist()
-def get_shift_options(from_date=None, to_date=None, process_type='Moulding'):
+def get_shift_options(production_date=None, process_type='Moulding'):
     """
     Get available shift options for the selected process
     
     Returns:
         list: List of shift options
     """
-    if not from_date:
-        from_date = today()
-    if not to_date:
-        to_date = today()
+    if not production_date:
+        production_date = today()
     
     # For now, return standard shifts
     # This could be made dynamic by querying actual shifts from production data
@@ -261,3 +293,203 @@ def get_shift_options(from_date=None, to_date=None, process_type='Moulding'):
         {'value': 'B', 'label': 'Shift B'},
         {'value': 'C', 'label': 'Shift C'}
     ]
+
+
+@frappe.whitelist()
+def get_reason_codes():
+    """Return predefined CAR reason codes for resolution panel dropdown."""
+    return [
+        "COMPOUND SHORTAGE",
+        "MACHINE BREAKDOWN",
+        "MLD CHANGE",
+        "MLD WASH / CLEAN",
+        "OPERATOR ISSUE",
+        "PLANNING",
+        "QUALITY ISSUE",
+        "TRIAL",
+        "COMPOUND ISSUE",
+        "SHELL SHORTAGE",
+        "SHELL QUALITY ISSUE",
+        "OPERATOR DELAY",
+        "LOADING PLATE NOT AVAILABLE",
+        "MOULD ISSUE",
+    ]
+
+
+@frappe.whitelist()
+def save_production_resolution(production_entry: str, resolution_data=None, is_draft: bool = True, process_type: str = 'Moulding'):
+    """Save CAR resolution data to Production Entry (process-specific DocType).
+    Args:
+        production_entry: Name of production entry document
+        resolution_data: Dict or JSON string containing resolution fields
+        is_draft: If True, sets status to In Progress; else Resolved
+        process_type: Process type to resolve underlying DocType
+    Returns: dict with success and updated status
+    """
+    try:
+        # Coerce resolution_data to dict
+        if resolution_data is None:
+            resolution_data = {}
+        elif isinstance(resolution_data, str):
+            import json
+            try:
+                resolution_data = json.loads(resolution_data) if resolution_data else {}
+            except Exception:
+                resolution_data = {}
+        elif not isinstance(resolution_data, dict):
+            # Unknown type -> convert to dict best-effort
+            resolution_data = frappe._dict(resolution_data)
+
+        if not production_entry:
+            return {"success": False, "error": "Missing production_entry"}
+
+        # Resolve underlying DocType
+        doctype = PRODUCTION_ENTRY_DOCTYPE.get(process_type) or PRODUCTION_ENTRY_DOCTYPE.get('Moulding')
+        doc = None
+        if doctype:
+            try:
+                doc = frappe.get_doc(doctype, production_entry)
+            except Exception:
+                doc = None
+        if not doc:
+            # Fallback: try by guessing common doctypes
+            for dt in ['Moulding Production Entry', 'Production Entry']:
+                try:
+                    doc = frappe.get_doc(dt, production_entry)
+                    if doc: break
+                except Exception:
+                    continue
+        if not doc:
+            return {"success": False, "error": "Production document not found"}
+        if not doc.has_permission("write"):
+            return {"success": False, "error": "No write permission for this record"}
+
+        # Map fields
+        field_map = {
+            "reason_code": "reason_code",
+            "problem_description": "problem_description",
+            "root_cause": "root_cause",
+            "corrective_action": "corrective_action",
+            "responsible_person": "responsible_person",
+            "target_completion_date": "target_completion_date",
+            "resolution_remarks": "resolution_remarks",
+        }
+        meta = frappe.get_meta(doc.doctype)
+        for k, f in field_map.items():
+            if (k in resolution_data) and meta.get_field(f):
+                doc.set(f, resolution_data.get(k))
+
+        # Status and audit
+        status = "In Progress" if is_draft else "Resolved"
+        if meta.get_field("resolution_status"):
+            doc.set("resolution_status", status)
+        if not is_draft:
+            from frappe.utils import now_datetime
+            if meta.get_field("resolved_by"):
+                doc.set("resolved_by", frappe.session.user)
+            if meta.get_field("resolved_on"):
+                doc.set("resolved_on", now_datetime())
+
+        doc.save()
+        frappe.db.commit()
+        return {"success": True, "resolution_status": status}
+    except Exception as e:
+        frappe.log_error(f"save_production_resolution error: {frappe.get_traceback()}", "OEE Resolution Save")
+        return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_latest_production_date(process_type: str = 'Moulding'):
+    """Return the most recent production date with posted entries for the given process.
+    Defaults to today if none found.
+    """
+    try:
+        if process_type == 'Moulding':
+            dt = frappe.db.sql("""
+                SELECT MAX(moulding_date) AS d
+                FROM `tabMoulding Production Entry`
+                WHERE docstatus = 1
+            """, as_dict=True)
+            latest = dt[0]['d'] if dt and dt[0] and dt[0]['d'] else None
+            return latest or today()
+        # Add other processes here as needed
+        return today()
+    except Exception:
+        return today()
+
+
+def check_lot_inspection_status(lot_number, process_type='Moulding'):
+    """
+    Check if Lot Inspection entry exists for a given lot and its submission status
+    
+    Args:
+        lot_number: Lot number to check
+        process_type: Process type (Moulding, etc.)
+    
+    Returns:
+        dict: {
+            'has_inspection': bool,
+            'is_submitted': bool,
+            'inspection_name': str or None,
+            'status': 'Submitted' | 'Pending' | 'Not Found'
+        }
+    """
+    if not lot_number:
+        return {
+            'has_inspection': False,
+            'is_submitted': False,
+            'inspection_name': None,
+            'status': 'Not Found'
+        }
+    
+    try:
+        # Check for Lot Inspection Entry (can be in multiple doctypes)
+        # First try the standard Inspection Entry doctype
+        # NOTE: The field name is 'lot_no' not 'lot_number'
+        inspection_entries = frappe.db.sql("""
+            SELECT name, docstatus, inspection_type
+            FROM `tabInspection Entry`
+            WHERE lot_no = %s 
+            AND inspection_type = 'Lot Inspection'
+            ORDER BY creation DESC
+            LIMIT 1
+        """, (lot_number,), as_dict=True)
+        
+        if not inspection_entries:
+            # Try alternative Lot Inspection Entry doctype if exists
+            try:
+                inspection_entries = frappe.db.sql("""
+                    SELECT name, docstatus
+                    FROM `tabLot Inspection Entry`
+                    WHERE lot_number = %s 
+                    ORDER BY creation DESC
+                    LIMIT 1
+                """, (lot_number,), as_dict=True)
+            except Exception:
+                pass
+        
+        if inspection_entries and len(inspection_entries) > 0:
+            entry = inspection_entries[0]
+            is_submitted = entry.get('docstatus') == 1
+            
+            return {
+                'has_inspection': True,
+                'is_submitted': is_submitted,
+                'inspection_name': entry.get('name'),
+                'status': 'Submitted' if is_submitted else 'Pending'
+            }
+        else:
+            return {
+                'has_inspection': False,
+                'is_submitted': False,
+                'inspection_name': None,
+                'status': 'Not Found'
+            }
+    except Exception as e:
+        frappe.log_error(f"Error checking lot inspection: {str(e)}", "Lot Inspection Check")
+        return {
+            'has_inspection': False,
+            'is_submitted': False,
+            'inspection_name': None,
+            'status': 'Not Found'
+        }
