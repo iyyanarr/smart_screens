@@ -493,3 +493,245 @@ def check_lot_inspection_status(lot_number, process_type='Moulding'):
             'inspection_name': None,
             'status': 'Not Found'
         }
+
+
+@frappe.whitelist()
+def save_oee_report(report_data):
+    """
+    Save OEE Report data to Daily OEE Report DocType
+    Creates a new Daily OEE Report document with all production records
+    
+    Args:
+        report_data: Dictionary containing:
+            - filters: {production_date, process_type, shift_filter, machine_filter}
+            - data: List of production records
+            - summary: Summary statistics
+            - generated_at: Timestamp
+    
+    Returns:
+        dict: {success: bool, report_name: str or None, error: str or None}
+    """
+    try:
+        import json
+        
+        # Parse report_data if it's a JSON string
+        if isinstance(report_data, str):
+            report_data = json.loads(report_data)
+        
+        # Extract data
+        filters = report_data.get('filters', {})
+        production_records = report_data.get('data', [])
+        summary = report_data.get('summary', {})
+        
+        # Validate required fields
+        production_date = filters.get('production_date')
+        if not production_date:
+            return {
+                'success': False,
+                'error': 'Production date is required'
+            }
+        
+        if not production_records or len(production_records) == 0:
+            return {
+                'success': False,
+                'error': 'No production records to save'
+            }
+        
+        # Check if report already exists for this date/filter combination
+        existing_reports = frappe.db.get_list(
+            'Daily OEE Report',
+            filters={
+                'production_date': production_date,
+                'shift_filter': filters.get('shift_filter', ''),
+                'machine_filter': filters.get('machine_filter', ''),
+                'docstatus': ['<', 2]  # Not cancelled
+            },
+            limit=1
+        )
+        
+        if existing_reports:
+            return {
+                'success': False,
+                'error': f'A report already exists for this date/filter combination: {existing_reports[0].name}'
+            }
+        
+        # Create new Daily OEE Report
+        report_doc = frappe.new_doc('Daily OEE Report')
+        
+        # Set header fields
+        report_doc.production_date = production_date
+        report_doc.report_date = today()
+        report_doc.shift_filter = filters.get('shift_filter', '')
+        report_doc.machine_filter = filters.get('machine_filter', '')
+        
+        # Add production records to child table
+        for record in production_records:
+            oee_pct = flt(record.get('oee_pct', 0))
+            
+            # Determine resolution status based on OEE
+            # Low OEE (< 90%) needs resolution - set to Pending
+            # Good OEE (>= 90%) doesn't need resolution - set to Resolved
+            resolution_status = 'Pending' if oee_pct < 90 else 'Resolved'
+            
+            report_doc.append('production_records', {
+                'production_entry': record.get('name'),  # Link to Moulding Production Entry
+                'production_date': record.get('production_date'),
+                'shift_type': record.get('shift_type'),
+                'operator_name': record.get('operator_name'),
+                'machine_reference': record.get('machine_reference'),
+                'item_code': record.get('item_code'),
+                'lot_number': record.get('lot_number'),
+                'target_quantity': flt(record.get('target_quantity', 0)),
+                'actual_quantity': flt(record.get('actual_quantity', 0)),
+                'variance_qty': flt(record.get('variance_qty', 0)),
+                'oee_pct': oee_pct,
+                'production_efficiency_pct': flt(record.get('production_equipment_efficiency', 0)),
+                'rejection_percentage': flt(record.get('rejection_percentage', 0)),
+                'availability_pct': flt(record.get('availability_pct', 0)),
+                'performance_pct': flt(record.get('performance_pct', 0)),
+                'quality_pct': flt(record.get('quality_pct', 0)),
+                'resolution_status': resolution_status
+            })
+        
+        # Save document (this will trigger validate() which calculates summary)
+        report_doc.insert()
+        frappe.db.commit()
+        
+        return {
+            'success': True,
+            'report_name': report_doc.name,
+            'message': f'Daily OEE Report {report_doc.name} saved successfully with {len(production_records)} records'
+        }
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error saving OEE report: {frappe.get_traceback()}", 
+            "Save OEE Report Error"
+        )
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+
+@frappe.whitelist()
+def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, resolution_data):
+    """
+    Create a Corrective Action Resolved document from OEE Dashboard
+    This links the CAR to Daily OEE Report (new flow)
+    
+    Args:
+        production_entry: Name of the Moulding Production Entry
+        parent_daily_oee_report: Name of the Daily OEE Report document
+        resolution_data: Dictionary containing:
+            - reason_code
+            - problem_description
+            - corrective_action
+            - responsible_person
+            - target_completion_date
+            - resolution_remarks
+    
+    Returns:
+        dict: {success: bool, car_name: str, error: str}
+    """
+    try:
+        import json
+        
+        # Parse resolution_data if it's a JSON string
+        if isinstance(resolution_data, str):
+            resolution_data = json.loads(resolution_data)
+        
+        # Validate required fields
+        if not production_entry:
+            return {'success': False, 'error': 'Production entry is required'}
+        
+        if not parent_daily_oee_report:
+            return {'success': False, 'error': 'Daily OEE Report reference is required. Please save the report first.'}
+        
+        if not resolution_data.get('reason_code'):
+            return {'success': False, 'error': 'Reason code is required'}
+        
+        # Get production entry data
+        prod_doc = frappe.get_doc('Moulding Production Entry', production_entry)
+        
+        # Create new Corrective Action Resolved document
+        car_doc = frappe.new_doc('Corrective Action Resolved')
+        
+        # Set parent reference (Daily OEE Report - NEW FLOW)
+        car_doc.parent_daily_oee_report = parent_daily_oee_report
+        car_doc.production_entry = production_entry
+        
+        # Copy production data
+        car_doc.production_date = prod_doc.moulding_date
+        car_doc.shift_type = prod_doc.shift_type
+        car_doc.operator_name = prod_doc.operator_name
+        car_doc.machine_reference = prod_doc.machine_reference
+        car_doc.item_code = prod_doc.item_code
+        car_doc.lot_number = prod_doc.lot_number
+        car_doc.target_quantity = prod_doc.target_quantity
+        car_doc.actual_quantity = prod_doc.actual_quantity
+        car_doc.variance_qty = prod_doc.actual_quantity - prod_doc.target_quantity
+        
+        # Copy OEE metrics if available
+        if hasattr(prod_doc, 'oee_pct'):
+            car_doc.oee_pct = prod_doc.oee_pct
+        if hasattr(prod_doc, 'production_efficiency_pct'):
+            car_doc.production_efficiency_pct = prod_doc.production_efficiency_pct
+        if hasattr(prod_doc, 'rejection_percentage'):
+            car_doc.rejection_percentage = prod_doc.rejection_percentage
+        
+        # Set resolution data
+        car_doc.reason_code = resolution_data.get('reason_code')
+        car_doc.problem_description = resolution_data.get('problem_description', '')
+        car_doc.root_cause = resolution_data.get('corrective_action', '')  # Using corrective_action as root cause for now
+        
+        # Create 5-Why Analysis (mandatory - auto-generate placeholder rows)
+        # We'll create 5 rows with the problem description as starting point
+        why_questions = [
+            f"Why did this issue occur? {resolution_data.get('problem_description', 'Issue occurred')}",
+            "Why did the root cause exist?",
+            "Why was this not prevented?",
+            "Why was the process susceptible to this?",
+            "What is the fundamental root cause?"
+        ]
+        
+        for i, why_q in enumerate(why_questions, 1):
+            car_doc.append('why_analysis', {
+                'why_number': i,
+                'question': why_q,
+                'answer': resolution_data.get('problem_description', '') if i == 1 else 'To be analyzed'
+            })
+        
+        # Create Corrective Action (mandatory - at least one row)
+        car_doc.append('corrective_actions', {
+            'action_description': resolution_data.get('corrective_action', 'Corrective action to be defined'),
+            'responsible_person': resolution_data.get('responsible_person', ''),
+            'target_date': resolution_data.get('target_completion_date', ''),
+            'status': 'Pending'
+        })
+        
+        # Set tracking fields
+        car_doc.scan_operator = resolution_data.get('responsible_person', '')
+        car_doc.target_date = resolution_data.get('target_completion_date', '')
+        car_doc.status = 'Resolved'
+        car_doc.remarks = resolution_data.get('resolution_remarks', '')
+        
+        # Save the document
+        car_doc.insert()
+        frappe.db.commit()
+        
+        return {
+            'success': True,
+            'car_name': car_doc.name,
+            'message': f'Corrective Action Resolved {car_doc.name} created successfully'
+        }
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error creating CAR from OEE Dashboard: {frappe.get_traceback()}",
+            "Create CAR from OEE Dashboard Error"
+        )
+        return {
+            'success': False,
+            'error': str(e)
+        }

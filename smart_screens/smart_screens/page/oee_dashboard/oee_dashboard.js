@@ -4,6 +4,7 @@ let sortedData = [];
 let currentSort = { column: null, direction: 'asc' };
 let reportGenerated = false; // Track if report has been generated
 let reportData = null; // Store report data for submission/saving
+let savedReportName = null; // Store the Daily OEE Report name after saving
 
 // Initialize the page
 frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
@@ -310,25 +311,50 @@ class ResolutionPanel {
             return;
         }
 
+        // Check if Daily OEE Report has been saved
+        if (!savedReportName) {
+            frappe.msgprint({
+                title: 'Report Not Saved',
+                message: 'Please save the Daily OEE Report first before generating CAR.',
+                indicator: 'red',
+                primary_action: {
+                    label: 'Save Report Now',
+                    action: function() {
+                        saveReport();
+                    }
+                }
+            });
+            return;
+        }
+
         try {
             showLoading();
+            
+            // Create Corrective Action Resolved document
             const r = await new Promise((resolve, reject) => {
                 frappe.call({
-                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.save_production_resolution',
+                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.create_car_from_oee_dashboard',
                     args: {
                         production_entry: row.name,
-                        resolution_data: data,
-                        is_draft: isDraft
+                        parent_daily_oee_report: savedReportName,
+                        resolution_data: data
                     },
                     callback: resolve,
                     error: reject
                 });
             });
+            
             hideLoading();
+            
             if (r && r.message && r.message.success) {
-                // Update local row
-                const status = r.message.resolution_status || (isDraft ? 'In Progress' : 'Resolved');
-                const updated = { ...row, ...data, resolution_status: status };
+                // Update local row status to Resolved
+                const updated = { 
+                    ...row, 
+                    ...data, 
+                    resolution_status: 'Resolved',
+                    resolved_record: r.message.car_name
+                };
+                
                 // Update both currentData and sortedData
                 const updateByName = (arr) => {
                     const i = arr.findIndex(x => x.name === row.name);
@@ -338,26 +364,30 @@ class ResolutionPanel {
                 updateByName(sortedData);
                 updateTable(sortedData);
 
+                frappe.show_alert({ 
+                    message: `CAR ${r.message.car_name} created successfully`, 
+                    indicator: 'green' 
+                });
+
                 if (goNext) {
                     const nextIndex = this.findNextUnresolved(index + 1);
                     if (nextIndex >= 0) {
                         this.open(nextIndex);
                     } else {
-                        frappe.msgprint('All low OEE records are processed.');
+                        frappe.msgprint('All low OEE records have been resolved.');
                         this.close();
                     }
                 } else {
-                    frappe.show_alert({ message: 'Resolution saved', indicator: 'green' });
                     this.close();
                 }
             } else {
-                const msg = (r && r.message && r.message.error) || 'Failed to save resolution';
+                const msg = (r && r.message && r.message.error) || 'Failed to create CAR';
                 frappe.msgprint(msg);
             }
         } catch (e) {
             hideLoading();
-            console.error('Save resolution error', e);
-            frappe.msgprint('Error while saving resolution.');
+            console.error('Create CAR error', e);
+            frappe.msgprint('Error while creating CAR. Please try again.');
         }
     }
 
@@ -773,6 +803,9 @@ function saveReport() {
             hideLoading();
             
             if (r.message && r.message.success) {
+                // Store the report name for later use
+                savedReportName = r.message.report_name;
+                
                 frappe.show_alert({
                     message: 'Report saved successfully',
                     indicator: 'blue'
@@ -782,11 +815,11 @@ function saveReport() {
                 if (r.message.report_name) {
                     frappe.msgprint({
                         title: 'Report Saved',
-                        message: `Report "${r.message.report_name}" has been saved as draft.`,
+                        message: `Report "${r.message.report_name}" has been saved as draft. You can now generate CARs for low OEE records.`,
                         primary_action: {
                             label: 'View Report',
                             action: function() {
-                                frappe.set_route('Form', 'OEE Report', r.message.report_name);
+                                frappe.set_route('Form', 'Daily OEE Report', r.message.report_name);
                             }
                         }
                     });

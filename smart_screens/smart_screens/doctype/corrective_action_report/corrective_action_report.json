@@ -10,14 +10,15 @@
   "naming_series",
   "report_info_section",
   "report_date",
-  "production_date",
+  "from_date",
+  "to_date",
   "column_break_filters",
   "shift_filter",
   "machine_filter",
   "item_filter",
   "operator_filter",
   "production_records_section",
-  "unresolved_production_records",
+  "low_oee_production_records",
   "summary_section",
   "total_records",
   "resolved_records",
@@ -32,9 +33,8 @@
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Series",
-   "options": "CAR-UNRESOLVED-.YYYY.-",
-   "set_only_once": 1,
-   "reqd": 1
+   "options": "CAR-.YYYY.-",
+   "set_only_once": 1
   },
   {
    "fieldname": "report_info_section",
@@ -50,12 +50,18 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "production_date",
+   "fieldname": "from_date",
    "fieldtype": "Date",
-   "label": "Production Date",
+   "label": "From Date",
    "reqd": 1,
-   "in_standard_filter": 1,
-   "in_list_view": 1
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date",
+   "reqd": 1,
+   "in_standard_filter": 1
   },
   {
    "fieldname": "column_break_filters",
@@ -91,10 +97,10 @@
    "label": "Low OEE Production Records"
   },
   {
-   "fieldname": "unresolved_production_records",
+   "fieldname": "low_oee_production_records",
    "fieldtype": "Table",
-   "label": "Unresolved Production Records",
-   "options": "Unresolved Production Record",
+   "label": "Production Records",
+   "options": "CAR Production Record",
    "reqd": 1
   },
   {
@@ -148,16 +154,16 @@
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
-   "options": "Corrective Action Unresolved",
+   "options": "Corrective Action Report",
    "read_only": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-10-27 16:00:00.000000",
+ "modified": "2025-10-25 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Smart Screens",
- "name": "Corrective Action Unresolved",
+ "name": "Corrective Action Report",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [

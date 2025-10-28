@@ -11,10 +11,10 @@ class CorrectiveActionUnresolved(Document):
     
     def validate(self):
         """Validation on save"""
-        # Validate date range
-        if self.from_date and self.to_date:
-            if getdate(self.to_date) < getdate(self.from_date):
-                frappe.throw("To Date cannot be before From Date")
+        # Validate production date
+        if self.production_date:
+            if getdate(self.production_date) > getdate():
+                frappe.throw("Production Date cannot be in the future")
         
         # Calculate summary fields
         self.calculate_summary()
@@ -70,8 +70,7 @@ def generate_car_from_oee_dashboard(filters):
     
     Args:
         filters: Dictionary containing:
-            - from_date
-            - to_date
+            - production_date (single date)
             - shift_filter
             - machine_filter
             - item_filter
@@ -87,8 +86,7 @@ def generate_car_from_oee_dashboard(filters):
         filters = json.loads(filters)
     
     # Extract filters
-    from_date = filters.get('from_date')
-    to_date = filters.get('to_date')
+    production_date = filters.get('production_date') or filters.get('from_date')  # Backward compatibility
     shift_filter = filters.get('shift_filter', '')
     machine_filter = filters.get('machine_filter', '')
     item_filter = filters.get('item_filter', '')
@@ -96,8 +94,8 @@ def generate_car_from_oee_dashboard(filters):
     production_records = filters.get('production_records', [])
     
     # Validate
-    if not from_date or not to_date:
-        frappe.throw("From Date and To Date are required")
+    if not production_date:
+        frappe.throw("Production Date is required")
     
     if not production_records:
         frappe.throw("No production records found to generate CAR")
@@ -116,8 +114,7 @@ def generate_car_from_oee_dashboard(filters):
     
     # Create CAR document
     car_doc = frappe.new_doc("Corrective Action Unresolved")
-    car_doc.from_date = from_date
-    car_doc.to_date = to_date
+    car_doc.production_date = production_date
     car_doc.shift_filter = shift_filter
     car_doc.machine_filter = machine_filter
     car_doc.item_filter = item_filter

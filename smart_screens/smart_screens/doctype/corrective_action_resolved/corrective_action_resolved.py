@@ -6,10 +6,17 @@ class CorrectiveActionResolved(Document):
     """
     Corrective Action Resolved DocType
     Stores root cause analysis and resolution for ONE production entry
+    Can be created from EITHER:
+    1. Corrective Action Unresolved (old flow)
+    2. Daily OEE Report (new flow)
     """
     
     def validate(self):
         """Validation on save"""
+        # Validate at least one parent is specified
+        if not self.parent_car_unresolved and not self.parent_daily_oee_report:
+            frappe.throw("Either 'Parent CAR Unresolved' or 'Parent Daily OEE Report' must be specified")
+        
         # Validate Why Analysis - must have exactly 5 rows
         if self.why_analysis:
             if len(self.why_analysis) != 5:
@@ -31,30 +38,63 @@ class CorrectiveActionResolved(Document):
     
     def after_insert(self):
         """Called after document is created"""
-        # Update the parent CAR Unresolved record
-        self.update_parent_car_status()
+        # Update the parent document based on which parent is set
+        if self.parent_car_unresolved:
+            self.update_parent_car_unresolved_status()
+        elif self.parent_daily_oee_report:
+            self.update_parent_daily_oee_report_status()
     
-    def update_parent_car_status(self):
-        """Update the parent CAR Unresolved production record status"""
+    def update_parent_car_unresolved_status(self):
+        """Update CAR Unresolved (OLD FLOW)"""
         if not self.parent_car_unresolved or not self.production_entry:
             return
         
         try:
-            # Get parent CAR document
             parent_car = frappe.get_doc("Corrective Action Unresolved", self.parent_car_unresolved)
             
-            # Find the corresponding production record in child table
             for row in parent_car.unresolved_production_records:
                 if row.production_entry == self.production_entry:
-                    # Update status and link
                     row.resolution_status = "Resolved"
                     row.resolved_record = self.name
                     break
             
-            # Save parent CAR (this will recalculate summary fields)
             parent_car.save(ignore_permissions=True)
-            
-            frappe.msgprint(f"Updated parent CAR {self.parent_car_unresolved} status")
+            frappe.msgprint(f"Updated CAR {self.parent_car_unresolved} status")
             
         except Exception as e:
             frappe.log_error(f"Failed to update parent CAR: {str(e)}", "CAR Resolution Update Failed")
+    
+    def update_parent_daily_oee_report_status(self):
+        """Update Daily OEE Report (NEW FLOW) ⭐"""
+        if not self.parent_daily_oee_report or not self.production_entry:
+            return
+        
+        try:
+            # Get parent Daily OEE Report
+            parent_report = frappe.get_doc("Daily OEE Report", self.parent_daily_oee_report)
+            
+            # Find the corresponding production record in child table
+            updated = False
+            for row in parent_report.production_records:
+                if row.production_entry == self.production_entry:
+                    # Update status and link
+                    row.resolution_status = "Resolved"
+                    row.resolved_record = self.name
+                    updated = True
+                    break
+            
+            if updated:
+                # Save parent report (this will recalculate summary fields)
+                parent_report.save(ignore_permissions=True)
+                frappe.msgprint(f"Updated Daily OEE Report {self.parent_daily_oee_report} - Record marked as Resolved")
+            else:
+                frappe.log_error(
+                    f"Production entry {self.production_entry} not found in Daily OEE Report {self.parent_daily_oee_report}",
+                    "Daily OEE Report Update Warning"
+                )
+            
+        except Exception as e:
+            frappe.log_error(
+                f"Failed to update Daily OEE Report: {str(e)}", 
+                "Daily OEE Report Resolution Update Failed"
+            )

@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "naming_series:",
- "creation": "2025-10-25 16:00:00.000000",
+ "creation": "2025-10-28 00:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -14,16 +14,22 @@
   "column_break_filters",
   "shift_filter",
   "machine_filter",
-  "item_filter",
-  "operator_filter",
   "production_records_section",
-  "unresolved_production_records",
+  "production_records",
   "summary_section",
   "total_records",
-  "resolved_records",
-  "pending_records",
+  "avg_availability",
+  "avg_performance",
   "column_break_summary",
-  "resolution_progress_pct",
+  "avg_quality",
+  "avg_oee",
+  "remarks_section",
+  "general_remarks",
+  "safety_and_machinery",
+  "tool_observation",
+  "mould_observation",
+  "suggestions_for_improvement",
+  "section_break_status",
   "status",
   "amended_from"
  ],
@@ -32,7 +38,7 @@
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Series",
-   "options": "CAR-UNRESOLVED-.YYYY.-",
+   "options": "DAILY-OEE-.YYYY.-",
    "set_only_once": 1,
    "reqd": 1
   },
@@ -74,26 +80,14 @@
    "read_only": 1
   },
   {
-   "fieldname": "item_filter",
-   "fieldtype": "Data",
-   "label": "Item Filter",
-   "read_only": 1
-  },
-  {
-   "fieldname": "operator_filter",
-   "fieldtype": "Data",
-   "label": "Operator Filter",
-   "read_only": 1
-  },
-  {
    "fieldname": "production_records_section",
    "fieldtype": "Section Break",
-   "label": "Low OEE Production Records"
+   "label": "Production Records"
   },
   {
-   "fieldname": "unresolved_production_records",
+   "fieldname": "production_records",
    "fieldtype": "Table",
-   "label": "Unresolved Production Records",
+   "label": "Production Records",
    "options": "Unresolved Production Record",
    "reqd": 1
   },
@@ -110,35 +104,76 @@
    "default": 0
   },
   {
-   "fieldname": "resolved_records",
-   "fieldtype": "Int",
-   "label": "Resolved Records",
+   "fieldname": "avg_availability",
+   "fieldtype": "Percent",
+   "label": "Average Availability %",
    "read_only": 1,
-   "default": 0
+   "precision": 2
   },
   {
-   "fieldname": "pending_records",
-   "fieldtype": "Int",
-   "label": "Pending Records",
+   "fieldname": "avg_performance",
+   "fieldtype": "Percent",
+   "label": "Average Performance %",
    "read_only": 1,
-   "default": 0
+   "precision": 2
   },
   {
    "fieldname": "column_break_summary",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "resolution_progress_pct",
+   "fieldname": "avg_quality",
    "fieldtype": "Percent",
-   "label": "Resolution Progress %",
+   "label": "Average Quality %",
    "read_only": 1,
    "precision": 2
+  },
+  {
+   "fieldname": "avg_oee",
+   "fieldtype": "Percent",
+   "label": "Average OEE %",
+   "read_only": 1,
+   "precision": 2
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks & Observations"
+  },
+  {
+   "fieldname": "general_remarks",
+   "fieldtype": "Text Editor",
+   "label": "General Remarks"
+  },
+  {
+   "fieldname": "safety_and_machinery",
+   "fieldtype": "Text Editor",
+   "label": "Safety and Machinery"
+  },
+  {
+   "fieldname": "tool_observation",
+   "fieldtype": "Text Editor",
+   "label": "Tool Observation"
+  },
+  {
+   "fieldname": "mould_observation",
+   "fieldtype": "Text Editor",
+   "label": "Mould Observation"
+  },
+  {
+   "fieldname": "suggestions_for_improvement",
+   "fieldtype": "Text Editor",
+   "label": "Suggestions for Improvement"
+  },
+  {
+   "fieldname": "section_break_status",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Draft\nIn Progress\nCompleted\nSubmitted",
+   "options": "Draft\nSubmitted",
    "default": "Draft",
    "reqd": 1,
    "in_list_view": 1,
@@ -148,16 +183,16 @@
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
-   "options": "Corrective Action Unresolved",
+   "options": "Daily OEE Report",
    "read_only": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-10-27 16:00:00.000000",
+ "modified": "2025-10-28 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Smart Screens",
- "name": "Corrective Action Unresolved",
+ "name": "Daily OEE Report",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
