@@ -128,10 +128,220 @@ class DailyOEEReport(Document):
 
 
 @frappe.whitelist()
+def check_existing_report(production_date, shift_filter='', machine_filter=''):
+    """
+    Check if a Daily OEE Report already exists for given date and filters
+    Called when user loads OEE Dashboard or changes production date
+    
+    Args:
+        production_date: Production date to check
+        shift_filter: Optional shift filter
+        machine_filter: Optional machine filter
+    
+    Returns:
+        {
+            'exists': True/False,
+            'report_name': 'DAILY-OEE-2025-10-28-00001',
+            'status': 'Draft'/'Submitted',
+            'docstatus': 0/1,
+            'total_records': 15,
+            'resolved_count': 8,
+            'pending_count': 7,
+            'can_resume': True/False
+        }
+    """
+    if not production_date:
+        frappe.throw("Production Date is required")
+    
+    # Search for existing report
+    filters = {
+        "production_date": production_date,
+        "docstatus": ["<", 2]  # Not cancelled
+    }
+    
+    # Add optional filters if provided
+    if shift_filter and shift_filter != 'all':
+        filters["shift_filter"] = shift_filter
+    if machine_filter and machine_filter != 'all':
+        filters["machine_filter"] = machine_filter
+    
+    existing_reports = frappe.get_all(
+        "Daily OEE Report",
+        filters=filters,
+        fields=["name", "status", "docstatus", "total_records", "production_date"],
+        order_by="creation desc",
+        limit=1
+    )
+    
+    if not existing_reports:
+        return {
+            'exists': False,
+            'report_name': None,
+            'status': None,
+            'docstatus': None,
+            'total_records': 0,
+            'resolved_count': 0,
+            'pending_count': 0,
+            'can_resume': False
+        }
+    
+    report = existing_reports[0]
+    report_name = report['name']
+    
+    # Get resolution statistics - safely handle if child table doesn't exist yet
+    resolved_count = 0
+    pending_count = 0
+    
+    try:
+        # Check if child table exists before querying
+        if frappe.db.table_exists("Daily OEE Report Production Record"):
+            resolved_count = frappe.db.count("Daily OEE Report Production Record", {
+                "parent": report_name,
+                "resolution_status": "Resolved"
+            })
+            
+            pending_count = frappe.db.count("Daily OEE Report Production Record", {
+                "parent": report_name,
+                "resolution_status": ["!=", "Resolved"]
+            })
+    except Exception as e:
+        frappe.log_error(f"Error counting child records: {str(e)}", "check_existing_report")
+        # Continue with zeros if table doesn't exist
+        pass
+    
+    return {
+        'exists': True,
+        'report_name': report_name,
+        'status': report['status'],
+        'docstatus': report['docstatus'],
+        'total_records': report['total_records'] or 0,
+        'resolved_count': resolved_count,
+        'pending_count': pending_count,
+        'can_resume': report['docstatus'] == 0  # Can only resume draft reports
+    }
+
+
+@frappe.whitelist()
+def get_report_data(report_name):
+    """
+    Load existing Daily OEE Report data for resume mode
+    Returns production records with their current resolution status
+    
+    Args:
+        report_name: Name of Daily OEE Report document
+    
+    Returns:
+        {
+            'report': {...report header fields...},
+            'production_records': [{...with resolution_status, car_reference...}]
+        }
+    """
+    if not report_name:
+        frappe.throw("Report Name is required")
+    
+    # Check if report exists
+    if not frappe.db.exists("Daily OEE Report", report_name):
+        frappe.throw(f"Daily OEE Report {report_name} not found")
+    
+    # Get report document
+    report_doc = frappe.get_doc("Daily OEE Report", report_name)
+    
+    # Build production records with current status
+    production_records = []
+    for row in report_doc.production_records:
+        production_records.append({
+            'name': row.production_entry,
+            'production_date': row.production_date,
+            'shift_type': row.shift_type,
+            'operator_name': row.operator_name,
+            'machine_reference': row.machine_reference,
+            'item_code': row.item_code,
+            'lot_number': row.lot_number,
+            'target_quantity': row.target_quantity,
+            'actual_quantity': row.actual_quantity,
+            'variance_qty': row.variance_qty,
+            'oee_pct': row.oee_pct,
+            'production_efficiency_pct': row.production_efficiency_pct,
+            'rejection_percentage': row.rejection_percentage,
+            'availability_pct': row.availability_pct,
+            'performance_pct': row.performance_pct,
+            'quality_pct': row.quality_pct,
+            'resolution_status': row.resolution_status or 'Pending',
+            'car_reference': row.car_reference or '',
+            'remarks': row.remarks or ''
+        })
+    
+    return {
+        'report': {
+            'name': report_doc.name,
+            'production_date': report_doc.production_date,
+            'shift_filter': report_doc.shift_filter,
+            'machine_filter': report_doc.machine_filter,
+            'status': report_doc.status,
+            'docstatus': report_doc.docstatus,
+            'total_records': report_doc.total_records,
+            'avg_oee': report_doc.avg_oee
+        },
+        'production_records': production_records
+    }
+
+
+@frappe.whitelist()
+def update_report_resolution_status(report_name, production_entry, resolution_status, car_reference='', remarks=''):
+    """
+    Update resolution status for a production record in existing Daily OEE Report
+    Called after user creates CAR from dashboard
+    
+    Args:
+        report_name: Name of Daily OEE Report
+        production_entry: Production entry identifier
+        resolution_status: 'Resolved' or 'Pending'
+        car_reference: CAR document name (if created)
+        remarks: Optional remarks
+    """
+    if not report_name or not production_entry:
+        frappe.throw("Report Name and Production Entry are required")
+    
+    # Get report document
+    report_doc = frappe.get_doc("Daily OEE Report", report_name)
+    
+    # Check if report is draft
+    if report_doc.docstatus != 0:
+        frappe.throw("Cannot update submitted or cancelled report")
+    
+    # Find the production record
+    updated = False
+    for row in report_doc.production_records:
+        if row.production_entry == production_entry:
+            row.resolution_status = resolution_status
+            if car_reference:
+                row.car_reference = car_reference
+            if remarks:
+                row.remarks = remarks
+            updated = True
+            break
+    
+    if not updated:
+        frappe.throw(f"Production entry {production_entry} not found in report {report_name}")
+    
+    # Save report
+    report_doc.save(ignore_permissions=True)
+    
+    frappe.db.commit()
+    
+    return {
+        'success': True,
+        'message': f'Updated resolution status for {production_entry}'
+    }
+
+
+@frappe.whitelist()
 def generate_daily_oee_report(filters):
     """
     Generate Daily OEE Report from OEE Dashboard
     Called when user clicks "Submit Report" button
+    
+    MODIFIED: Now checks for existing draft report and updates it instead of creating duplicate
     
     Args:
         filters: Dictionary containing:
@@ -139,9 +349,10 @@ def generate_daily_oee_report(filters):
             - shift_filter
             - machine_filter
             - production_records (list of all OEE records for the day)
+            - existing_report_name (optional - if resuming)
     
     Returns:
-        Name of created Daily OEE Report document
+        Name of created/updated Daily OEE Report document
     """
     import json
     
@@ -153,6 +364,7 @@ def generate_daily_oee_report(filters):
     shift_filter = filters.get('shift_filter', '')
     machine_filter = filters.get('machine_filter', '')
     production_records = filters.get('production_records', [])
+    existing_report_name = filters.get('existing_report_name')
     
     # Validate
     if not production_date:
@@ -161,7 +373,60 @@ def generate_daily_oee_report(filters):
     if not production_records:
         frappe.throw("No production records found to generate Daily OEE Report")
     
-    # Check if report already exists for this date and filters
+    # RESUME MODE: Update existing draft report
+    if existing_report_name:
+        if not frappe.db.exists("Daily OEE Report", existing_report_name):
+            frappe.throw(f"Existing report {existing_report_name} not found")
+        
+        report_doc = frappe.get_doc("Daily OEE Report", existing_report_name)
+        
+        # Check if report is still draft
+        if report_doc.docstatus != 0:
+            frappe.throw("Cannot update a submitted or cancelled report")
+        
+        # Update production records (merge new data with existing resolution status)
+        # Create lookup of existing records
+        existing_records = {row.production_entry: row for row in report_doc.production_records}
+        
+        # Clear and rebuild child table
+        report_doc.production_records = []
+        
+        for record in production_records:
+            production_entry_name = record.get('name')
+            
+            # Check if this record already exists (preserve resolution status)
+            existing_row = existing_records.get(production_entry_name)
+            
+            report_doc.append("production_records", {
+                "production_entry": production_entry_name,
+                "production_date": record.get('production_date'),
+                "shift_type": record.get('shift_type', ''),
+                "operator_name": record.get('operator_name', ''),
+                "machine_reference": record.get('machine_reference', ''),
+                "item_code": record.get('item_code', ''),
+                "lot_number": record.get('lot_number', ''),
+                "target_quantity": flt(record.get('target_quantity', 0)),
+                "actual_quantity": flt(record.get('actual_quantity', 0)),
+                "variance_qty": flt(record.get('variance_qty', 0)),
+                "oee_pct": flt(record.get('oee_pct', 0)),
+                "production_efficiency_pct": flt(record.get('production_efficiency_pct', 0)),
+                "rejection_percentage": flt(record.get('rejection_percentage', 0)),
+                "availability_pct": flt(record.get('availability_pct', 0)),
+                "performance_pct": flt(record.get('performance_pct', 0)),
+                "quality_pct": flt(record.get('quality_pct', 0)),
+                # Preserve existing resolution data if available
+                "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
+                "car_reference": existing_row.car_reference if existing_row else '',
+                "remarks": existing_row.remarks if existing_row else ''
+            })
+        
+        report_doc.save(ignore_permissions=True)
+        
+        frappe.msgprint(f"Updated existing Daily OEE Report {report_doc.name} with {len(production_records)} production record(s)")
+        
+        return report_doc.name
+    
+    # NEW REPORT MODE: Check if report already exists for this date and filters
     existing_report = frappe.db.exists("Daily OEE Report", {
         "production_date": production_date,
         "shift_filter": shift_filter,
@@ -170,7 +435,7 @@ def generate_daily_oee_report(filters):
     })
     
     if existing_report:
-        frappe.throw(f"Daily OEE Report already exists for this date and filter combination: {existing_report}")
+        frappe.throw(f"Daily OEE Report already exists for this date and filter combination: {existing_report}. Please use 'Resume Report' to update it.")
     
     # Create Daily OEE Report document
     report_doc = frappe.new_doc("Daily OEE Report")

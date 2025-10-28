@@ -39,14 +39,14 @@ class MouldingAdapter(ProcessAdapter):
                 lot_condition = f"AND wpi.lot_number LIKE '%{filters.get('lot')}%'"
             
             if filters.get('shift') and filters.get('shift') != 'all':
-                prod_shift_condition = f"AND COALESCE(jc.shift_type, 'Unknown') = '{filters.get('shift')}'"
+                # Shift filter will be applied after joining with work plan
                 shift_condition = f"AND wp.shift_type = '{filters.get('shift')}'"
         
         # STEP 1: Get aggregated production data (same as Planned vs Actual)
+        # Note: shift_type removed from Job Card join as it doesn't exist in the schema
         production_query = f"""
             SELECT 
                 mpe.moulding_date as production_date,
-                COALESCE(jc.shift_type, 'Unknown') as shift_type,
                 mpe.mould_reference as mould_ref,
                 COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
                 mpe.item_to_produce as item_code,
@@ -56,15 +56,13 @@ class MouldingAdapter(ProcessAdapter):
                 mpe.employee_name as operator_name,
                 GROUP_CONCAT(mpe.name ORDER BY mpe.creation SEPARATOR '|||') as production_entry_names
             FROM `tabMoulding Production Entry` mpe
-            LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
             AND mpe.docstatus = 1
             AND COALESCE(mpe.scan_lot_number, mpe.batch_no) IS NOT NULL
             AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
             {prod_item_condition}
             {prod_lot_condition}
-            {prod_shift_condition}
-            GROUP BY mpe.moulding_date, COALESCE(jc.shift_type, 'Unknown'), 
+            GROUP BY mpe.moulding_date, 
                      mpe.mould_reference, COALESCE(mpe.scan_lot_number, mpe.batch_no), 
                      mpe.item_to_produce, mpe.employee_name
         """
@@ -78,7 +76,7 @@ class MouldingAdapter(ProcessAdapter):
         production_lot_numbers = list(set([prod['lot_number'] for prod in production_data]))
         lot_numbers_condition = "'" + "','".join(production_lot_numbers) + "'"
         
-        # STEP 2: Get matching work plans for these lot numbers
+        # STEP 2: Get matching work plans for these lot numbers (shift comes from here)
         work_plan_query = f"""
             SELECT 
                 wp.name as work_plan_no,
@@ -87,7 +85,7 @@ class MouldingAdapter(ProcessAdapter):
                 wpi.mould as mould_ref,
                 ms.noof_cavities as no_of_cavities,
                 COALESCE(wpit.target_qty, 0) as target_lifts,
-                wp.shift_type
+                COALESCE(wp.shift_type, 'Unknown') as shift_type
             FROM `tabWork Planning` wp
             INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
             LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
@@ -119,19 +117,22 @@ class MouldingAdapter(ProcessAdapter):
             
             # Get first production entry name from the comma-separated list
             production_entry_names = prod.get('production_entry_names', '')
-            first_production_entry = production_entry_names.split('|||')[0] if production_entry_names else f"{prod['production_date']}_{prod['shift_type']}_{lot_no}"
+            first_production_entry = production_entry_names.split('|||')[0] if production_entry_names else f"{prod['production_date']}_Unknown_{lot_no}"
             
-            # Find matching work plan by lot number
+            # Find matching work plan by lot number (shift comes from work plan)
             matched_work_plan = None
             if lot_no in work_plan_by_lot:
                 matched_work_plan = work_plan_by_lot[lot_no][0]  # Take first match
+            
+            # Get shift from work plan, default to 'Unknown' if no work plan
+            shift_type = matched_work_plan.get('shift_type', 'Unknown') if matched_work_plan else 'Unknown'
             
             if matched_work_plan:
                 # Merge production with work plan data
                 result = {
                     'name': first_production_entry,  # Use actual production entry ID
                     'production_date': prod['production_date'],
-                    'shift_type': prod['shift_type'],
+                    'shift_type': shift_type,  # From work plan, not job card
                     'mould_reference': prod['mould_ref'],
                     'lot_number': lot_no,
                     'item_to_produce': matched_work_plan['item_code'],
@@ -151,7 +152,7 @@ class MouldingAdapter(ProcessAdapter):
                 result = {
                     'name': first_production_entry,  # Use actual production entry ID
                     'production_date': prod['production_date'],
-                    'shift_type': prod['shift_type'],
+                    'shift_type': 'Unknown',  # No work plan = no shift info
                     'mould_reference': prod['mould_ref'],
                     'lot_number': lot_no,
                     'item_to_produce': prod['item_code'],

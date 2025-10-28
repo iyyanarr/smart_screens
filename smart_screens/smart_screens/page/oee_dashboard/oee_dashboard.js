@@ -5,6 +5,7 @@ let currentSort = { column: null, direction: 'asc' };
 let reportGenerated = false; // Track if report has been generated
 let reportData = null; // Store report data for submission/saving
 let savedReportName = null; // Store the Daily OEE Report name after saving
+let existingReportInfo = null; // Store existing report information for resume mode
 
 // Initialize the page
 frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
@@ -24,7 +25,8 @@ frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
         loadProcessOptions();
         // Load shift options only (don't auto-load data)
         loadShiftOptions();
-        // Don't call loadData() automatically - user must click Generate Report
+        // Check for existing report when date is set
+        checkExistingReport();
     });
 };
 
@@ -590,28 +592,275 @@ function updateSortIndicators() {
     }
 }
 
+function checkExistingReport() {
+    /**
+     * Check if a Daily OEE Report already exists for the selected date and filters
+     * Called when user loads dashboard or changes production date/filters
+     */
+    const productionDate = document.getElementById('production_date').value;
+    const shiftFilter = document.getElementById('shift_filter').value;
+    const machineFilter = document.getElementById('machine_filter').value;
+    
+    if (!productionDate) return;
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.check_existing_report',
+        args: {
+            production_date: productionDate,
+            shift_filter: shiftFilter === 'all' ? '' : shiftFilter,
+            machine_filter: machineFilter === 'all' ? '' : machineFilter
+        },
+        callback: function(r) {
+            if (r.message && r.message.exists) {
+                existingReportInfo = r.message;
+                showExistingReportNotification(r.message);
+            } else {
+                existingReportInfo = null;
+                hideExistingReportNotification();
+            }
+        },
+        error: function(err) {
+            console.error('Error checking existing report:', err);
+        }
+    });
+}
+
+function showExistingReportNotification(reportInfo) {
+    /**
+     * Display notification banner when existing report is found
+     */
+    let notificationDiv = document.getElementById('existing-report-notification');
+    
+    if (!notificationDiv) {
+        // Create notification div if it doesn't exist
+        const filterSection = document.querySelector('.filter-section');
+        notificationDiv = document.createElement('div');
+        notificationDiv.id = 'existing-report-notification';
+        notificationDiv.className = 'alert alert-info';
+        notificationDiv.style.marginTop = '15px';
+        filterSection.parentElement.insertBefore(notificationDiv, filterSection.nextSibling);
+    }
+    
+    const isDraft = reportInfo.docstatus === 0;
+    const isSubmitted = reportInfo.docstatus === 1;
+    
+    if (isDraft) {
+        // Draft report - show resume option
+        notificationDiv.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <strong>📋 Existing Draft Report Found:</strong> ${reportInfo.report_name}<br>
+                    <small>
+                        Total Records: ${reportInfo.total_records} | 
+                        Resolved: <span style="color: green;">${reportInfo.resolved_count}</span> | 
+                        Pending: <span style="color: red;">${reportInfo.pending_count}</span>
+                    </small>
+                </div>
+                <div>
+                    <button class="btn btn-primary btn-sm" onclick="resumeExistingReport()" style="margin-right: 5px;">
+                        <i class="fa fa-play"></i> Resume Report
+                    </button>
+                    <button class="btn btn-default btn-sm" onclick="viewExistingReport()">
+                        <i class="fa fa-eye"></i> View Report
+                    </button>
+                </div>
+            </div>
+        `;
+        notificationDiv.className = 'alert alert-warning';
+    } else if (isSubmitted) {
+        // Submitted report - show view only
+        notificationDiv.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <strong>✅ Report Already Submitted:</strong> ${reportInfo.report_name}<br>
+                    <small>Total Records: ${reportInfo.total_records} | Status: <span style="color: green;">Submitted</span></small>
+                </div>
+                <div>
+                    <button class="btn btn-default btn-sm" onclick="viewExistingReport()">
+                        <i class="fa fa-eye"></i> View Report
+                    </button>
+                </div>
+            </div>
+        `;
+        notificationDiv.className = 'alert alert-success';
+    }
+    
+    notificationDiv.style.display = 'block';
+}
+
+function hideExistingReportNotification() {
+    const notificationDiv = document.getElementById('existing-report-notification');
+    if (notificationDiv) {
+        notificationDiv.style.display = 'none';
+    }
+}
+
+function resumeExistingReport() {
+    /**
+     * Load existing draft report data and enable CAR generation
+     */
+    if (!existingReportInfo || !existingReportInfo.report_name) {
+        frappe.msgprint('No existing report found');
+        return;
+    }
+    
+    showLoading();
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
+        args: {
+            report_name: existingReportInfo.report_name
+        },
+        callback: function(r) {
+            hideLoading();
+            
+            if (r.message && r.message.production_records) {
+                // Load existing report data into the dashboard
+                currentData = r.message.production_records;
+                sortedData = [...currentData];
+                updateTable(sortedData);
+                
+                // CRITICAL: Set saved report name FIRST so CAR creation works
+                savedReportName = existingReportInfo.report_name;
+                reportGenerated = true;
+                
+                // Store report data structure (prevents duplicate save attempts)
+                const productionDate = document.getElementById('production_date').value;
+                const processType = document.getElementById('process_filter').value;
+                const shiftFilter = document.getElementById('shift_filter').value;
+                const machineFilter = document.getElementById('machine_filter').value;
+                
+                reportData = {
+                    filters: {
+                        production_date: productionDate,
+                        process_type: processType,
+                        shift_filter: shiftFilter,
+                        machine_filter: machineFilter
+                    },
+                    data: currentData,
+                    summary: calculateSummaryFromData(currentData),
+                    generated_at: new Date().toISOString()
+                };
+                
+                // Update summary from loaded data
+                const summary = calculateSummaryFromData(currentData);
+                updateSummaryCards(summary);
+                
+                // Show action buttons
+                showReportActionButtons();
+                
+                // Hide the notification banner after resume
+                hideExistingReportNotification();
+                
+                frappe.show_alert({
+                    message: `Resumed report ${existingReportInfo.report_name} with ${currentData.length} records`,
+                    indicator: 'green'
+                });
+                
+                // Highlight pending records
+                const pendingCount = currentData.filter(r => 
+                    (r.oee_pct || 0) < 90 && r.resolution_status !== 'Resolved'
+                ).length;
+                
+                if (pendingCount > 0) {
+                    frappe.msgprint({
+                        title: 'Resume Report',
+                        message: `You have ${pendingCount} low OEE record(s) pending resolution. Click "Generate CAR" to create Corrective Action Reports.`,
+                        indicator: 'orange'
+                    });
+                } else {
+                    frappe.msgprint({
+                        title: 'All Records Resolved',
+                        message: 'All low OEE records have been resolved. You can now submit the report.',
+                        indicator: 'green'
+                    });
+                }
+                
+                // Log for debugging
+                console.log('✅ Report resumed successfully:', {
+                    reportName: savedReportName,
+                    totalRecords: currentData.length,
+                    pendingCount: pendingCount
+                });
+            }
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error loading existing report:', err);
+            frappe.msgprint('Error loading existing report. Please try again.');
+        }
+    });
+}
+
+function viewExistingReport() {
+    /**
+     * Open the existing Daily OEE Report document
+     */
+    if (existingReportInfo && existingReportInfo.report_name) {
+        frappe.set_route('Form', 'Daily OEE Report', existingReportInfo.report_name);
+    }
+}
+
+function calculateSummaryFromData(data) {
+    /**
+     * Calculate summary statistics from loaded production data
+     */
+    if (!data || data.length === 0) {
+        return {
+            avg_availability: 0,
+            avg_performance: 0,
+            avg_quality: 0,
+            avg_oee: 0
+        };
+    }
+    
+    const total = data.length;
+    const totalAvailability = data.reduce((sum, r) => sum + (r.availability_pct || 0), 0);
+    const totalPerformance = data.reduce((sum, r) => sum + (r.performance_pct || 0), 0);
+    const totalQuality = data.reduce((sum, r) => sum + (r.quality_pct || 0), 0);
+    const totalOEE = data.reduce((sum, r) => sum + (r.oee_pct || 0), 0);
+    
+    return {
+        avg_availability: (totalAvailability / total).toFixed(2),
+        avg_performance: (totalPerformance / total).toFixed(2),
+        avg_quality: (totalQuality / total).toFixed(2),
+        avg_oee: (totalOEE / total).toFixed(2)
+    };
+}
+
 // Event listeners for filter changes
 document.addEventListener('DOMContentLoaded', function() {
-    // Only reload shift options when date or process changes, don't auto-load data
+    // Check for existing report when date or filters change
     const productionDateEl = document.getElementById('production_date');
     const processFilterEl = document.getElementById('process_filter');
+    const shiftFilterEl = document.getElementById('shift_filter');
+    const machineFilterEl = document.getElementById('machine_filter');
     
     if (productionDateEl) {
         productionDateEl.addEventListener('change', function() {
             loadShiftOptions();
-            // Don't auto-load data - user must click Generate Report
+            checkExistingReport(); // Check for existing report
         });
     }
     
     if (processFilterEl) {
         processFilterEl.addEventListener('change', function() {
             loadShiftOptions();
-            // Don't auto-load data - user must click Generate Report
+            checkExistingReport(); // Check for existing report
         });
     }
-
-    // Remove auto-load for other filters as well
-    // User must click Generate Report to load data
+    
+    if (shiftFilterEl) {
+        shiftFilterEl.addEventListener('change', function() {
+            checkExistingReport(); // Check for existing report
+        });
+    }
+    
+    if (machineFilterEl) {
+        machineFilterEl.addEventListener('change', function() {
+            checkExistingReport(); // Check for existing report
+        });
+    }
 
     // Ensure panel exists on DOM ready
     if (!resolutionPanel) resolutionPanel = new ResolutionPanel();

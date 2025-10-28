@@ -776,6 +776,23 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         # Get production entry data
         prod_doc = frappe.get_doc('Moulding Production Entry', production_entry)
         
+        # Get shift_type from Work Planning (since it doesn't exist in Moulding Production Entry)
+        shift_type = 'Unknown'
+        try:
+            work_plan = frappe.db.get_value(
+                'Work Planning',
+                {
+                    'moulding_production_entry': production_entry,
+                    'docstatus': 1
+                },
+                'shift_type'
+            )
+            if work_plan:
+                shift_type = work_plan
+        except Exception:
+            # Fallback to Unknown if Work Planning not found
+            pass
+        
         # Create new Corrective Action Resolved document
         car_doc = frappe.new_doc('Corrective Action Resolved')
         
@@ -785,7 +802,7 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         
         # Copy production data
         car_doc.production_date = prod_doc.moulding_date
-        car_doc.shift_type = prod_doc.shift_type
+        car_doc.shift_type = shift_type  # Use shift_type from Work Planning
         car_doc.operator_name = prod_doc.operator_name
         car_doc.machine_reference = prod_doc.machine_reference
         car_doc.item_code = prod_doc.item_code
@@ -841,6 +858,19 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         # Save the document
         car_doc.insert()
         frappe.db.commit()
+        
+        # Update the Daily OEE Report Production Record with CAR reference
+        try:
+            frappe.db.sql("""
+                UPDATE `tabDaily OEE Report Production Record`
+                SET resolution_status = 'Resolved',
+                    car_reference = %s
+                WHERE parent = %s
+                AND production_entry = %s
+            """, (car_doc.name, parent_daily_oee_report, production_entry))
+            frappe.db.commit()
+        except Exception as e:
+            frappe.log_error(f"Error updating Daily OEE Report record: {str(e)}", "Update CAR Reference")
         
         return {
             'success': True,
