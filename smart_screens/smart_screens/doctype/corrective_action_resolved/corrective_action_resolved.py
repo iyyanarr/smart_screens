@@ -69,6 +69,19 @@ class CorrectiveActionResolved(Document):
             # Get parent Daily OEE Report
             parent_report = frappe.get_doc("Daily OEE Report", self.parent_daily_oee_report)
             
+            # Check if parent is submitted
+            if parent_report.docstatus == 1:
+                frappe.msgprint(
+                    f"Warning: Daily OEE Report {self.parent_daily_oee_report} is already submitted. "
+                    "Child table cannot be updated. Please amend the report if you need to update it.",
+                    indicator='orange'
+                )
+                frappe.log_error(
+                    f"Attempted to update submitted Daily OEE Report {self.parent_daily_oee_report}",
+                    "Daily OEE Report Already Submitted"
+                )
+                return
+            
             # Find the corresponding production record in child table
             updated = False
             for row in parent_report.production_records:

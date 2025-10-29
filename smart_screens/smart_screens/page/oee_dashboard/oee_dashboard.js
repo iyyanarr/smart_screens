@@ -468,6 +468,12 @@ function updateTable(data) {
         return;
     }
     
+    // DEBUG: Log first record to see lot_inspection_status
+    if (data.length > 0) {
+        console.log('🔍 DEBUG - First record lot_inspection_status:', data[0].lot_inspection_status);
+        console.log('🔍 DEBUG - First record full data:', data[0]);
+    }
+    
     data.forEach((row, index) => {
         const tr = document.createElement('tr');
         let oeeClass = row.oee_pct >= 90 ? 'oee-excellent' : 'oee-poor';
@@ -1292,11 +1298,67 @@ function applyFilters() {
 }
 
 function refreshData() {
-    // Reset report state
-    reportGenerated = false;
-    reportData = null;
-    hideReportActionButtons();
-    
-    // Reload data
-    loadData();
+    // Check if we're in resume mode (i.e., working with a saved/resumed report)
+    if (savedReportName) {
+        console.log('🔄 Refreshing resumed report:', savedReportName);
+        
+        // Reload the saved report data to get latest resolution statuses
+        showLoading();
+        
+        frappe.call({
+            method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
+            args: {
+                report_name: savedReportName
+            },
+            callback: function(r) {
+                hideLoading();
+                
+                if (r.message && r.message.success) {
+                    // Reload the saved report data
+                    const savedData = r.message.data;
+                    
+                    // Update current data from saved report
+                    currentData = savedData.production_records || [];
+                    sortedData = [...currentData];
+                    
+                    // Update table with refreshed data
+                    updateTable(sortedData);
+                    
+                    // Update summary from saved report
+                    if (savedData.summary) {
+                        updateSummaryCards(savedData.summary);
+                    }
+                    
+                    // Update report data (preserve existing reportData structure)
+                    if (reportData) {
+                        reportData.data = currentData;
+                        reportData.summary = savedData.summary;
+                    }
+                    
+                    frappe.show_alert({
+                        message: `Report refreshed: ${currentData.length} records loaded`,
+                        indicator: 'blue'
+                    });
+                    
+                    console.log('✅ Report refreshed successfully in resume mode');
+                } else {
+                    frappe.msgprint('Error refreshing report data: ' + (r.message.error || 'Unknown error'));
+                }
+            },
+            error: function(err) {
+                hideLoading();
+                console.error('Error refreshing report:', err);
+                frappe.msgprint('Error refreshing report. Please try again.');
+            }
+        });
+    } else {
+        // Not in resume mode - reset report state and reload fresh data
+        console.log('🔄 Refreshing with fresh data (not in resume mode)');
+        reportGenerated = false;
+        reportData = null;
+        hideReportActionButtons();
+        
+        // Reload fresh data
+        loadData();
+    }
 }

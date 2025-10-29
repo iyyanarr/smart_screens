@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "naming_series:",
- "creation": "2025-10-28 00:00:00.000000",
+ "creation": "2025-10-28 00:00:00",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -30,7 +30,6 @@
   "mould_observation",
   "suggestions_for_improvement",
   "section_break_status",
-  "status",
   "amended_from"
  ],
  "fields": [
@@ -39,8 +38,8 @@
    "fieldtype": "Select",
    "label": "Series",
    "options": "DAILY-OEE-.YYYY.-",
-   "set_only_once": 1,
-   "reqd": 1
+   "reqd": 1,
+   "set_only_once": 1
   },
   {
    "fieldname": "report_info_section",
@@ -48,20 +47,20 @@
    "label": "Report Information"
   },
   {
+   "default": "Today",
    "fieldname": "report_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "label": "Report Generated Date",
-   "default": "Today",
-   "read_only": 1,
-   "in_list_view": 1
+   "read_only": 1
   },
   {
    "fieldname": "production_date",
    "fieldtype": "Date",
-   "label": "Production Date",
-   "reqd": 1,
+   "in_list_view": 1,
    "in_standard_filter": 1,
-   "in_list_view": 1
+   "label": "Production Date",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_filters",
@@ -97,25 +96,25 @@
    "label": "Summary"
   },
   {
+   "default": "0",
    "fieldname": "total_records",
    "fieldtype": "Int",
    "label": "Total Records",
-   "read_only": 1,
-   "default": 0
+   "read_only": 1
   },
   {
    "fieldname": "avg_availability",
    "fieldtype": "Percent",
    "label": "Average Availability %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "avg_performance",
    "fieldtype": "Percent",
    "label": "Average Performance %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_summary",
@@ -125,15 +124,15 @@
    "fieldname": "avg_quality",
    "fieldtype": "Percent",
    "label": "Average Quality %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "avg_oee",
    "fieldtype": "Percent",
    "label": "Average OEE %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "remarks_section",
@@ -170,16 +169,6 @@
    "fieldtype": "Section Break"
   },
   {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "Draft\nSubmitted",
-   "default": "Draft",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
@@ -189,7 +178,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-10-28 00:00:00.000000",
+ "modified": "2025-10-29 14:30:28.175605",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Daily OEE Report",
@@ -223,6 +212,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

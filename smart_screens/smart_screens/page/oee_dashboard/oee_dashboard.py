@@ -352,14 +352,6 @@ def save_production_resolution(production_entry: str, resolution_data=None, is_d
             except Exception:
                 doc = None
         if not doc:
-            # Fallback: try by guessing common doctypes
-            for dt in ['Moulding Production Entry', 'Production Entry']:
-                try:
-                    doc = frappe.get_doc(dt, production_entry)
-                    if doc: break
-                except Exception:
-                    continue
-        if not doc:
             return {"success": False, "error": "Production document not found"}
         if not doc.has_permission("write"):
             return {"success": False, "error": "No write permission for this record"}
@@ -431,10 +423,15 @@ def check_lot_inspection_status(lot_number, process_type='Moulding'):
             'has_inspection': bool,
             'is_submitted': bool,
             'inspection_name': str or None,
-            'status': 'Submitted' | 'Pending' | 'Not Found'
+            'status': 'Submitted' | 'Draft' | 'Not Found'
         }
     """
-    if not lot_number:
+    # Handle empty or None lot number
+    if not lot_number or str(lot_number).strip() == '':
+        frappe.log_error(
+            message=f"Empty lot number received: '{lot_number}'",
+            title="Lot Inspection Check - Empty Lot"
+        )
         return {
             'has_inspection': False,
             'is_submitted': False,
@@ -443,9 +440,11 @@ def check_lot_inspection_status(lot_number, process_type='Moulding'):
         }
     
     try:
-        # Check for Lot Inspection Entry (can be in multiple doctypes)
-        # First try the standard Inspection Entry doctype
-        # NOTE: The field name is 'lot_no' not 'lot_number'
+        # DEBUG: Log the lot number being checked
+        frappe.logger().info(f"🔍 Checking inspection status for lot: '{lot_number}'")
+        
+        # Check for Lot Inspection Entry
+        # Query uses lot_no field and inspection_type = 'Lot Inspection'
         inspection_entries = frappe.db.sql("""
             SELECT name, docstatus, inspection_type
             FROM `tabInspection Entry`
@@ -455,38 +454,53 @@ def check_lot_inspection_status(lot_number, process_type='Moulding'):
             LIMIT 1
         """, (lot_number,), as_dict=True)
         
-        if not inspection_entries:
-            # Try alternative Lot Inspection Entry doctype if exists
-            try:
-                inspection_entries = frappe.db.sql("""
-                    SELECT name, docstatus
-                    FROM `tabLot Inspection Entry`
-                    WHERE lot_number = %s 
-                    ORDER BY creation DESC
-                    LIMIT 1
-                """, (lot_number,), as_dict=True)
-            except Exception:
-                pass
+        # DEBUG: Log the query results
+        frappe.logger().info(f"🔍 Query result for lot '{lot_number}': {inspection_entries}")
         
+        # Check if we got results
         if inspection_entries and len(inspection_entries) > 0:
             entry = inspection_entries[0]
-            is_submitted = entry.get('docstatus') == 1
+            docstatus = int(entry.get('docstatus', 0))
+            is_submitted = (docstatus == 1)
             
-            return {
+            # Determine status based on docstatus
+            # 0 = Draft, 1 = Submitted, 2 = Cancelled
+            if docstatus == 0:
+                status = 'Draft'
+            elif docstatus == 1:
+                status = 'Submitted'
+            elif docstatus == 2:
+                status = 'Cancelled'
+            else:
+                status = 'Draft'
+            
+            result = {
                 'has_inspection': True,
                 'is_submitted': is_submitted,
                 'inspection_name': entry.get('name'),
-                'status': 'Submitted' if is_submitted else 'Pending'
+                'status': status
             }
+            frappe.logger().info(f"✅ Found inspection for lot '{lot_number}': {result}")
+            return result
         else:
-            return {
+            # No inspection found - this is normal and not an error
+            result = {
                 'has_inspection': False,
                 'is_submitted': False,
                 'inspection_name': None,
                 'status': 'Not Found'
             }
+            frappe.logger().info(f"⚠️ No inspection found for lot '{lot_number}'")
+            return result
+    
     except Exception as e:
-        frappe.log_error(f"Error checking lot inspection: {str(e)}", "Lot Inspection Check")
+        # Log error but don't fail - return "Not Found" status
+        error_msg = f"Error checking lot inspection for lot '{lot_number}': {str(e)}\n{frappe.get_traceback()}"
+        frappe.logger().error(f"❌ {error_msg}")
+        frappe.log_error(
+            message=error_msg,
+            title="Lot Inspection Check Error"
+        )
         return {
             'has_inspection': False,
             'is_submitted': False,
@@ -559,7 +573,18 @@ def save_oee_report(report_data):
             # Add updated production records
             for record in production_records:
                 oee_pct = flt(record.get('oee_pct', 0))
-                resolution_status = record.get('resolution_status', 'Pending' if oee_pct < 90 else 'Resolved')
+                
+                # For draft reports, only set resolution_status if:
+                # 1. Record already has a resolution_status from production entry
+                # 2. OEE is low (<90%) and needs resolution - mark as Pending
+                # Don't auto-mark good OEE records as Resolved in draft
+                existing_resolution_status = (record.get('resolution_status') or '').strip()
+                if existing_resolution_status:
+                    resolution_status = existing_resolution_status
+                elif oee_pct < 90:
+                    resolution_status = 'Pending'
+                else:
+                    resolution_status = ''  # Leave empty for good OEE in draft
                 
                 report_doc.append('production_records', {
                     'production_entry': record.get('name'),
@@ -604,7 +629,18 @@ def save_oee_report(report_data):
         # Add production records to child table
         for record in production_records:
             oee_pct = flt(record.get('oee_pct', 0))
-            resolution_status = record.get('resolution_status', 'Pending' if oee_pct < 90 else 'Resolved')
+            
+            # For draft reports, only set resolution_status if:
+            # 1. Record already has a resolution_status from production entry
+            # 2. OEE is low (<90%) and needs resolution - mark as Pending
+            # Don't auto-mark good OEE records as Resolved in draft
+            existing_resolution_status = (record.get('resolution_status') or '').strip()
+            if existing_resolution_status:
+                resolution_status = existing_resolution_status
+            elif oee_pct < 90:
+                resolution_status = 'Pending'
+            else:
+                resolution_status = ''  # Leave empty for good OEE in draft
             
             report_doc.append('production_records', {
                 'production_entry': record.get('name'),
@@ -676,7 +712,6 @@ def submit_oee_report(report_data):
         # Extract data
         filters = report_data.get('filters', {})
         production_records = report_data.get('data', [])
-        summary = report_data.get('summary', {})
         remarks = report_data.get('remarks', {})
         
         # Validate required fields
@@ -731,10 +766,10 @@ def submit_oee_report(report_data):
         for record in production_records:
             oee_pct = flt(record.get('oee_pct', 0))
             
-            # Determine resolution status based on OEE
+            # For submitted reports, determine resolution status based on OEE
             # Low OEE (< 90%) needs resolution - set to Pending
-            # Good OEE (>= 90%) doesn't need resolution - set to Resolved
-            resolution_status = 'Pending' if oee_pct < 90 else 'Resolved'
+            # Good OEE (>= 90%) doesn't need resolution - leave empty (will be auto-resolved on submit)
+            resolution_status = 'Pending' if oee_pct < 90 else ''
             
             report_doc.append('production_records', {
                 'production_entry': record.get('name'),  # Link to Moulding Production Entry
@@ -869,22 +904,6 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
         # Save the CAR document
         car_doc.insert()
         
-        # Update the production entry with resolution status
-        production_doc.reason_code = car_doc.reason_code
-        production_doc.problem_description = car_doc.problem_description
-        production_doc.root_cause = car_doc.root_cause
-        production_doc.corrective_action = car_doc.corrective_action
-        production_doc.responsible_person = car_doc.responsible_person
-        production_doc.target_completion_date = car_doc.target_completion_date
-        production_doc.resolution_remarks = car_doc.resolution_remarks
-        production_doc.resolution_status = car_doc.resolution_status
-        
-        if not is_draft:
-            production_doc.resolved_by = car_doc.resolved_by
-            production_doc.resolved_on = car_doc.resolved_on
-        
-        production_doc.save()
-        
         # If there's a Daily OEE Report, update the resolution status there too
         if parent_daily_oee_report:
             try:
@@ -893,15 +912,16 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
                 # Find the production record row in the child table
                 for row in report_doc.production_records:
                     if row.production_entry == production_entry:
+                        # Document is draft, safe to update normally
                         row.resolution_status = car_doc.resolution_status
                         row.car_reference = car_doc.name
                         row.remarks = resolution_data.get('resolution_remarks', '')
+                        report_doc.save()
                         break
                 
-                report_doc.save()
             except Exception as e:
                 frappe.log_error(
-                    f"Error updating Daily OEE Report: {str(e)}", 
+                    f"Error updating Daily OEE Report: {str(e)}\n{frappe.get_traceback()}", 
                     "CAR Creation - Report Update Error"
                 )
         

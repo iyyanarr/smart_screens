@@ -268,9 +268,9 @@ def get_report_data(report_name):
                 'availability_pct': flt(row.availability_pct, 2),
                 'performance_pct': flt(row.performance_pct, 2),
                 'quality_pct': flt(row.quality_pct, 2),
-                'resolution_status': row.resolution_status or 'Pending',
-                'resolved_record': row.car_reference or '',
-                'resolution_remarks': row.remarks or '',
+                'resolution_status': getattr(row, 'resolution_status', 'Pending'),
+                'resolved_record': getattr(row, 'resolved_record', ''),
+                'resolution_remarks': getattr(row, 'remarks', ''),
                 # Add fields needed for CAR generation
                 'reason_code': getattr(row, 'reason_code', ''),
                 'problem_description': getattr(row, 'problem_description', ''),
@@ -315,35 +315,50 @@ def get_report_data(report_name):
 def get_lot_inspection_status(production_entry):
     """
     Helper function to get lot inspection status for a production entry
+    Queries the Inspection Entry DocType with inspection_type = "Lot Inspection"
     """
     try:
         if not production_entry:
             return 'Not Found'
         
-        # Get production entry document
-        prod_doc = frappe.get_doc('Production Entry', production_entry)
-        lot_number = prod_doc.lot_number
+        # Get production entry document - try Moulding Production Entry
+        try:
+            prod_doc = frappe.get_doc('Moulding Production Entry', production_entry)
+        except Exception:
+            frappe.log_error(f"Production entry {production_entry} not found", "Get Lot Inspection Status")
+            return 'Not Found'
+        
+        lot_number = prod_doc.get('scan_lot_number')
         
         if not lot_number:
             return 'Not Found'
         
-        # Check for lot inspection
-        inspection = frappe.db.exists('Lot Inspection', {'lot_number': lot_number})
+        # Check for lot inspection in the Inspection Entry DocType
+        # where inspection_type = "Lot Inspection"
+        inspection = frappe.db.get_value(
+            'Inspection Entry',
+            {
+                'lot_no': lot_number,
+                'inspection_type': 'Lot Inspection'
+            },
+            ['name', 'docstatus'],
+            as_dict=True
+        )
+        
         if inspection:
-            inspection_doc = frappe.get_doc('Lot Inspection', inspection)
-            if inspection_doc.docstatus == 1:
+            if inspection.docstatus == 1:
                 return 'Submitted'
             else:
-                return 'Pending'
+                return 'Draft'
         
         return 'Not Found'
     except Exception as e:
-        frappe.log_error(f"Error getting lot inspection status: {str(e)}", "Get Lot Inspection Status")
+        frappe.log_error(f"Error getting lot inspection status: {str(e)}\n{frappe.get_traceback()}", "Get Lot Inspection Status")
         return 'Not Found'
 
 
 @frappe.whitelist()
-def update_report_resolution_status(report_name, production_entry, resolution_status, car_reference='', remarks=''):
+def update_report_resolution_status(report_name, production_entry, resolution_status, resolved_record='', remarks=''):
     """
     Update resolution status for a production record in existing Daily OEE Report
     Called after user creates CAR from dashboard
@@ -352,7 +367,7 @@ def update_report_resolution_status(report_name, production_entry, resolution_st
         report_name: Name of Daily OEE Report
         production_entry: Production entry identifier
         resolution_status: 'Resolved' or 'Pending'
-        car_reference: CAR document name (if created)
+        resolved_record: CAR document name (if created)
         remarks: Optional remarks
     """
     if not report_name or not production_entry:
@@ -370,8 +385,8 @@ def update_report_resolution_status(report_name, production_entry, resolution_st
     for row in report_doc.production_records:
         if row.production_entry == production_entry:
             row.resolution_status = resolution_status
-            if car_reference:
-                row.car_reference = car_reference
+            if resolved_record:
+                row.resolved_record = resolved_record
             if remarks:
                 row.remarks = remarks
             updated = True
@@ -472,7 +487,7 @@ def generate_daily_oee_report(filters):
                 "quality_pct": flt(record.get('quality_pct', 0)),
                 # Preserve existing resolution data if available
                 "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
-                "car_reference": existing_row.car_reference if existing_row else '',
+                "resolved_record": existing_row.resolved_record if existing_row else '',
                 "remarks": existing_row.remarks if existing_row else ''
             })
         
