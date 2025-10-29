@@ -264,17 +264,63 @@ class ResolutionPanel {
         const oee = (row.oee_pct != null ? row.oee_pct : '-') + '%';
         this.summaryEl.textContent = `Lot: ${lot} | Date: ${date} | Shift: ${shift} | OEE: ${oee}`;
 
-        // Prefill form fields
-        this.inputs.reason_code.value = row.reason_code || '';
-        this.inputs.problem_description.value = row.problem_description || '';
-        this.inputs.corrective_action_code.value = row.corrective_action_code || '';
-        this.inputs.corrective_action_details.value = row.corrective_action_details || '';
-        this.inputs.resolution_remarks.value = row.resolution_remarks || '';
+        // Check if a CAR document exists for this record
+        if (row.resolved_record) {
+            // Fetch LIVE data from the CAR document
+            console.log('🔄 Fetching live CAR data for:', row.resolved_record);
+            
+            try {
+                const carData = await new Promise((resolve, reject) => {
+                    frappe.call({
+                        method: 'frappe.client.get',
+                        args: {
+                            doctype: 'Corrective Action Resolved',
+                            name: row.resolved_record
+                        },
+                        callback: resolve,
+                        error: reject
+                    });
+                });
+                
+                if (carData && carData.message) {
+                    const car = carData.message;
+                    console.log('✅ Loaded live CAR data:', car);
+                    
+                    // Prefill form with LIVE data from CAR document (single source of truth)
+                    this.inputs.reason_code.value = car.reason_code || '';
+                    this.inputs.problem_description.value = car.problem_description || '';
+                    this.inputs.corrective_action_code.value = car.corrective_action_code || '';
+                    this.inputs.corrective_action_details.value = car.corrective_action_details || '';
+                    this.inputs.resolution_remarks.value = car.remarks || '';
+                } else {
+                    console.warn('⚠️ Failed to load CAR data');
+                    // Clear form if CAR data couldn't be loaded
+                    this.clearForm();
+                }
+            } catch (err) {
+                console.error('❌ Error fetching CAR data:', err);
+                // Clear form on error
+                this.clearForm();
+            }
+        } else {
+            // No CAR exists yet - start with blank form (no snapshot data)
+            console.log('📝 No CAR exists, starting with blank form');
+            this.clearForm();
+        }
 
         // Show panel
         if (this.overlay) this.overlay.style.display = 'block';
         if (this.panel) this.panel.classList.add('open');
         this.panel?.setAttribute('aria-hidden', 'false');
+    }
+
+    clearForm() {
+        // Clear all form fields (no prefilling from snapshot)
+        this.inputs.reason_code.value = '';
+        this.inputs.problem_description.value = '';
+        this.inputs.corrective_action_code.value = '';
+        this.inputs.corrective_action_details.value = '';
+        this.inputs.resolution_remarks.value = '';
     }
 
     close() {
@@ -483,6 +529,9 @@ function updateTable(data) {
         const lotInspectionStatus = row.lot_inspection_status || 'Not Found';
         const hasLotInspection = lotInspectionStatus !== 'Not Found';
         
+        // Check if CAR document exists
+        const hasCAR = row.resolved_record ? true : false;
+        
         // Can only resolve if:
         // 1. OEE < 90% AND
         // 2. Not already resolved AND
@@ -500,12 +549,15 @@ function updateTable(data) {
             // No button shown when inspection is pending
             actionButton = '<small class="text-muted" style="font-size: 10px;">Not Eligible</small>';
         } else {
-            // Inspection exists - show appropriate button
+            // Inspection exists - show appropriate button based on status
             if (canResolve) {
-                // Generate CAR button - RED by default, BLUE on hover
+                // OEE < 90%, not resolved, has inspection → "Generate CAR" button
                 actionButton = `<button class="btn btn-xs car-button" data-action="resolve" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Generate CAR</button>`;
+            } else if (hasCAR) {
+                // CAR document exists → "Update CAR" button
+                actionButton = `<button class="btn btn-xs update-car-button" data-action="update" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Update CAR</button>`;
             } else {
-                // Remarks button without status indicator - GREEN background
+                // OEE acceptable, no CAR → "Remarks" button
                 actionButton = `<button class="btn btn-xs remarks-button" data-action="view" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Remarks</button>`;
             }
         }
@@ -545,6 +597,7 @@ function updateTable(data) {
             const action = e.currentTarget.getAttribute('data-action');
             if (!resolutionPanel) resolutionPanel = new ResolutionPanel();
             if (action === 'resolve') return resolutionPanel.open(idx);
+            if (action === 'update') return resolutionPanel.open(idx);
             if (action === 'view') return resolutionPanel.open(idx);
         });
     });
@@ -610,7 +663,7 @@ function initializeTableSorting() {
                 
                 if (type === 'number') {
                     aVal = parseFloat(aVal) || 0;
-                    bVal = parseFloat(bVal) || 0;
+                    bVal = bVal || 0;
                 } else if (type === 'date') {
                     aVal = new Date(aVal);
                     bVal = new Date(bVal);

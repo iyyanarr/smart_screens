@@ -270,12 +270,6 @@ def get_report_data(report_name):
                 'quality_pct': flt(row.quality_pct, 2),
                 'resolution_status': getattr(row, 'resolution_status', 'Pending'),
                 'resolved_record': getattr(row, 'resolved_record', ''),
-                'resolution_remarks': getattr(row, 'remarks', ''),
-                # Add fields needed for CAR generation
-                'reason_code': getattr(row, 'reason_code', ''),
-                'problem_description': getattr(row, 'problem_description', ''),
-                'corrective_action_code': getattr(row, 'corrective_action_code', ''),
-                'corrective_action_details': getattr(row, 'corrective_action_details', ''),
                 # Add lot inspection status (check if exists in production entry)
                 'lot_inspection_status': get_lot_inspection_status(row.production_entry)
             })
@@ -358,7 +352,7 @@ def get_lot_inspection_status(production_entry):
 
 
 @frappe.whitelist()
-def update_report_resolution_status(report_name, production_entry, resolution_status, resolved_record='', remarks=''):
+def update_report_resolution_status(report_name, production_entry, resolution_status, resolved_record=''):
     """
     Update resolution status for a production record in existing Daily OEE Report
     Called after user creates CAR from dashboard
@@ -368,7 +362,6 @@ def update_report_resolution_status(report_name, production_entry, resolution_st
         production_entry: Production entry identifier
         resolution_status: 'Resolved' or 'Pending'
         resolved_record: CAR document name (if created)
-        remarks: Optional remarks
     """
     if not report_name or not production_entry:
         frappe.throw("Report Name and Production Entry are required")
@@ -387,8 +380,6 @@ def update_report_resolution_status(report_name, production_entry, resolution_st
             row.resolution_status = resolution_status
             if resolved_record:
                 row.resolved_record = resolved_record
-            if remarks:
-                row.remarks = remarks
             updated = True
             break
     
@@ -487,8 +478,7 @@ def generate_daily_oee_report(filters):
                 "quality_pct": flt(record.get('quality_pct', 0)),
                 # Preserve existing resolution data if available
                 "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
-                "resolved_record": existing_row.resolved_record if existing_row else '',
-                "remarks": existing_row.remarks if existing_row else ''
+                "resolved_record": existing_row.resolved_record if existing_row else ''
             })
         
         report_doc.save(ignore_permissions=True)

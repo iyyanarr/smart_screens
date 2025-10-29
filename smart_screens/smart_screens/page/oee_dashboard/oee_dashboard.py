@@ -604,7 +604,7 @@ def save_oee_report(report_data):
                     'performance_pct': flt(record.get('performance_pct', 0)),
                     'quality_pct': flt(record.get('quality_pct', 0)),
                     'resolution_status': resolution_status,
-                    'car_reference': record.get('resolved_record', ''),
+                    'resolved_record': record.get('resolved_record', ''),  # FIXED: Use resolved_record instead of car_reference
                     'remarks': record.get('resolution_remarks', '')
                 })
             
@@ -885,11 +885,20 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
         # Set resolution fields
         car_doc.reason_code = resolution_data.get('reason_code', '')
         car_doc.problem_description = resolution_data.get('problem_description', '')
-        car_doc.root_cause = resolution_data.get('root_cause', '')
-        car_doc.corrective_action = resolution_data.get('corrective_action', '')
-        car_doc.responsible_person = resolution_data.get('responsible_person', '')
-        car_doc.target_completion_date = resolution_data.get('target_completion_date')
-        car_doc.resolution_remarks = resolution_data.get('resolution_remarks', '')
+        
+        # FIX: Save corrective action fields with correct field names
+        car_doc.corrective_action_code = resolution_data.get('corrective_action_code', '')
+        car_doc.corrective_action_details = resolution_data.get('corrective_action_details', '')
+        
+        # FIX: Save remarks to correct field name (remarks, not resolution_remarks)
+        car_doc.remarks = resolution_data.get('resolution_remarks', '')
+        
+        # Optional fields (map to correct CAR field names)
+        if resolution_data.get('responsible_person'):
+            car_doc.scan_operator = resolution_data.get('responsible_person')
+        
+        if resolution_data.get('target_completion_date'):
+            car_doc.target_date = resolution_data.get('target_completion_date')
         
         # Set status based on whether it's a draft or complete
         is_draft = resolution_data.get('is_draft', False)
@@ -914,7 +923,7 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
                     if row.production_entry == production_entry:
                         # Document is draft, safe to update normally
                         row.resolution_status = car_doc.resolution_status
-                        row.car_reference = car_doc.name
+                        row.resolved_record = car_doc.name  # FIXED: Use resolved_record instead of car_reference
                         row.remarks = resolution_data.get('resolution_remarks', '')
                         report_doc.save()
                         break
