@@ -407,7 +407,17 @@ class ResolutionPanel {
                 };
                 updateByName(currentData);
                 updateByName(sortedData);
+                
+                // Refresh table to show updated status
                 updateTable(sortedData);
+                
+                // Also refresh the saved report data to keep it in sync
+                if (reportData && reportData.data) {
+                    const dataIndex = reportData.data.findIndex(x => x.name === row.name);
+                    if (dataIndex >= 0) {
+                        reportData.data[dataIndex] = updated;
+                    }
+                }
 
                 frappe.show_alert({ 
                     message: `CAR ${r.message.car_name} created successfully`, 
@@ -498,7 +508,7 @@ function updateTable(data) {
             <td>${row.production_date_formatted || ''}</td>
             <td>${row.shift_type || ''}</td>
             <td><small>${row.operator_name || '-'}</small></td>
-            <td><small>${row.machine_reference || ''}</small></td>
+            <td><small><strong>${row.machine_reference || ''}</strong></small></td>
             <td><small><strong>${row.item_code || ''}</strong></small></td>
             <td><small><span class="badge badge-info">${row.lot_number || ''}</span></small></td>
             <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>
@@ -592,7 +602,6 @@ function initializeTableSorting() {
                 let aVal = a[column];
                 let bVal = b[column];
                 
-                // Handle different data types
                 if (type === 'number') {
                     aVal = parseFloat(aVal) || 0;
                     bVal = parseFloat(bVal) || 0;
@@ -746,11 +755,8 @@ function hideExistingReportNotification() {
 }
 
 function resumeExistingReport() {
-    /**
-     * Load existing draft report data and enable CAR generation
-     */
     if (!existingReportInfo || !existingReportInfo.report_name) {
-        frappe.msgprint('No existing report found');
+        frappe.msgprint('No existing report information available');
         return;
     }
     
@@ -764,79 +770,61 @@ function resumeExistingReport() {
         callback: function(r) {
             hideLoading();
             
-            if (r.message && r.message.production_records) {
-                // Load existing report data into the dashboard
-                currentData = r.message.production_records;
+            if (r.message && r.message.success) {
+                // Load the saved report data
+                const savedData = r.message.data;
+                
+                // Set current data from saved report
+                currentData = savedData.production_records || [];
                 sortedData = [...currentData];
+                
+                // Update table with saved data
                 updateTable(sortedData);
                 
-                // CRITICAL: Set saved report name FIRST so CAR creation works
-                savedReportName = existingReportInfo.report_name;
+                // Update summary from saved report
+                if (savedData.summary) {
+                    updateSummaryCards(savedData.summary);
+                }
+                
+                // Store report metadata - CRITICAL: Set savedReportName immediately
                 reportGenerated = true;
+                savedReportName = existingReportInfo.report_name;
                 
-                // Store report data structure (prevents duplicate save attempts)
-                const productionDate = document.getElementById('production_date').value;
-                const processType = document.getElementById('process_filter').value;
-                const shiftFilter = document.getElementById('shift_filter').value;
-                const machineFilter = document.getElementById('machine_filter').value;
-                
+                // Store report data for saving (use correct variable name)
                 reportData = {
-                    filters: {
-                        production_date: productionDate,
-                        process_type: processType,
-                        shift_filter: shiftFilter,
-                        machine_filter: machineFilter
+                    filters: savedData.filters || {
+                        production_date: document.getElementById('production_date').value,
+                        shift_filter: document.getElementById('shift_filter').value,
+                        machine_filter: document.getElementById('machine_filter').value
                     },
                     data: currentData,
-                    summary: calculateSummaryFromData(currentData),
-                    generated_at: new Date().toISOString()
+                    summary: savedData.summary,
+                    generated_at: savedData.generated_at || new Date().toISOString()
                 };
-                
-                // Update summary from loaded data
-                const summary = calculateSummaryFromData(currentData);
-                updateSummaryCards(summary);
                 
                 // Show action buttons
                 showReportActionButtons();
                 
-                // Hide the notification banner after resume
+                // Hide the notification banner since we're now in resume mode
                 hideExistingReportNotification();
                 
                 frappe.show_alert({
-                    message: `Resumed report ${existingReportInfo.report_name} with ${currentData.length} records`,
-                    indicator: 'green'
+                    message: `Resumed report: ${existingReportInfo.report_name} with ${currentData.length} records`,
+                    indicator: 'blue'
                 });
                 
-                // Highlight pending records
-                const pendingCount = currentData.filter(r => 
-                    (r.oee_pct || 0) < 90 && r.resolution_status !== 'Resolved'
-                ).length;
-                
-                if (pendingCount > 0) {
-                    frappe.msgprint({
-                        title: 'Resume Report',
-                        message: `You have ${pendingCount} low OEE record(s) pending resolution. Click "Generate CAR" to create Corrective Action Reports.`,
-                        indicator: 'orange'
-                    });
-                } else {
-                    frappe.msgprint({
-                        title: 'All Records Resolved',
-                        message: 'All low OEE records have been resolved. You can now submit the report.',
-                        indicator: 'green'
-                    });
-                }
-                
-                // Log for debugging
                 console.log('✅ Report resumed successfully:', {
-                    reportName: savedReportName,
-                    totalRecords: currentData.length,
-                    pendingCount: pendingCount
+                    savedReportName: savedReportName,
+                    recordCount: currentData.length,
+                    reportGenerated: reportGenerated
                 });
+            } else {
+                frappe.msgprint('Error loading report data: ' + (r.message.error || 'Unknown error'));
             }
         },
         error: function(err) {
             hideLoading();
-            console.error('Error loading existing report:', err);
+            console.error('Error resuming report:', err);
             frappe.msgprint('Error loading existing report. Please try again.');
         }
     });
@@ -925,13 +913,122 @@ function generateReport() {
         return;
     }
     
-    // Load data and mark report as generated
-    showLoading();
-    
+    // First, check if a report already exists for this date/filter combination
     const processType = document.getElementById('process_filter').value;
     const shiftFilter = document.getElementById('shift_filter').value;
     const machineFilter = document.getElementById('machine_filter').value;
-    // Lot and Item filters have been removed from UI
+    
+    showLoading();
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.check_existing_report',
+        args: {
+            production_date: productionDate,
+            shift_filter: shiftFilter === 'all' ? '' : shiftFilter,
+            machine_filter: machineFilter === 'all' ? '' : machineFilter
+        },
+        callback: function(check_r) {
+            if (check_r.message && check_r.message.exists) {
+                // Report already exists
+                hideLoading();
+                existingReportInfo = check_r.message;
+                
+                const isDraft = check_r.message.docstatus === 0;
+                const isSubmitted = check_r.message.docstatus === 1;
+                
+                if (isSubmitted) {
+                    // Already submitted - just view it
+                    frappe.msgprint({
+                        title: 'Report Already Submitted',
+                        message: `A report has already been submitted for this date/filter combination: <strong>${check_r.message.report_name}</strong>`,
+                        primary_action: {
+                            label: 'View Report',
+                            action: function() {
+                                frappe.set_route('Form', 'Daily OEE Report', check_r.message.report_name);
+                            }
+                        }
+                    });
+                    return;
+                }
+                
+                if (isDraft) {
+                    // Draft exists - ask to resume or replace
+                    frappe.confirm(
+                        `A draft report exists: <strong>${check_r.message.report_name}</strong><br><br>` +
+                        `<small>Total Records: ${check_r.message.total_records} | ` +
+                        `Resolved: <span style="color: green;">${check_r.message.resolved_count}</span> | ` +
+                        `Pending: <span style="color: red;">${check_r.message.pending_count}</span></small><br><br>` +
+                        `Do you want to <strong>Resume</strong> the existing report?<br>` +
+                        `<small>(Click "No" to replace it with fresh data)</small>`,
+                        function() {
+                            // User clicked Yes - Resume existing report
+                            resumeExistingReport();
+                        },
+                        function() {
+                            // User clicked No - Replace with fresh data
+                            frappe.confirm(
+                                'Are you sure you want to replace the existing draft with fresh data?<br>' +
+                                '<span style="color: red;">This will DELETE the existing report and any CAR resolutions.</span>',
+                                function() {
+                                    // Delete the old draft and generate fresh
+                                    deleteAndRegenerateReport(check_r.message.report_name, productionDate, processType, shiftFilter, machineFilter);
+                                }
+                            );
+                        }
+                    );
+                    return;
+                }
+            }
+            
+            // No existing report - proceed with generating fresh data
+            generateFreshReport(productionDate, processType, shiftFilter, machineFilter);
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error checking existing report:', err);
+            frappe.msgprint('Error checking for existing reports. Please try again.');
+        }
+    });
+}
+
+function deleteAndRegenerateReport(oldReportName, productionDate, processType, shiftFilter, machineFilter) {
+    showLoading();
+    
+    // Delete the old draft report
+    frappe.call({
+        method: 'frappe.client.delete',
+        args: {
+            doctype: 'Daily OEE Report',
+            name: oldReportName
+        },
+        callback: function(r) {
+            console.log('✅ Old report deleted:', oldReportName);
+            
+            // Clear state
+            savedReportName = null;
+            existingReportInfo = null;
+            reportGenerated = false;
+            reportData = null;
+            hideExistingReportNotification();
+            
+            // Generate fresh report
+            frappe.show_alert({
+                message: 'Old report deleted. Generating fresh data...',
+                indicator: 'orange'
+            });
+            
+            generateFreshReport(productionDate, processType, shiftFilter, machineFilter);
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error deleting old report:', err);
+            frappe.msgprint('Error deleting old report. Please try again.');
+        }
+    });
+}
+
+function generateFreshReport(productionDate, processType, shiftFilter, machineFilter) {
+    // This function generates a fresh report from production data
     const lotFilter = null;
     const itemFilter = null;
     
@@ -986,6 +1083,8 @@ function generateReport() {
                             
                             // Mark report as generated and show action buttons
                             reportGenerated = true;
+                            savedReportName = null; // Clear any previous saved report name
+                            existingReportInfo = null; // Clear existing report info
                             showReportActionButtons();
                             
                             frappe.show_alert({
@@ -1030,11 +1129,59 @@ function submitReport() {
         return;
     }
     
-    // Confirm submission
-    frappe.confirm(
-        'Are you sure you want to submit this OEE report? This action cannot be undone.',
-        function() {
-            // User confirmed
+    // Show dialog to collect remarks fields before submission
+    const dialog = new frappe.ui.Dialog({
+        title: 'Submit Daily OEE Report',
+        fields: [
+            {
+                label: 'Report Remarks',
+                fieldtype: 'Section Break',
+            },
+            {
+                label: 'General Remarks',
+                fieldname: 'general_remarks',
+                fieldtype: 'Small Text',
+                description: 'Overall observations and notes about the production day'
+            },
+            {
+                label: 'Suggestions for Improvement',
+                fieldname: 'suggestions_for_improvement',
+                fieldtype: 'Small Text',
+                description: 'Ideas and recommendations to improve OEE and production efficiency'
+            },
+            {
+                label: 'Safety and Machinery',
+                fieldname: 'safety_and_machinery',
+                fieldtype: 'Small Text',
+                description: 'Safety incidents, concerns, and machinery maintenance observations'
+            },
+            {
+                label: 'Mould Observation',
+                fieldname: 'mould_observation',
+                fieldtype: 'Small Text',
+                description: 'Notes on mould conditions, performance, and maintenance needs'
+            },
+            {
+                label: 'Tool Observation',
+                fieldname: 'tool_observation',
+                fieldtype: 'Small Text',
+                description: 'Notes on tool conditions and any issues encountered'
+            }
+        ],
+        primary_action_label: 'Submit Report',
+        primary_action(values) {
+            // Add remarks to report data
+            reportData.remarks = {
+                general_remarks: values.general_remarks || '',
+                suggestions_for_improvement: values.suggestions_for_improvement || '',
+                safety_and_machinery: values.safety_and_machinery || '',
+                mould_observation: values.mould_observation || '',
+                tool_observation: values.tool_observation || ''
+            };
+            
+            dialog.hide();
+            
+            // Proceed with submission
             showLoading();
             
             frappe.call({
@@ -1054,6 +1201,7 @@ function submitReport() {
                         // Reset report state
                         reportGenerated = false;
                         reportData = null;
+                        savedReportName = null;
                         hideReportActionButtons();
                         
                         // Optionally show the report document
@@ -1064,7 +1212,7 @@ function submitReport() {
                                 primary_action: {
                                     label: 'View Report',
                                     action: function() {
-                                        frappe.set_route('Form', 'OEE Report', r.message.report_name);
+                                        frappe.set_route('Form', 'Daily OEE Report', r.message.report_name);
                                     }
                                 }
                             });
@@ -1081,7 +1229,9 @@ function submitReport() {
                 }
             });
         }
-    );
+    });
+    
+    dialog.show();
 }
 
 function saveReport() {

@@ -224,58 +224,122 @@ def get_report_data(report_name):
     
     Returns:
         {
-            'report': {...report header fields...},
-            'production_records': [{...with resolution_status, car_reference...}]
+            'success': True,
+            'data': {
+                'filters': {...},
+                'production_records': [{...with resolution_status, car_reference...}],
+                'summary': {...},
+                'generated_at': '...'
+            }
         }
     """
     if not report_name:
-        frappe.throw("Report Name is required")
+        return {'success': False, 'error': 'Report Name is required'}
     
     # Check if report exists
     if not frappe.db.exists("Daily OEE Report", report_name):
-        frappe.throw(f"Daily OEE Report {report_name} not found")
+        return {'success': False, 'error': f'Daily OEE Report {report_name} not found'}
     
-    # Get report document
-    report_doc = frappe.get_doc("Daily OEE Report", report_name)
-    
-    # Build production records with current status
-    production_records = []
-    for row in report_doc.production_records:
-        production_records.append({
-            'name': row.production_entry,
-            'production_date': row.production_date,
-            'shift_type': row.shift_type,
-            'operator_name': row.operator_name,
-            'machine_reference': row.machine_reference,
-            'item_code': row.item_code,
-            'lot_number': row.lot_number,
-            'target_quantity': row.target_quantity,
-            'actual_quantity': row.actual_quantity,
-            'variance_qty': row.variance_qty,
-            'oee_pct': row.oee_pct,
-            'production_efficiency_pct': row.production_efficiency_pct,
-            'rejection_percentage': row.rejection_percentage,
-            'availability_pct': row.availability_pct,
-            'performance_pct': row.performance_pct,
-            'quality_pct': row.quality_pct,
-            'resolution_status': row.resolution_status or 'Pending',
-            'car_reference': row.car_reference or '',
-            'remarks': row.remarks or ''
-        })
-    
-    return {
-        'report': {
-            'name': report_doc.name,
-            'production_date': report_doc.production_date,
-            'shift_filter': report_doc.shift_filter,
-            'machine_filter': report_doc.machine_filter,
-            'status': report_doc.status,
-            'docstatus': report_doc.docstatus,
-            'total_records': report_doc.total_records,
-            'avg_oee': report_doc.avg_oee
-        },
-        'production_records': production_records
-    }
+    try:
+        # Get report document
+        report_doc = frappe.get_doc("Daily OEE Report", report_name)
+        
+        # Build production records with current status from saved report
+        production_records = []
+        for row in report_doc.production_records:
+            # Format production date for display
+            prod_date_formatted = frappe.utils.formatdate(row.production_date, 'dd-MM-yyyy') if row.production_date else ''
+            
+            production_records.append({
+                'name': row.production_entry,
+                'production_date': str(row.production_date) if row.production_date else '',
+                'production_date_formatted': prod_date_formatted,
+                'shift_type': row.shift_type or '',
+                'operator_name': row.operator_name or '',
+                'machine_reference': row.machine_reference or '',
+                'item_code': row.item_code or '',
+                'lot_number': row.lot_number or '',
+                'target_quantity': flt(row.target_quantity, 2),
+                'actual_quantity': flt(row.actual_quantity, 2),
+                'variance_qty': flt(row.variance_qty, 2),
+                'oee_pct': flt(row.oee_pct, 2),
+                'production_equipment_efficiency': flt(row.production_efficiency_pct, 2),
+                'rejection_percentage': flt(row.rejection_percentage, 2),
+                'availability_pct': flt(row.availability_pct, 2),
+                'performance_pct': flt(row.performance_pct, 2),
+                'quality_pct': flt(row.quality_pct, 2),
+                'resolution_status': row.resolution_status or 'Pending',
+                'resolved_record': row.car_reference or '',
+                'resolution_remarks': row.remarks or '',
+                # Add fields needed for CAR generation
+                'reason_code': getattr(row, 'reason_code', ''),
+                'problem_description': getattr(row, 'problem_description', ''),
+                'corrective_action_code': getattr(row, 'corrective_action_code', ''),
+                'corrective_action_details': getattr(row, 'corrective_action_details', ''),
+                # Add lot inspection status (check if exists in production entry)
+                'lot_inspection_status': get_lot_inspection_status(row.production_entry)
+            })
+        
+        # Build summary
+        summary = {
+            'avg_availability': flt(report_doc.avg_availability, 2),
+            'avg_performance': flt(report_doc.avg_performance, 2),
+            'avg_quality': flt(report_doc.avg_quality, 2),
+            'avg_oee': flt(report_doc.avg_oee, 2)
+        }
+        
+        # Build filters
+        filters = {
+            'production_date': str(report_doc.production_date) if report_doc.production_date else '',
+            'shift_filter': report_doc.shift_filter or '',
+            'machine_filter': report_doc.machine_filter or ''
+        }
+        
+        return {
+            'success': True,
+            'data': {
+                'filters': filters,
+                'production_records': production_records,
+                'summary': summary,
+                'generated_at': report_doc.creation.isoformat() if report_doc.creation else frappe.utils.now()
+            }
+        }
+    except Exception as e:
+        frappe.log_error(f"Error loading report data: {frappe.get_traceback()}", "Get Report Data Error")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+
+def get_lot_inspection_status(production_entry):
+    """
+    Helper function to get lot inspection status for a production entry
+    """
+    try:
+        if not production_entry:
+            return 'Not Found'
+        
+        # Get production entry document
+        prod_doc = frappe.get_doc('Production Entry', production_entry)
+        lot_number = prod_doc.lot_number
+        
+        if not lot_number:
+            return 'Not Found'
+        
+        # Check for lot inspection
+        inspection = frappe.db.exists('Lot Inspection', {'lot_number': lot_number})
+        if inspection:
+            inspection_doc = frappe.get_doc('Lot Inspection', inspection)
+            if inspection_doc.docstatus == 1:
+                return 'Submitted'
+            else:
+                return 'Pending'
+        
+        return 'Not Found'
+    except Exception as e:
+        frappe.log_error(f"Error getting lot inspection status: {str(e)}", "Get Lot Inspection Status")
+        return 'Not Found'
 
 
 @frappe.whitelist()
