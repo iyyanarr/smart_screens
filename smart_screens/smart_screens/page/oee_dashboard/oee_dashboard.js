@@ -202,16 +202,18 @@ class ResolutionPanel {
         this.btnSaveNext = document.getElementById('res-save-next');
         this.btnCancel = document.getElementById('res-cancel');
         this.reasonSelect = document.getElementById('res-reason-code');
+        this.addActionRowBtn = document.getElementById('add-action-row');
+        this.actionsTbody = document.getElementById('corrective-actions-tbody');
         this.inputs = {
             reason_code: document.getElementById('res-reason-code'),
             problem_description: document.getElementById('res-problem'),
-            corrective_action: document.getElementById('res-corrective'),
-            responsible_person: document.getElementById('res-responsible'),
-            target_completion_date: document.getElementById('res-target-date'),
+            corrective_action_code: document.getElementById('res-corrective-action-code'),
+            corrective_action_details: document.getElementById('res-corrective-action-details'),
             resolution_remarks: document.getElementById('res-remarks')
         };
         this.currentIndex = null;
         this.reasonCodesLoaded = false;
+        this.actionRowCounter = 0;
         this._bind();
     }
 
@@ -221,10 +223,31 @@ class ResolutionPanel {
         if (this.btnCancel) this.btnCancel.addEventListener('click', (e) => { e.preventDefault(); this.close(); });
         if (this.btnSaveDraft) this.btnSaveDraft.addEventListener('click', (e) => { e.preventDefault(); this.save(true, false); });
         if (this.btnSaveNext) this.btnSaveNext.addEventListener('click', (e) => { e.preventDefault(); this.save(false, true); });
+        // Remove child table row button listener since we no longer have the table
+        // if (this.addActionRowBtn) this.addActionRowBtn.addEventListener('click', () => this.addActionRow());
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.isOpen()) this.close(); });
     }
 
     isOpen() { return this.panel && this.panel.classList.contains('open'); }
+
+    // Remove child table methods as they're no longer needed
+    /*
+    addActionRow(data = {}) {
+        // ... removed ...
+    }
+
+    removeActionRow(rowId) {
+        // ... removed ...
+    }
+
+    clearActionRows() {
+        // ... removed ...
+    }
+
+    getActionRows() {
+        // ... removed ...
+    }
+    */
 
     async open(index) {
         this.currentIndex = index;
@@ -241,12 +264,11 @@ class ResolutionPanel {
         const oee = (row.oee_pct != null ? row.oee_pct : '-') + '%';
         this.summaryEl.textContent = `Lot: ${lot} | Date: ${date} | Shift: ${shift} | OEE: ${oee}`;
 
-        // Prefill form if data exists
+        // Prefill form fields
         this.inputs.reason_code.value = row.reason_code || '';
         this.inputs.problem_description.value = row.problem_description || '';
-        this.inputs.corrective_action.value = row.corrective_action || '';
-        this.inputs.responsible_person.value = row.responsible_person || '';
-        this.inputs.target_completion_date.value = row.target_completion_date || '';
+        this.inputs.corrective_action_code.value = row.corrective_action_code || '';
+        this.inputs.corrective_action_details.value = row.corrective_action_details || '';
         this.inputs.resolution_remarks.value = row.resolution_remarks || '';
 
         // Show panel
@@ -294,9 +316,8 @@ class ResolutionPanel {
         return {
             reason_code: this.inputs.reason_code.value || '',
             problem_description: this.inputs.problem_description.value || '',
-            corrective_action: this.inputs.corrective_action.value || '',
-            responsible_person: this.inputs.responsible_person.value || '',
-            target_completion_date: this.inputs.target_completion_date.value || '',
+            corrective_action_code: this.inputs.corrective_action_code.value || '',
+            corrective_action_details: this.inputs.corrective_action_details.value || '',
             resolution_remarks: this.inputs.resolution_remarks.value || ''
         };
     }
@@ -307,27 +328,49 @@ class ResolutionPanel {
         if (!row) return;
         const data = this.getFormData();
 
-        // Validate minimal requirement when not draft
-        if (!isDraft && !data.reason_code) {
-            frappe.msgprint('Please select a Reason Code.');
-            return;
+        // Validate required fields
+        if (!isDraft) {
+            if (!data.reason_code) {
+                frappe.msgprint('Please select a Reason Code.');
+                return;
+            }
+            if (!data.corrective_action_code || !data.corrective_action_details) {
+                frappe.msgprint('Please provide Corrective Action details.');
+                return;
+            }
         }
+
+        // Debug logging
+        console.log('💾 CAR Save - Debug Info:', {
+            savedReportName: savedReportName,
+            reportGenerated: reportGenerated,
+            existingReportInfo: existingReportInfo,
+            hasReportData: !!reportData
+        });
 
         // Check if Daily OEE Report has been saved
         if (!savedReportName) {
-            frappe.msgprint({
-                title: 'Report Not Saved',
-                message: 'Please save the Daily OEE Report first before generating CAR.',
-                indicator: 'red',
-                primary_action: {
-                    label: 'Save Report Now',
-                    action: function() {
-                        saveReport();
+            // Double-check if we're in resume mode
+            if (existingReportInfo && existingReportInfo.report_name) {
+                console.log('⚠️ savedReportName was null but existingReportInfo exists, recovering...');
+                savedReportName = existingReportInfo.report_name;
+            } else {
+                frappe.msgprint({
+                    title: 'Report Not Saved',
+                    message: 'Please save the Daily OEE Report first before generating CAR.',
+                    indicator: 'red',
+                    primary_action: {
+                        label: 'Save Report Now',
+                        action: function() {
+                            saveReport();
+                        }
                     }
-                }
-            });
-            return;
+                });
+                return;
+            }
         }
+
+        console.log('✅ Proceeding with CAR creation for report:', savedReportName);
 
         try {
             showLoading();
@@ -634,6 +677,13 @@ function showExistingReportNotification(reportInfo) {
     if (!notificationDiv) {
         // Create notification div if it doesn't exist
         const filterSection = document.querySelector('.filter-section');
+        
+        // Check if filterSection exists before trying to insert notification
+        if (!filterSection) {
+            console.warn('Filter section not found, cannot display existing report notification');
+            return;
+        }
+        
         notificationDiv = document.createElement('div');
         notificationDiv.id = 'existing-report-notification';
         notificationDiv.className = 'alert alert-info';

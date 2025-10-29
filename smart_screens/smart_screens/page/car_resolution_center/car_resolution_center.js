@@ -279,30 +279,37 @@ class CARResolutionCenter {
                                     placeholder="Based on the 5-Why analysis, what is the root cause?" required></textarea>
                             </div>
 
-                            <!-- Corrective Actions -->
+                            <!-- Corrective Actions - Simplified -->
                             <div class="corrective-actions-section">
-                                <div class="section-header">
-                                    <h5><i class="fa fa-wrench"></i> Corrective Action Plan</h5>
-                                    <button class="btn btn-sm btn-success" id="add-action-btn">
-                                        <i class="fa fa-plus"></i> Add Action
-                                    </button>
+                                <h5><i class="fa fa-wrench"></i> Corrective Action</h5>
+                                
+                                <div class="form-group">
+                                    <label>Corrective Action Code</label>
+                                    <input type="text" class="form-control" id="corrective-action-code" 
+                                        placeholder="Enter action code (optional)">
                                 </div>
-                                <div class="actions-table-wrapper">
-                                    <table class="table table-bordered actions-table" id="actions-table">
-                                        <thead>
-                                            <tr>
-                                                <th width="5%">#</th>
-                                                <th width="40%">Corrective Action</th>
-                                                <th width="20%">Responsible</th>
-                                                <th width="15%">Target Date</th>
-                                                <th width="15%">Status</th>
-                                                <th width="5%"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="actions-tbody">
-                                            <!-- Actions will be added dynamically -->
-                                        </tbody>
-                                    </table>
+                                
+                                <div class="form-group">
+                                    <label>Corrective Action Details</label>
+                                    <textarea class="form-control" id="corrective-action-details" rows="4" 
+                                        placeholder="Describe the corrective actions to be taken..."></textarea>
+                                </div>
+                                
+                                <!-- Tracking Fields -->
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <div class="form-group">
+                                            <label>Responsible Person</label>
+                                            <input type="text" class="form-control" id="scan-operator" 
+                                                placeholder="Select user...">
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="form-group">
+                                            <label>Target Date</label>
+                                            <input type="date" class="form-control" id="target-date">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -381,13 +388,17 @@ class CARResolutionCenter {
         this.$remarks = $('#remarks');
         this.$why_inputs = $('.why-input');
         
+        // Corrective action fields (simplified - no child table)
+        this.$corrective_action_code = $('#corrective-action-code');
+        this.$corrective_action_details = $('#corrective-action-details');
+        this.$scan_operator = $('#scan-operator');
+        this.$target_date = $('#target-date');
+        
         // Action buttons
         this.$btn_previous = $('#btn-previous');
         this.$btn_save = $('#btn-save');
         this.$btn_resolve = $('#btn-resolve');
         this.$btn_save_next = $('#btn-save-next');
-        this.$add_action_btn = $('#add-action-btn');
-        this.$actions_tbody = $('#actions-tbody');
     }
 
     setup_event_listeners() {
@@ -401,14 +412,6 @@ class CARResolutionCenter {
         $(document).on('click', '#btn-save', () => this.save_resolution(false));
         $(document).on('click', '#btn-resolve', () => this.save_resolution(true));
         $(document).on('click', '#btn-save-next', () => this.save_and_next());
-        
-        // Add corrective action
-        $(document).on('click', '#add-action-btn', () => this.add_corrective_action_row());
-        
-        // Delete action row
-        $(document).on('click', '.delete-action-btn', (e) => {
-            $(e.target).closest('tr').fadeOut(300, function() { $(this).remove(); });
-        });
         
         // Record item click
         $(document).on('click', '.record-item', (e) => {
@@ -598,6 +601,21 @@ class CARResolutionCenter {
             
             const oee_class = record.oee_pct >= 90 ? 'metric-success' : (record.oee_pct >= 70 ? 'metric-warning' : 'metric-danger');
             
+            // Build additional fields for resolved records
+            let additionalFields = '';
+            if (record.resolution_status === 'Resolved') {
+                additionalFields = `
+                    <div class="detail-row">
+                        <i class="fa fa-user-circle"></i>
+                        <span><strong>Responsible:</strong> ${record.scan_operator || 'Not Assigned'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <i class="fa fa-calendar-check-o"></i>
+                        <span><strong>Target Date:</strong> ${record.target_date ? frappe.datetime.str_to_user(record.target_date) : 'Not Set'}</span>
+                    </div>
+                `;
+            }
+            
             const html = `
                 <div class="record-item ${status_class}" data-index="${original_idx}">
                     <div class="record-header">
@@ -626,6 +644,7 @@ class CARResolutionCenter {
                             <i class="fa fa-cogs"></i>
                             <span>${record.machine_reference || 'N/A'}</span>
                         </div>
+                        ${additionalFields}
                     </div>
                     <div class="record-metrics">
                         <div class="metric-badge ${oee_class}">
@@ -727,19 +746,18 @@ class CARResolutionCenter {
                     this.$problem_description.val(doc.problem_description || '');
                     this.$root_cause.val(doc.root_cause || '');
                     this.$remarks.val(doc.remarks || '');
+                    this.$corrective_action_code.val(doc.corrective_action_code || '');
+                    this.$corrective_action_details.val(doc.corrective_action_details || '');
+                    this.$scan_operator.val(doc.scan_operator || '');
+                    this.$target_date.val(doc.target_date || '');
                     
-                    // Fill why analysis
-                    if (doc.why_analysis && doc.why_analysis.length === 5) {
-                        doc.why_analysis.forEach((why, idx) => {
-                            $(`.why-input[data-why-no="${idx + 1}"]`).val(why.why_question || '');
-                        });
-                    }
-                    
-                    // Fill corrective actions
-                    this.$actions_tbody.empty();
-                    if (doc.corrective_actions && doc.corrective_actions.length > 0) {
-                        doc.corrective_actions.forEach((action, idx) => {
-                            this.add_corrective_action_row(action);
+                    // Load Why Analysis data
+                    if (doc.why_analysis && doc.why_analysis.length > 0) {
+                        doc.why_analysis.forEach((item, idx) => {
+                            const $why_input = $(`.why-input[data-why-no="${idx + 1}"]`);
+                            if ($why_input.length) {
+                                $why_input.val(item.why_question || '');
+                            }
                         });
                     }
                     
@@ -755,9 +773,15 @@ class CARResolutionCenter {
         this.$problem_description.val('');
         this.$root_cause.val('');
         this.$remarks.val('');
-        $('.why-input').val('');
-        this.$actions_tbody.empty();
-        this.action_counter = 0;
+        this.$corrective_action_code.val('');
+        this.$corrective_action_details.val('');
+        this.$scan_operator.val('');
+        this.$target_date.val('');
+        
+        // Clear Why Analysis inputs
+        this.$why_inputs.each(function() {
+            $(this).val('');
+        });
         
         // Enable form
         this.toggle_form_readonly(false);
@@ -769,82 +793,25 @@ class CARResolutionCenter {
         this.$problem_description.prop('readonly', readonly).prop('disabled', readonly);
         this.$root_cause.prop('readonly', readonly).prop('disabled', readonly);
         this.$remarks.prop('readonly', readonly).prop('disabled', readonly);
+        this.$corrective_action_code.prop('readonly', readonly).prop('disabled', readonly);
+        this.$corrective_action_details.prop('readonly', readonly).prop('disabled', readonly);
+        this.$scan_operator.prop('readonly', readonly).prop('disabled', readonly);
+        this.$target_date.prop('readonly', readonly).prop('disabled', readonly);
         
-        // Toggle why inputs
-        $('.why-input').prop('readonly', readonly).prop('disabled', readonly);
+        // Toggle Why Analysis inputs
+        this.$why_inputs.each(function() {
+            $(this).prop('readonly', readonly).prop('disabled', readonly);
+        });
         
         if (readonly) {
-            this.$add_action_btn.hide();
-            $('.delete-action-btn').hide();
-            $('input[name="action-scan-operator"]').prop('disabled', true);
-            $('input[name="action-target-date"]').prop('disabled', true);
-            $('textarea[name="action-description"]').prop('disabled', true);
-            $('select[name="action-status"]').prop('disabled', true);
-            
             this.$btn_save.hide();
             this.$btn_resolve.hide();
             this.$btn_save_next.hide();
         } else {
-            this.$add_action_btn.show();
-            $('.delete-action-btn').show();
-            $('input[name="action-scan-operator"]').prop('disabled', false);
-            $('input[name="action-target-date"]').prop('disabled', false);
-            $('textarea[name="action-description"]').prop('disabled', false);
-            $('select[name="action-status"]').prop('disabled', false);
-            
             this.$btn_save.show();
             this.$btn_resolve.show();
             this.$btn_save_next.show();
         }
-    }
-
-    add_corrective_action_row(data = null) {
-        this.action_counter++;
-        const row_id = `action-${this.action_counter}`;
-        
-        const html = `
-            <tr id="${row_id}">
-                <td>${this.action_counter}</td>
-                <td>
-                    <textarea class="form-control" name="action-description" rows="2" 
-                        placeholder="Describe corrective action..." required>${data ? data.corrective_action : ''}</textarea>
-                </td>
-                <td>
-                    <input type="text" class="form-control" name="action-scan-operator" 
-                        data-fieldtype="Link" data-fieldname="scan_operator" 
-                        placeholder="Select user..." value="${data ? (data.scan_operator || '') : ''}">
-                </td>
-                <td>
-                    <input type="date" class="form-control" name="action-target-date" 
-                        value="${data ? (data.target_date || '') : ''}">
-                </td>
-                <td>
-                    <select class="form-control" name="action-status">
-                        <option value="Pending" ${data && data.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                        <option value="In Progress" ${data && data.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                        <option value="Completed" ${data && data.status === 'Completed' ? 'selected' : ''}>Completed</option>
-                    </select>
-                </td>
-                <td>
-                    <button class="btn btn-xs btn-danger delete-action-btn" type="button">
-                        <i class="fa fa-times"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-        
-        this.$actions_tbody.append(html);
-        
-        // Setup Link field for scan operator
-        frappe.ui.form.make_control({
-            parent: $(`#${row_id} input[name="action-scan-operator"]`).parent(),
-            df: {
-                fieldtype: 'Link',
-                options: 'User',
-                fieldname: 'scan_operator'
-            },
-            render_input: true
-        });
     }
 
     validate_form() {
@@ -881,12 +848,6 @@ class CARResolutionCenter {
             return false;
         }
         
-        // Check at least one corrective action
-        if (this.$actions_tbody.find('tr').length === 0) {
-            frappe.msgprint('Please add at least one Corrective Action');
-            return false;
-        }
-        
         return true;
     }
 
@@ -897,19 +858,6 @@ class CARResolutionCenter {
             why_analysis.push({
                 s_no: idx + 1,
                 why_question: $(this).val().trim()
-            });
-        });
-        
-        // Collect Corrective Actions
-        const corrective_actions = [];
-        this.$actions_tbody.find('tr').each(function(idx) {
-            const $row = $(this);
-            corrective_actions.push({
-                s_no: idx + 1,
-                corrective_action: $row.find('textarea[name="action-description"]').val().trim(),
-                scan_operator: $row.find('input[name="action-scan-operator"]').val(),
-                target_date: $row.find('input[name="action-target-date"]').val(),
-                status: $row.find('select[name="action-status"]').val()
             });
         });
         
@@ -932,8 +880,11 @@ class CARResolutionCenter {
             problem_description: this.$problem_description.val().trim(),
             root_cause: this.$root_cause.val().trim(),
             remarks: this.$remarks.val().trim(),
-            why_analysis: why_analysis,
-            corrective_actions: corrective_actions
+            corrective_action_code: this.$corrective_action_code.val().trim(),
+            corrective_action_details: this.$corrective_action_details.val().trim(),
+            scan_operator: this.$scan_operator.val().trim(),
+            target_date: this.$target_date.val(),
+            why_analysis: why_analysis
         };
     }
 

@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "naming_series:",
- "creation": "2025-10-25 17:00:00.000000",
+ "creation": "2025-10-25 17:00:00",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -32,11 +32,8 @@
   "root_cause_section",
   "reason_code",
   "problem_description",
-  "why_analysis_section",
-  "why_analysis",
-  "root_cause",
-  "corrective_actions_section",
-  "corrective_actions",
+  "corrective_action_code",
+  "corrective_action_details",
   "tracking_section",
   "scan_operator",
   "target_date",
@@ -53,8 +50,8 @@
    "fieldtype": "Select",
    "label": "Series",
    "options": "CAR-RESOLVED-.YYYY.-",
-   "set_only_once": 1,
-   "reqd": 1
+   "reqd": 1,
+   "set_only_once": 1
   },
   {
    "fieldname": "reference_section",
@@ -64,29 +61,27 @@
   {
    "fieldname": "parent_car_unresolved",
    "fieldtype": "Link",
-   "label": "Parent CAR Unresolved",
-   "options": "Corrective Action Unresolved",
-   "reqd": 0,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Parent CAR Unresolved",
+   "options": "Corrective Action Unresolved"
   },
   {
    "fieldname": "parent_daily_oee_report",
    "fieldtype": "Link",
-   "label": "Parent Daily OEE Report",
-   "options": "Daily OEE Report",
-   "reqd": 0,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Parent Daily OEE Report",
+   "options": "Daily OEE Report"
   },
   {
    "fieldname": "production_entry",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Moulding Production Entry",
    "options": "Moulding Production Entry",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
+   "reqd": 1
   },
   {
    "fieldname": "column_break_ref",
@@ -99,10 +94,10 @@
    "read_only": 1
   },
   {
+   "default": "Today",
    "fieldname": "resolved_date",
    "fieldtype": "Date",
    "label": "Resolved Date",
-   "default": "Today",
    "read_only": 1
   },
   {
@@ -113,10 +108,10 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
    "fieldname": "production_data_section",
    "fieldtype": "Section Break",
-   "label": "Production Data",
-   "collapsible": 1
+   "label": "Production Data"
   },
   {
    "fieldname": "shift_type",
@@ -157,44 +152,44 @@
    "fieldname": "target_quantity",
    "fieldtype": "Float",
    "label": "Target Quantity",
-   "read_only": 1,
-   "precision": 0
+   "precision": "0",
+   "read_only": 1
   },
   {
    "fieldname": "actual_quantity",
    "fieldtype": "Float",
    "label": "Actual Quantity",
-   "read_only": 1,
-   "precision": 0
+   "precision": "0",
+   "read_only": 1
   },
   {
    "fieldname": "variance_qty",
    "fieldtype": "Float",
    "label": "Variance",
-   "read_only": 1,
-   "precision": 0
+   "precision": "0",
+   "read_only": 1
   },
   {
    "fieldname": "oee_pct",
    "fieldtype": "Percent",
+   "in_list_view": 1,
    "label": "OEE %",
-   "read_only": 1,
-   "precision": 2,
-   "in_list_view": 1
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "production_efficiency_pct",
    "fieldtype": "Percent",
    "label": "Production Efficiency %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "rejection_percentage",
    "fieldtype": "Percent",
    "label": "Rejection %",
-   "read_only": 1,
-   "precision": 2
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "root_cause_section",
@@ -204,10 +199,10 @@
   {
    "fieldname": "reason_code",
    "fieldtype": "Select",
+   "in_list_view": 1,
    "label": "Reason Code",
    "options": "COMPOUND SHORTAGE\nMACHINE BREAKDOWN\nMLD CHANGE\nMLD WASH / CLEAN\nOPERATOR ISSUE\nPLANNING\nQUALITY ISSUE\nTRIAL\nCOMPOUND ISSUE\nSHELL SHORTAGE\nSHELL QUALITY ISSUE\nOPERATOR DELAY\nLOADING PLATE NOT AVAILABLE\nMOULD ISSUE",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "problem_description",
@@ -216,34 +211,15 @@
    "reqd": 1
   },
   {
-   "fieldname": "why_analysis_section",
-   "fieldtype": "Section Break",
-   "label": "Why-Why Analysis"
+   "fieldname": "corrective_action_code",
+   "fieldtype": "Data",
+   "label": "Corrective Action Code",
+   "in_list_view": 1
   },
   {
-   "fieldname": "why_analysis",
-   "fieldtype": "Table",
-   "label": "Why Analysis (5 Rows Mandatory)",
-   "options": "CAR Why Analysis",
-   "reqd": 1
-  },
-  {
-   "fieldname": "root_cause",
+   "fieldname": "corrective_action_details",
    "fieldtype": "Text Editor",
-   "label": "Root Cause",
-   "reqd": 1
-  },
-  {
-   "fieldname": "corrective_actions_section",
-   "fieldtype": "Section Break",
-   "label": "Corrective Action Plan"
-  },
-  {
-   "fieldname": "corrective_actions",
-   "fieldtype": "Table",
-   "label": "Corrective Actions",
-   "options": "CAR Corrective Action",
-   "reqd": 1
+   "label": "Corrective Action Details"
   },
   {
    "fieldname": "tracking_section",
@@ -266,14 +242,14 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Resolved",
    "fieldname": "status",
    "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Status",
    "options": "Resolved\nVerified\nClosed",
-   "default": "Resolved",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
+   "reqd": 1
   },
   {
    "fieldname": "completion_date",
@@ -281,10 +257,10 @@
    "label": "Actual Completion Date"
   },
   {
+   "collapsible": 1,
    "fieldname": "remarks_section",
    "fieldtype": "Section Break",
-   "label": "Remarks",
-   "collapsible": 1
+   "label": "Remarks"
   },
   {
    "fieldname": "remarks",
@@ -299,9 +275,8 @@
    "read_only": 1
   }
  ],
- "is_submittable": 0,
  "links": [],
- "modified": "2025-10-25 17:00:00.000000",
+ "modified": "2025-10-28 18:42:30.176048",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "Corrective Action Resolved",
@@ -332,6 +307,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

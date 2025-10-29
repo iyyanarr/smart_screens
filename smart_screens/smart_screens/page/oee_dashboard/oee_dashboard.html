@@ -158,7 +158,7 @@
         <div class="resolution-panel__body">
             <form id="resolution-form">
                 <div class="form-group">
-                    <label for="res-reason-code">Reason Code</label>
+                    <label for="res-reason-code">Reason Code <span class="text-danger">*</span></label>
                     <select id="res-reason-code" class="form-control" required>
                         <option value="">Select Reason</option>
                         <!-- options will be loaded dynamically -->
@@ -168,20 +168,18 @@
                     <label for="res-problem">Problem Description</label>
                     <textarea id="res-problem" class="form-control" rows="2" placeholder="Describe the problem..."></textarea>
                 </div>
+                
+                <!-- Simplified Corrective Action Fields (replacing child table) -->
                 <div class="form-group">
-                    <label for="res-corrective">Corrective Action</label>
-                    <textarea id="res-corrective" class="form-control" rows="2" placeholder="Describe corrective action..."></textarea>
+                    <label for="res-corrective-action-code">Corrective Action Code</label>
+                    <input type="text" id="res-corrective-action-code" class="form-control" placeholder="Enter action code...">
                 </div>
-                <div class="form-row">
-                    <div class="form-group col-md-7">
-                        <label for="res-responsible">Responsible Person</label>
-                        <input id="res-responsible" type="text" class="form-control" placeholder="User ID or Name">
-                    </div>
-                    <div class="form-group col-md-5">
-                        <label for="res-target-date">Target Date</label>
-                        <input id="res-target-date" type="date" class="form-control">
-                    </div>
+                
+                <div class="form-group">
+                    <label for="res-corrective-action-details">Corrective Action Details</label>
+                    <textarea id="res-corrective-action-details" class="form-control" rows="3" placeholder="Describe the corrective actions taken..."></textarea>
                 </div>
+                
                 <div class="form-group mb-2">
                     <label for="res-remarks">Remarks</label>
                     <textarea id="res-remarks" class="form-control" rows="2" placeholder="Additional remarks (optional)"></textarea>

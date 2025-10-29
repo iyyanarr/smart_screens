@@ -17,14 +17,10 @@ class CorrectiveActionResolved(Document):
         if not self.parent_car_unresolved and not self.parent_daily_oee_report:
             frappe.throw("Either 'Parent CAR Unresolved' or 'Parent Daily OEE Report' must be specified")
         
-        # Validate Why Analysis - must have exactly 5 rows
-        if self.why_analysis:
-            if len(self.why_analysis) != 5:
-                frappe.throw("Why Analysis must have exactly 5 rows")
-        
-        # Validate at least one corrective action
-        if not self.corrective_actions or len(self.corrective_actions) == 0:
-            frappe.throw("At least one Corrective Action is required")
+        # Validate corrective action details (simplified fields - no child table anymore)
+        # Optional: You can add validation if corrective action details are required
+        # if not self.corrective_action_details:
+        #     frappe.throw("Corrective Action Details are required")
     
     def before_save(self):
         """Called before saving"""

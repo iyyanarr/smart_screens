@@ -748,10 +748,9 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         resolution_data: Dictionary containing:
             - reason_code
             - problem_description
-            - corrective_action
-            - responsible_person
-            - target_completion_date
-            - resolution_remarks
+            - corrective_action_code (NEW: simple field replacing child table)
+            - corrective_action_details (NEW: simple field replacing child table)
+            - remarks
     
     Returns:
         dict: {success: bool, car_name: str, error: str}
@@ -773,25 +772,81 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         if not resolution_data.get('reason_code'):
             return {'success': False, 'error': 'Reason code is required'}
         
+        # Check if CAR already exists for this production entry and daily report
+        existing_car = frappe.db.exists('Corrective Action Resolved', {
+            'parent_daily_oee_report': parent_daily_oee_report,
+            'production_entry': production_entry,
+            'docstatus': ['<', 2]  # Not cancelled
+        })
+        
+        if existing_car:
+            # Update existing CAR instead of creating duplicate
+            car_doc = frappe.get_doc('Corrective Action Resolved', existing_car)
+            car_doc.reason_code = resolution_data.get('reason_code')
+            car_doc.problem_description = resolution_data.get('problem_description', '')
+            car_doc.corrective_action_code = resolution_data.get('corrective_action_code', '')
+            car_doc.corrective_action_details = resolution_data.get('corrective_action_details', '')
+            car_doc.remarks = resolution_data.get('remarks', '')
+            
+            car_doc.save()
+            frappe.db.commit()
+            
+            return {
+                'success': True,
+                'car_name': car_doc.name,
+                'message': f'Corrective Action Resolved {car_doc.name} updated successfully'
+            }
+        
         # Get production entry data
         prod_doc = frappe.get_doc('Moulding Production Entry', production_entry)
         
-        # Get shift_type from Work Planning (since it doesn't exist in Moulding Production Entry)
+        # Get shift_type and machine_reference from Work Planning via Job Card
         shift_type = 'Unknown'
+        machine_reference = ''
+        
         try:
-            work_plan = frappe.db.get_value(
-                'Work Planning',
+            # Get Work Planning data via Job Card
+            if prod_doc.job_card:
+                work_plan_data = frappe.db.get_value(
+                    'Work Plan Item',
+                    {
+                        'job_card': prod_doc.job_card,
+                        'docstatus': 1
+                    },
+                    ['parent', 'work_station'],
+                    as_dict=True
+                )
+                
+                if work_plan_data and work_plan_data.parent:
+                    # Get shift_type from Work Planning header
+                    work_plan = frappe.get_doc('Work Planning', work_plan_data.parent)
+                    shift_type = work_plan.shift_type or 'Unknown'
+                    
+                    # Get machine/press from Work Planning (work_station field)
+                    machine_reference = work_plan_data.work_station or work_plan.work_station or ''
+        except Exception as e:
+            frappe.log_error(f"Error fetching Work Planning data: {str(e)}", "CAR Creation - Work Planning Fetch")
+        
+        # Fallback to mould_reference if machine not found
+        if not machine_reference:
+            machine_reference = prod_doc.mould_reference or ''
+        
+        # Get the corresponding Daily OEE Report Production Record for accurate OEE data
+        oee_record = None
+        try:
+            oee_record = frappe.db.get_value(
+                'Unresolved Production Record',
                 {
-                    'moulding_production_entry': production_entry,
-                    'docstatus': 1
+                    'parent': parent_daily_oee_report,
+                    'production_entry': production_entry
                 },
-                'shift_type'
+                ['machine_reference', 'target_quantity', 'actual_quantity', 'variance_qty', 
+                 'oee_pct', 'production_efficiency_pct', 'rejection_percentage'],
+                as_dict=True
             )
-            if work_plan:
-                shift_type = work_plan
-        except Exception:
-            # Fallback to Unknown if Work Planning not found
-            pass
+        except Exception as e:
+            frappe.log_error(f"Error fetching OEE record: {str(e)}", "CAR Creation - OEE Record Fetch")
+            oee_record = None
         
         # Create new Corrective Action Resolved document
         car_doc = frappe.new_doc('Corrective Action Resolved')
@@ -800,69 +855,52 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
         car_doc.parent_daily_oee_report = parent_daily_oee_report
         car_doc.production_entry = production_entry
         
-        # Copy production data
+        # Copy production data from Moulding Production Entry (using correct field names)
         car_doc.production_date = prod_doc.moulding_date
-        car_doc.shift_type = shift_type  # Use shift_type from Work Planning
-        car_doc.operator_name = prod_doc.operator_name
-        car_doc.machine_reference = prod_doc.machine_reference
-        car_doc.item_code = prod_doc.item_code
-        car_doc.lot_number = prod_doc.lot_number
-        car_doc.target_quantity = prod_doc.target_quantity
-        car_doc.actual_quantity = prod_doc.actual_quantity
-        car_doc.variance_qty = prod_doc.actual_quantity - prod_doc.target_quantity
+        car_doc.shift_type = shift_type
+        car_doc.operator_name = prod_doc.employee_name or ''
         
-        # Copy OEE metrics if available
-        if hasattr(prod_doc, 'oee_pct'):
-            car_doc.oee_pct = prod_doc.oee_pct
-        if hasattr(prod_doc, 'production_efficiency_pct'):
-            car_doc.production_efficiency_pct = prod_doc.production_efficiency_pct
-        if hasattr(prod_doc, 'rejection_percentage'):
-            car_doc.rejection_percentage = prod_doc.rejection_percentage
+        # Use machine_reference from OEE record (most accurate), fallback to Work Planning data
+        car_doc.machine_reference = (oee_record.get('machine_reference') if oee_record else '') or machine_reference
         
-        # Set resolution data
+        car_doc.item_code = prod_doc.item_to_produce or ''
+        car_doc.lot_number = prod_doc.spp_batch_number or ''
+        
+        # Use OEE record data for quantities (more accurate)
+        if oee_record:
+            car_doc.target_quantity = flt(oee_record.get('target_quantity', 0))
+            car_doc.actual_quantity = flt(oee_record.get('actual_quantity', 0))
+            car_doc.variance_qty = flt(oee_record.get('variance_qty', 0))
+            car_doc.oee_pct = flt(oee_record.get('oee_pct', 0))
+            car_doc.production_efficiency_pct = flt(oee_record.get('production_efficiency_pct', 0))
+            car_doc.rejection_percentage = flt(oee_record.get('rejection_percentage', 0))
+        else:
+            # Fallback to production entry data
+            car_doc.actual_quantity = flt(prod_doc.weight or 0)
+            car_doc.target_quantity = 0
+            car_doc.variance_qty = 0
+            car_doc.oee_pct = 0
+            car_doc.production_efficiency_pct = 0
+            car_doc.rejection_percentage = 0
+        
+        # Set resolution data - SIMPLIFIED (no child table)
         car_doc.reason_code = resolution_data.get('reason_code')
         car_doc.problem_description = resolution_data.get('problem_description', '')
-        car_doc.root_cause = resolution_data.get('corrective_action', '')  # Using corrective_action as root cause for now
+        car_doc.corrective_action_code = resolution_data.get('corrective_action_code', '')
+        car_doc.corrective_action_details = resolution_data.get('corrective_action_details', '')
+        car_doc.remarks = resolution_data.get('remarks', '')
         
-        # Create 5-Why Analysis (mandatory - auto-generate placeholder rows)
-        # We'll create 5 rows with the problem description as starting point
-        why_questions = [
-            f"Why did this issue occur? {resolution_data.get('problem_description', 'Issue occurred')}",
-            "Why did the root cause exist?",
-            "Why was this not prevented?",
-            "Why was the process susceptible to this?",
-            "What is the fundamental root cause?"
-        ]
-        
-        for i, why_q in enumerate(why_questions, 1):
-            car_doc.append('why_analysis', {
-                'why_number': i,
-                'question': why_q,
-                'answer': resolution_data.get('problem_description', '') if i == 1 else 'To be analyzed'
-            })
-        
-        # Create Corrective Action (mandatory - at least one row)
-        car_doc.append('corrective_actions', {
-            'action_description': resolution_data.get('corrective_action', 'Corrective action to be defined'),
-            'responsible_person': resolution_data.get('responsible_person', ''),
-            'target_date': resolution_data.get('target_completion_date', ''),
-            'status': 'Pending'
-        })
-        
-        # Set tracking fields
-        car_doc.scan_operator = resolution_data.get('responsible_person', '')
-        car_doc.target_date = resolution_data.get('target_completion_date', '')
+        # Set status
         car_doc.status = 'Resolved'
-        car_doc.remarks = resolution_data.get('resolution_remarks', '')
         
         # Save the document
         car_doc.insert()
         frappe.db.commit()
         
-        # Update the Daily OEE Report Production Record with CAR reference
+        # Update the Unresolved Production Record with CAR reference
         try:
             frappe.db.sql("""
-                UPDATE `tabDaily OEE Report Production Record`
+                UPDATE `tabUnresolved Production Record`
                 SET resolution_status = 'Resolved',
                     car_reference = %s
                 WHERE parent = %s
@@ -870,7 +908,7 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report, res
             """, (car_doc.name, parent_daily_oee_report, production_entry))
             frappe.db.commit()
         except Exception as e:
-            frappe.log_error(f"Error updating Daily OEE Report record: {str(e)}", "Update CAR Reference")
+            frappe.log_error(f"Error updating Unresolved Production Record: {str(e)}", "Update CAR Reference")
         
         return {
             'success': True,

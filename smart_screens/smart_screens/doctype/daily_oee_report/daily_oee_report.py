@@ -9,15 +9,7 @@ class DailyOEEReport(Document):
     Provides summary statistics for daily OEE performance
     """
     
-    def autoname(self):
-        """Set document name with production date"""
-        if self.production_date:
-            # Format: DAILY-OEE-2025-10-28-00001
-            date_part = getdate(self.production_date).strftime("%Y-%m-%d")
-            self.name = f"DAILY-OEE-{date_part}-.###"
-        else:
-            # Fallback if no production date
-            self.name = "DAILY-OEE-.####"
+    # Removed custom autoname() - let Frappe handle naming series automatically
     
     def validate(self):
         """Validation on save"""
@@ -194,13 +186,13 @@ def check_existing_report(production_date, shift_filter='', machine_filter=''):
     
     try:
         # Check if child table exists before querying
-        if frappe.db.table_exists("Daily OEE Report Production Record"):
-            resolved_count = frappe.db.count("Daily OEE Report Production Record", {
+        if frappe.db.table_exists("Unresolved Production Record"):
+            resolved_count = frappe.db.count("Unresolved Production Record", {
                 "parent": report_name,
                 "resolution_status": "Resolved"
             })
             
-            pending_count = frappe.db.count("Daily OEE Report Production Record", {
+            pending_count = frappe.db.count("Unresolved Production Record", {
                 "parent": report_name,
                 "resolution_status": ["!=", "Resolved"]
             })
