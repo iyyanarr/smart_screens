@@ -192,6 +192,150 @@
             <button id="res-cancel" class="btn btn-link btn-sm">Cancel</button>
         </div>
     </div>
+    
+    <!-- OEE Details Modal -->
+    <div class="modal fade" id="oeeDetailModal" tabindex="-1" role="dialog" aria-labelledby="oeeDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="oeeDetailModalLabel">📊 OEE Details Breakdown</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <!-- Production Summary -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Date</small><br>
+                                            <strong id="modal-date">-</strong>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <small class="text-muted">Shift</small><br>
+                                            <strong id="modal-shift">-</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Lot Number</small><br>
+                                            <strong id="modal-lot">-</strong>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <small class="text-muted">Item</small><br>
+                                            <strong id="modal-item">-</strong>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-md-12">
+                                            <small class="text-muted">Operator</small><br>
+                                            <strong id="modal-operator">-</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- OEE Score -->
+                    <div class="row mb-3">
+                        <div class="col-md-12 text-center">
+                            <h3 class="mb-1">Overall OEE Score</h3>
+                            <h1 id="modal-oee-score" class="display-4 font-weight-bold text-primary">0%</h1>
+                        </div>
+                    </div>
+                    
+                    <!-- Availability Details -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <strong>🟢 Availability</strong> - <span id="modal-availability-pct">0%</span>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        <tr>
+                                            <td>Planned Production Time:</td>
+                                            <td class="text-right"><strong id="modal-planned-time">450</strong> minutes</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Downtime:</td>
+                                            <td class="text-right"><strong id="modal-downtime" class="text-danger">0.0</strong> minutes</td>
+                                        </tr>
+                                        <tr class="border-top">
+                                            <td><strong>Available Production Time:</strong></td>
+                                            <td class="text-right"><strong id="modal-available-time">450</strong> minutes</td>
+                                        </tr>
+                                    </table>
+                                    <small class="text-muted">Formula: (Planned Time - Downtime) / Planned Time × 100</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Performance Details -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card border-info">
+                                <div class="card-header bg-info text-white">
+                                    <strong>🔵 Performance</strong> - <span id="modal-performance-pct">0%</span>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        <tr>
+                                            <td>Cycle Time (Standard):</td>
+                                            <td class="text-right"><strong id="modal-cycle-time">0.00</strong> seconds</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Actual Quantity Produced:</td>
+                                            <td class="text-right"><strong id="modal-actual-qty">0</strong> pieces</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Available Time:</td>
+                                            <td class="text-right"><strong id="modal-perf-available-time">450</strong> minutes</td>
+                                        </tr>
+                                    </table>
+                                    <small class="text-muted">Formula: (Cycle Time × Actual Quantity) / (Available Time × 60) × 100</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quality Details -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning text-dark">
+                                    <strong>🟡 Quality</strong> - <span id="modal-quality-pct">0%</span>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        <tr>
+                                            <td>Good Pieces:</td>
+                                            <td class="text-right"><strong id="modal-good-pieces" class="text-success">0</strong> pieces</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Rejected Pieces:</td>
+                                            <td class="text-right"><strong id="modal-rejected-pieces" class="text-danger">0</strong> pieces</td>
+                                        </tr>
+                                        <tr class="border-top">
+                                            <td><strong>Total Inspected:</strong></td>
+                                            <td class="text-right"><strong id="modal-total-inspected">0</strong> pieces</td>
+                                        </tr>
+                                    </table>
+                                    <small class="text-muted">Formula: Good Pieces / Total Inspected × 100</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
