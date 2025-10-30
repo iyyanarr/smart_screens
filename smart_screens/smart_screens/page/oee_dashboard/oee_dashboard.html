@@ -5,6 +5,15 @@
             <div class="col-md-6">
                 <h4 class="mb-0">📊 OEE Report Generator</h4>
                 <small class="text-muted">Overall Equipment Effectiveness Analysis</small>
+                <!-- NEW: Display current report name -->
+                <div id="current-report-badge" style="display: none; margin-top: 8px;">
+                    <span class="badge badge-success" style="font-size: 13px; padding: 6px 12px;">
+                        📋 Working on: <strong id="current-report-name"></strong>
+                    </span>
+                    <button class="btn btn-xs btn-light" onclick="viewCurrentReport()" style="margin-left: 8px; font-size: 11px; padding: 2px 8px;" title="View Report">
+                        <i class="fa fa-external-link"></i> View
+                    </button>
+                </div>
             </div>
             <div class="col-md-6 text-right">
                 <!-- Summary Metrics -->

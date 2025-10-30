@@ -852,6 +852,9 @@ function resumeExistingReport() {
                 reportGenerated = true;
                 savedReportName = existingReportInfo.report_name;
                 
+                // NEW: Show report name badge when resuming
+                showReportNameBadge(existingReportInfo.report_name);
+                
                 // Store report data for saving (use correct variable name)
                 reportData = {
                     filters: savedData.filters || {
@@ -992,7 +995,6 @@ function generateReport() {
         callback: function(check_r) {
             if (check_r.message && check_r.message.exists) {
                 // Report already exists
-                hideLoading();
                 existingReportInfo = check_r.message;
                 
                 const isDraft = check_r.message.docstatus === 0;
@@ -1000,6 +1002,7 @@ function generateReport() {
                 
                 if (isSubmitted) {
                     // Already submitted - just view it
+                    hideLoading();
                     frappe.msgprint({
                         title: 'Report Already Submitted',
                         message: `A report has already been submitted for this date/filter combination: <strong>${check_r.message.report_name}</strong>`,
@@ -1014,30 +1017,9 @@ function generateReport() {
                 }
                 
                 if (isDraft) {
-                    // Draft exists - ask to resume or replace
-                    frappe.confirm(
-                        `A draft report exists: <strong>${check_r.message.report_name}</strong><br><br>` +
-                        `<small>Total Records: ${check_r.message.total_records} | ` +
-                        `Resolved: <span style="color: green;">${check_r.message.resolved_count}</span> | ` +
-                        `Pending: <span style="color: red;">${check_r.message.pending_count}</span></small><br><br>` +
-                        `Do you want to <strong>Resume</strong> the existing report?<br>` +
-                        `<small>(Click "No" to replace it with fresh data)</small>`,
-                        function() {
-                            // User clicked Yes - Resume existing report
-                            resumeExistingReport();
-                        },
-                        function() {
-                            // User clicked No - Replace with fresh data
-                            frappe.confirm(
-                                'Are you sure you want to replace the existing draft with fresh data?<br>' +
-                                '<span style="color: red;">This will DELETE the existing report and any CAR resolutions.</span>',
-                                function() {
-                                    // Delete the old draft and generate fresh
-                                    deleteAndRegenerateReport(check_r.message.report_name, productionDate, processType, shiftFilter, machineFilter);
-                                }
-                            );
-                        }
-                    );
+                    // NEW: Auto-resume draft without confirmation
+                    console.log('📋 Auto-resuming existing draft report:', check_r.message.report_name);
+                    resumeExistingReport();
                     return;
                 }
             }
@@ -1317,6 +1299,9 @@ function saveReport() {
                 // Store the report name for later use
                 savedReportName = r.message.report_name;
                 
+                // NEW: Show report name badge in header
+                showReportNameBadge(r.message.report_name);
+                
                 frappe.show_alert({
                     message: 'Report saved successfully',
                     indicator: 'blue'
@@ -1346,6 +1331,32 @@ function saveReport() {
             frappe.msgprint('Error saving report. Please try again.');
         }
     });
+}
+
+// NEW: Report name badge functions
+function showReportNameBadge(reportName) {
+    const badgeDiv = document.getElementById('current-report-badge');
+    const nameSpan = document.getElementById('current-report-name');
+    
+    if (badgeDiv && nameSpan) {
+        nameSpan.textContent = reportName;
+        badgeDiv.style.display = 'block';
+    }
+}
+
+function hideReportNameBadge() {
+    const badgeDiv = document.getElementById('current-report-badge');
+    if (badgeDiv) {
+        badgeDiv.style.display = 'none';
+    }
+}
+
+function viewCurrentReport() {
+    if (savedReportName) {
+        frappe.set_route('Form', 'Daily OEE Report', savedReportName);
+    } else if (existingReportInfo && existingReportInfo.report_name) {
+        frappe.set_route('Form', 'Daily OEE Report', existingReportInfo.report_name);
+    }
 }
 
 function applyFilters() {
