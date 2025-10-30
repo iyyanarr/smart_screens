@@ -124,6 +124,11 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 'no_of_cavities': entry.get('no_of_running_cavities', 0),
                 'variance_qty': actual_qty - target_qty,
                 
+                # NEW: NoP (Number of Products) fields
+                'number_of_products': entry.get('number_of_products', 0),
+                'production_weight_kg': entry.get('production_weight_kg', 0),
+                'blank_weight_grams': entry.get('blank_weight_grams', 0),
+                
                 # Quality Data
                 'total_inspected': quality_data['total_pieces'],
                 'good_pieces': quality_data['good_pieces'],
@@ -604,6 +609,15 @@ def save_oee_report(report_data):
                     'availability_pct': flt(record.get('availability_pct', 0)),
                     'performance_pct': flt(record.get('performance_pct', 0)),
                     'quality_pct': flt(record.get('quality_pct', 0)),
+                    # NEW: Add breakdown details for OEE Details Modal
+                    'planned_time_minutes': flt(record.get('planned_time_minutes', 0)),
+                    'downtime_minutes': flt(record.get('downtime_minutes', 0)),
+                    'available_time_minutes': flt(record.get('available_time_minutes', 0)),
+                    'cycle_time_seconds': flt(record.get('cycle_time_seconds', 0)),
+                    'no_of_cavities': int(record.get('no_of_cavities', 0)),
+                    'total_inspected': int(record.get('total_inspected', 0)),
+                    'good_pieces': int(record.get('good_pieces', 0)),
+                    'rejected_pieces': int(record.get('rejected_pieces', 0)),
                     'resolution_status': resolution_status,
                     'resolved_record': record.get('resolved_record', ''),  # FIXED: Use resolved_record instead of car_reference
                     'remarks': record.get('resolution_remarks', '')
@@ -660,8 +674,17 @@ def save_oee_report(report_data):
                 'availability_pct': flt(record.get('availability_pct', 0)),
                 'performance_pct': flt(record.get('performance_pct', 0)),
                 'quality_pct': flt(record.get('quality_pct', 0)),
+                # NEW: Add breakdown details for OEE Details Modal
+                'planned_time_minutes': flt(record.get('planned_time_minutes', 0)),
+                'downtime_minutes': flt(record.get('downtime_minutes', 0)),
+                'available_time_minutes': flt(record.get('available_time_minutes', 0)),
+                'cycle_time_seconds': flt(record.get('cycle_time_seconds', 0)),
+                'no_of_cavities': int(record.get('no_of_cavities', 0)),
+                'total_inspected': int(record.get('total_inspected', 0)),
+                'good_pieces': int(record.get('good_pieces', 0)),
+                'rejected_pieces': int(record.get('rejected_pieces', 0)),
                 'resolution_status': resolution_status,
-                'car_reference': record.get('resolved_record', ''),
+                'resolved_record': record.get('resolved_record', ''),  # FIXED: Use resolved_record instead of car_reference
                 'remarks': record.get('resolution_remarks', '')
             })
         
@@ -789,6 +812,15 @@ def submit_oee_report(report_data):
                 'availability_pct': flt(record.get('availability_pct', 0)),
                 'performance_pct': flt(record.get('performance_pct', 0)),
                 'quality_pct': flt(record.get('quality_pct', 0)),
+                # NEW: Add breakdown details for OEE Details Modal
+                'planned_time_minutes': flt(record.get('planned_time_minutes', 0)),
+                'downtime_minutes': flt(record.get('downtime_minutes', 0)),
+                'available_time_minutes': flt(record.get('available_time_minutes', 0)),
+                'cycle_time_seconds': flt(record.get('cycle_time_seconds', 0)),
+                'no_of_cavities': int(record.get('no_of_cavities', 0)),
+                'total_inspected': int(record.get('total_inspected', 0)),
+                'good_pieces': int(record.get('good_pieces', 0)),
+                'rejected_pieces': int(record.get('rejected_pieces', 0)),
                 'resolution_status': resolution_status
             })
         

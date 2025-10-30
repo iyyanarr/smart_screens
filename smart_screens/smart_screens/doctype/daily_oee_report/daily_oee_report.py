@@ -268,6 +268,15 @@ def get_report_data(report_name):
                 'availability_pct': flt(row.availability_pct, 2),
                 'performance_pct': flt(row.performance_pct, 2),
                 'quality_pct': flt(row.quality_pct, 2),
+                # OEE Breakdown fields for Details Modal
+                'planned_time_minutes': flt(getattr(row, 'planned_time_minutes', 450), 2),
+                'downtime_minutes': flt(getattr(row, 'downtime_minutes', 0), 2),
+                'available_time_minutes': flt(getattr(row, 'available_time_minutes', 450), 2),
+                'cycle_time_seconds': flt(getattr(row, 'cycle_time_seconds', 0), 2),
+                'no_of_cavities': int(getattr(row, 'no_of_cavities', 0)),
+                'total_inspected': int(getattr(row, 'total_inspected', 0)),
+                'good_pieces': int(getattr(row, 'good_pieces', 0)),
+                'rejected_pieces': int(getattr(row, 'rejected_pieces', 0)),
                 'resolution_status': getattr(row, 'resolution_status', 'Pending'),
                 'resolved_record': getattr(row, 'resolved_record', ''),
                 # Add lot inspection status (check if exists in production entry)

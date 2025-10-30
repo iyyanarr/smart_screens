@@ -59,12 +59,12 @@ function initializeDateFilters() {
 
 // Adjust loading spinner helpers to use correct element ID
 function showLoading() {
-    const el = document.getElementById('loading-spinner') || document.getElementById('loading');
-    if (el) el.style.display = 'block';
+    const el = document.getElementById('loading-overlay');
+    if (el) el.style.display = 'flex';
 }
 
 function hideLoading() {
-    const el = document.getElementById('loading-spinner') || document.getElementById('loading');
+    const el = document.getElementById('loading-overlay');
     if (el) el.style.display = 'none';
 }
 
@@ -510,7 +510,7 @@ function updateTable(data) {
     tableBody.innerHTML = '';
 
     if (!data || data.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="12" class="text-center">No OEE data found for the selected criteria</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="13" class="text-center">No OEE data found for the selected criteria</td></tr>';
         return;
     }
     
@@ -570,6 +570,7 @@ function updateTable(data) {
             <td><small><strong>${row.item_code || ''}</strong></small></td>
             <td><small><span class="badge badge-info">${row.lot_number || ''}</span></small></td>
             <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>
+            <td class="text-right"><small><strong>${row.number_of_products || 0}</strong></small></td>
             <td class="text-right"><small>${row.availability_pct || 0}%</small></td>
             <td class="text-right"><small>${row.performance_pct || 0}%</small></td>
             <td class="text-right"><small>${row.quality_pct || 0}%</small></td>
@@ -610,6 +611,8 @@ function showOEEDetails(event, rowIndex) {
     const row = document.querySelectorAll('[data-row-index]')[rowIndex];
     const rowData = JSON.parse(row.dataset.rowData);
     
+    console.log('🔍 DEBUG - showOEEDetails rowData:', rowData);
+    
     // Populate modal with data
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
@@ -618,22 +621,22 @@ function showOEEDetails(event, rowIndex) {
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
     
     // OEE Score
-    document.getElementById('modal-oee-score').textContent = rowData.oee_pct + '%';
+    document.getElementById('modal-oee-score').textContent = (rowData.oee_pct || 0) + '%';
     
     // Availability Details
-    document.getElementById('modal-availability-pct').textContent = rowData.availability_pct + '%';
+    document.getElementById('modal-availability-pct').textContent = (rowData.availability_pct || 0) + '%';
     document.getElementById('modal-planned-time').textContent = rowData.planned_time_minutes || 450;
-    document.getElementById('modal-downtime').textContent = rowData.downtime_minutes ? rowData.downtime_minutes.toFixed(1) : '0.0';
+    document.getElementById('modal-downtime').textContent = (rowData.downtime_minutes != null) ? rowData.downtime_minutes.toFixed(1) : '0.0';
     document.getElementById('modal-available-time').textContent = rowData.available_time_minutes || 450;
     
     // Performance Details
-    document.getElementById('modal-performance-pct').textContent = rowData.performance_pct + '%';
-    document.getElementById('modal-cycle-time').textContent = rowData.cycle_time_seconds ? rowData.cycle_time_seconds.toFixed(2) : '0.00';
+    document.getElementById('modal-performance-pct').textContent = (rowData.performance_pct || 0) + '%';
+    document.getElementById('modal-cycle-time').textContent = (rowData.cycle_time_seconds != null) ? rowData.cycle_time_seconds.toFixed(2) : '0.00';
     document.getElementById('modal-actual-qty').textContent = rowData.actual_quantity || 0;
     document.getElementById('modal-perf-available-time').textContent = rowData.available_time_minutes || 450;
     
     // Quality Details
-    document.getElementById('modal-quality-pct').textContent = rowData.quality_pct + '%';
+    document.getElementById('modal-quality-pct').textContent = (rowData.quality_pct || 0) + '%';
     document.getElementById('modal-good-pieces').textContent = rowData.good_pieces || 0;
     document.getElementById('modal-total-inspected').textContent = rowData.total_inspected || 0;
     document.getElementById('modal-rejected-pieces').textContent = rowData.rejected_pieces || 0;

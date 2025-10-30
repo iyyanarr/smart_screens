@@ -201,7 +201,7 @@ oee_dashboard/
 #### Requirement #1: Replace Mold with Machine Name from Add-on Work Planning
 - **Description:** In the OEE Report Generator table view, the "Machine" column currently shows mould data from `Moulding Production Entry.machine_no`. This needs to be replaced with the actual machine name from the linked `Job Card` document's `workstation` field.
 - **Priority:** High
-- **Status:** 🔄 In Progress
+- **Status:** ✅ **COMPLETED**
 - **Implementation Notes:**
   
   **Data Structure Analysis:**
@@ -217,92 +217,39 @@ oee_dashboard/
   Moulding Production Entry → Job Card → Workstation (Machine)
   ```
   
-  **Example Data:**
-  - Moulding Production Entry: MLDPE-21650
-    - job_card: "PO-JOB230601"
-    - mould_reference: "TC-2437-A" (mould, currently shown incorrectly)
-  - Job Card: PO-JOB230601
-    - workstation: "P22 : TUNGYU - 200 Ton" (actual machine - what we need!)
-  
-  **Implementation Strategy:**
-  
-  1. **Backend (moulding_adapter.py):**
-     ```python
-     # Add new method to fetch machine from Job Card
-     def get_machine_from_job_card(self, production_entry):
-         """
-         Fetch workstation (machine) from linked Job Card
-         
-         Args:
-             production_entry: Moulding Production Entry dict
-         
-         Returns:
-             str: Workstation name or 'N/A' if not found
-         """
-         job_card = production_entry.get('job_card')
-         if not job_card:
-             return 'N/A'
-         
-         try:
-             job_card_doc = frappe.get_value(
-                 'Job Card',
-                 job_card,
-                 'workstation'
-             )
-             return job_card_doc or 'N/A'
-         except Exception as e:
-             frappe.log_error(f"Error fetching workstation: {str(e)}")
-             return 'N/A'
-     ```
-  
-  2. **Modify get_production_data() in moulding_adapter.py:**
-     - Join Job Card table to fetch workstation
-     - SQL Query:
-     ```sql
-     SELECT 
-         mpe.*,
-         jc.workstation as machine_name
-     FROM `tabMoulding Production Entry` AS mpe
-     LEFT JOIN `tabJob Card` AS jc ON mpe.job_card = jc.name
-     WHERE mpe.moulding_date = %(date)s
-     AND mpe.docstatus = 1
-     ```
-  
-  3. **Update oee_dashboard.py:**
-     - Modify result object to use `machine_name` from adapter
-     - Change field mapping:
-       ```python
-       result = {
-           # ...existing fields...
-           'machine_reference': machine_name,  # From Job Card workstation
-           'mould_reference': entry.get('mould_reference'),  # Keep mould separate
-           # ...existing fields...
-       }
-       ```
-  
-  4. **Optional Enhancement:**
-     - Add mould_reference as a separate field if needed
-     - Show both Machine and Mould in different columns
-  
-  5. **Fallback Handling:**
-     - If Job Card not linked → show "N/A"
-     - If Job Card has no workstation → show "N/A"
-     - Log warning for missing data
-  
-  **Testing Checklist:**
-  - [ ] Verify machine name appears correctly in OEE table
-  - [ ] Test with production entries that have Job Cards
-  - [ ] Test with production entries without Job Cards (fallback)
-  - [ ] Verify sorting by machine column works
-  - [ ] Check Daily OEE Report generation includes correct machine
-  - [ ] Verify CAR creation uses correct machine reference
-  - [ ] Test with multiple machines/workstations
+  **Changes Made:**
+  1. ✅ Modified `moulding_adapter.py` - Added LEFT JOIN with Job Card
+  2. ✅ Modified `oee_dashboard.py` - Uses machine_name from adapter
+  3. ✅ Added machine filter support (filter by workstation)
+  4. ✅ Preserved mould_reference as separate field
 
-#### Requirement #2: [TO BE ADDED]
-- **Description:** [Pending]
-- **Priority:** [High/Medium/Low]
-- **Status:** ⏳ Pending
-- **Implementation Notes:** [TBD]
+#### Requirement #2: Include Add-on Work Planning for Shift Type Lookup
+- **Description:** Some production records show "Unknown" for shift type because the system only looks at Work Planning. Need to include Add-on Work Planning as well to properly fetch shift information for all production lots.
+- **Priority:** High
+- **Status:** ✅ **COMPLETED**
+- **Implementation Notes:**
+  
+  **Problem:**
+  - Shift type comes from Work Planning DocType
+  - Some lots only exist in Add-on Work Planning
+  - When lot not found in Work Planning → shift_type = "Unknown"
+  
+  **Solution:**
+  - Query BOTH Work Planning and Add-on Work Planning
+  - Combine results and create unified lookup dictionary
+  - Priority: Work Planning first, then Add-on Work Planning
+  
+  **Changes Made:**
+  1. ✅ Added STEP 2B in `moulding_adapter.py`
+  2. ✅ Query Add-on Work Planning child table (Add On Work Plan Item)
+  3. ✅ Combined both sources: `all_work_plans = work_plan_data + addon_work_plan_data`
+  4. ✅ Unified lookup by lot_number includes both sources
+  
+  **Field Mapping:**
+  - Work Planning: `Work Plan Item.lot_number`, `Work Planning.shift_type`
+  - Add-on Work Planning: `Add On Work Plan Item.lot_number`, `Add On Work Planning.shift_type`
+
+#### Requirement #3: [TO BE ADDED]
 
 ---
 

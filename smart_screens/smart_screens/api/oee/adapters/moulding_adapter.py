@@ -20,6 +20,8 @@ class MouldingAdapter(ProcessAdapter):
         Fetch Moulding Production Entry data using the same logic as Planned vs Actual Production
         This aggregates production by date/shift/mould/lot and matches with work plans
         NOW INCLUDES: Machine name from Job Card's workstation field
+        UPDATED: Includes both Work Planning and Add-on Work Planning for shift lookup
+        NEW: Calculates NoP (Number of Products) = Production Weight / Blank Weight
         """
         
         # Build filter conditions
@@ -60,6 +62,7 @@ class MouldingAdapter(ProcessAdapter):
                 AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime_minutes,
                 mpe.employee_name as operator_name,
                 jc.workstation as machine_name,
+                SUM(mpe.weight) as total_production_weight,
                 GROUP_CONCAT(mpe.name ORDER BY mpe.creation SEPARATOR '|||') as production_entry_names
             FROM `tabMoulding Production Entry` mpe
             LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
@@ -84,7 +87,7 @@ class MouldingAdapter(ProcessAdapter):
         production_lot_numbers = list(set([prod['lot_number'] for prod in production_data]))
         lot_numbers_condition = "'" + "','".join(production_lot_numbers) + "'"
         
-        # STEP 2: Get matching work plans for these lot numbers (shift comes from here)
+        # STEP 2A: Get matching work plans for these lot numbers (shift comes from here)
         work_plan_query = f"""
             SELECT 
                 wp.name as work_plan_no,
@@ -93,7 +96,8 @@ class MouldingAdapter(ProcessAdapter):
                 wpi.mould as mould_ref,
                 ms.noof_cavities as no_of_cavities,
                 COALESCE(wpit.target_qty, 0) as target_lifts,
-                COALESCE(wp.shift_type, 'Unknown') as shift_type
+                COALESCE(wp.shift_type, 'Unknown') as shift_type,
+                'Work Planning' as source
             FROM `tabWork Planning` wp
             INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
             LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
@@ -109,9 +113,37 @@ class MouldingAdapter(ProcessAdapter):
         
         work_plan_data = frappe.db.sql(work_plan_query, as_dict=True)
         
+        # STEP 2B: Get matching Add-on Work Planning for these lot numbers (NEW!)
+        addon_work_plan_query = f"""
+            SELECT 
+                awp.name as work_plan_no,
+                awpi.lot_number,
+                awpi.item as item_code,
+                awpi.mould as mould_ref,
+                COALESCE(ms.noof_cavities, 0) as no_of_cavities,
+                0 as target_lifts,
+                COALESCE(awp.shift_type, 'Unknown') as shift_type,
+                'Add-on Work Planning' as source
+            FROM `tabAdd On Work Planning` awp
+            INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
+            LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
+            WHERE awpi.lot_number IN ({lot_numbers_condition})
+            AND awpi.mould IS NOT NULL
+            AND awpi.lot_number IS NOT NULL
+            AND awpi.lot_number != ''
+            {item_condition.replace('wpi.item', 'awpi.item')}
+            {lot_condition.replace('wpi.lot_number', 'awpi.lot_number')}
+            {shift_condition.replace('wp.shift_type', 'awp.shift_type')}
+        """
+        
+        addon_work_plan_data = frappe.db.sql(addon_work_plan_query, as_dict=True)
+        
+        # Combine both Work Planning and Add-on Work Planning data
+        all_work_plans = work_plan_data + addon_work_plan_data
+        
         # Create lookup dictionary for work plans by lot number
         work_plan_by_lot = {}
-        for wp in work_plan_data:
+        for wp in all_work_plans:
             lot_no = wp['lot_number']
             if lot_no not in work_plan_by_lot:
                 work_plan_by_lot[lot_no] = []
@@ -138,6 +170,16 @@ class MouldingAdapter(ProcessAdapter):
             # Get machine name from Job Card workstation (NEW!)
             machine_name = prod.get('machine_name') or 'N/A'
             
+            # Calculate NoP (Number of Products) = Production Weight / Blank Weight
+            total_production_weight_kg = flt(prod.get('total_production_weight', 0))
+            blank_weight_grams = self.get_blank_weight(prod['mould_ref'], prod['item_code'])
+            number_of_products = 0
+            
+            if blank_weight_grams > 0 and total_production_weight_kg > 0:
+                # Convert production weight from kg to grams, then divide by blank weight
+                total_production_weight_grams = total_production_weight_kg * 1000
+                number_of_products = int(total_production_weight_grams / blank_weight_grams)
+            
             if matched_work_plan:
                 # Merge production with work plan data
                 result = {
@@ -149,6 +191,9 @@ class MouldingAdapter(ProcessAdapter):
                     'lot_number': lot_no,
                     'item_to_produce': matched_work_plan['item_code'],
                     'number_of_lifts': flt(prod['total_production_lifts']),
+                    'number_of_products': number_of_products,  # NEW: NoP
+                    'production_weight_kg': total_production_weight_kg,  # NEW: Production weight
+                    'blank_weight_grams': blank_weight_grams,  # NEW: Blank weight
                     'no_of_running_cavities': flt(matched_work_plan.get('no_of_cavities', 0)),
                     'downtime_minutes': flt(prod.get('avg_downtime_minutes', 0)),
                     'operator_name': prod.get('operator_name', ''),
@@ -170,6 +215,9 @@ class MouldingAdapter(ProcessAdapter):
                     'lot_number': lot_no,
                     'item_to_produce': prod['item_code'],
                     'number_of_lifts': flt(prod['total_production_lifts']),
+                    'number_of_products': number_of_products,  # NEW: NoP
+                    'production_weight_kg': total_production_weight_kg,  # NEW: Production weight
+                    'blank_weight_grams': blank_weight_grams,  # NEW: Blank weight
                     'no_of_running_cavities': 0,  # Unknown without work plan
                     'downtime_minutes': flt(prod.get('avg_downtime_minutes', 0)),
                     'operator_name': prod.get('operator_name', ''),
@@ -184,6 +232,58 @@ class MouldingAdapter(ProcessAdapter):
             final_results.append(result)
         
         return final_results
+    
+    def get_blank_weight(self, mould_ref, item_code):
+        """
+        Get blank weight (in grams) from Mould Specification
+        
+        Args:
+            mould_ref: Mould reference code
+            item_code: Item code (SPP reference)
+        
+        Returns:
+            float: Blank weight in grams, 0 if not found
+        """
+        if not mould_ref:
+            return 0.0
+        
+        try:
+            # First try to match both mould_ref and spp_ref (item code)
+            result = frappe.db.sql("""
+                SELECT avg_blank_wtproduct_gms
+                FROM `tabMould Specification`
+                WHERE mould_ref = %s AND spp_ref = %s
+                AND avg_blank_wtproduct_gms IS NOT NULL 
+                AND avg_blank_wtproduct_gms != ''
+                AND avg_blank_wtproduct_gms != '0'
+                AND docstatus = 1
+                ORDER BY creation DESC
+                LIMIT 1
+            """, (mould_ref, item_code), as_dict=True)
+            
+            # Fallback: try with mould_ref only if no exact match found
+            if not result:
+                result = frappe.db.sql("""
+                    SELECT avg_blank_wtproduct_gms
+                    FROM `tabMould Specification`
+                    WHERE mould_ref = %s
+                    AND avg_blank_wtproduct_gms IS NOT NULL 
+                    AND avg_blank_wtproduct_gms != ''
+                    AND avg_blank_wtproduct_gms != '0'
+                    AND docstatus = 1
+                    ORDER BY creation DESC
+                    LIMIT 1
+                """, (mould_ref,), as_dict=True)
+            
+            if result and len(result) > 0:
+                blank_wt = flt(result[0].get('avg_blank_wtproduct_gms', 0))
+                return blank_wt if blank_wt > 0 else 0.0
+            
+            return 0.0
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting blank weight for mould {mould_ref}: {str(e)}", "Moulding Adapter")
+            return 0.0
     
     def get_planned_time(self, production_entry):
         """Get planned production time in minutes"""
