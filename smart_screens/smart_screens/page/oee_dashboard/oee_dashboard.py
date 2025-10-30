@@ -108,7 +108,8 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 'production_date_formatted': formatdate(adapter.get_production_date(entry)),
                 'shift_type': adapter.get_shift_type(entry),
                 'process_type': process_type,
-                'machine_reference': adapter.get_machine_reference(entry),
+                'machine_reference': entry.get('machine_name', 'N/A'),  # NEW: Use machine_name from Job Card
+                'mould_reference': adapter.get_machine_reference(entry),  # Keep mould separate
                 'lot_number': adapter.get_lot_number(entry),
                 'item_code': adapter.get_item_code(entry),
                 'operator_name': entry.get('operator_name', ''),

@@ -19,6 +19,7 @@ class MouldingAdapter(ProcessAdapter):
         """
         Fetch Moulding Production Entry data using the same logic as Planned vs Actual Production
         This aggregates production by date/shift/mould/lot and matches with work plans
+        NOW INCLUDES: Machine name from Job Card's workstation field
         """
         
         # Build filter conditions
@@ -28,6 +29,7 @@ class MouldingAdapter(ProcessAdapter):
         item_condition = ""
         lot_condition = ""
         shift_condition = ""
+        machine_condition = ""
         
         if filters:
             if filters.get('item'):
@@ -41,9 +43,12 @@ class MouldingAdapter(ProcessAdapter):
             if filters.get('shift') and filters.get('shift') != 'all':
                 # Shift filter will be applied after joining with work plan
                 shift_condition = f"AND wp.shift_type = '{filters.get('shift')}'"
+            
+            if filters.get('machine') and filters.get('machine').strip():
+                # Machine filter - filter by workstation from Job Card
+                machine_condition = f"AND jc.workstation LIKE '%{filters.get('machine')}%'"
         
-        # STEP 1: Get aggregated production data (same as Planned vs Actual)
-        # Note: shift_type removed from Job Card join as it doesn't exist in the schema
+        # STEP 1: Get aggregated production data with Job Card workstation (MACHINE NAME)
         production_query = f"""
             SELECT 
                 mpe.moulding_date as production_date,
@@ -54,17 +59,20 @@ class MouldingAdapter(ProcessAdapter):
                 SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced,
                 AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime_minutes,
                 mpe.employee_name as operator_name,
+                jc.workstation as machine_name,
                 GROUP_CONCAT(mpe.name ORDER BY mpe.creation SEPARATOR '|||') as production_entry_names
             FROM `tabMoulding Production Entry` mpe
+            LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
             AND mpe.docstatus = 1
             AND COALESCE(mpe.scan_lot_number, mpe.batch_no) IS NOT NULL
             AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
             {prod_item_condition}
             {prod_lot_condition}
+            {machine_condition}
             GROUP BY mpe.moulding_date, 
                      mpe.mould_reference, COALESCE(mpe.scan_lot_number, mpe.batch_no), 
-                     mpe.item_to_produce, mpe.employee_name
+                     mpe.item_to_produce, mpe.employee_name, jc.workstation
         """
         
         production_data = frappe.db.sql(production_query, as_dict=True)
@@ -127,6 +135,9 @@ class MouldingAdapter(ProcessAdapter):
             # Get shift from work plan, default to 'Unknown' if no work plan
             shift_type = matched_work_plan.get('shift_type', 'Unknown') if matched_work_plan else 'Unknown'
             
+            # Get machine name from Job Card workstation (NEW!)
+            machine_name = prod.get('machine_name') or 'N/A'
+            
             if matched_work_plan:
                 # Merge production with work plan data
                 result = {
@@ -134,6 +145,7 @@ class MouldingAdapter(ProcessAdapter):
                     'production_date': prod['production_date'],
                     'shift_type': shift_type,  # From work plan, not job card
                     'mould_reference': prod['mould_ref'],
+                    'machine_name': machine_name,  # NEW: Actual machine from Job Card
                     'lot_number': lot_no,
                     'item_to_produce': matched_work_plan['item_code'],
                     'number_of_lifts': flt(prod['total_production_lifts']),
@@ -154,6 +166,7 @@ class MouldingAdapter(ProcessAdapter):
                     'production_date': prod['production_date'],
                     'shift_type': 'Unknown',  # No work plan = no shift info
                     'mould_reference': prod['mould_ref'],
+                    'machine_name': machine_name,  # NEW: Actual machine from Job Card
                     'lot_number': lot_no,
                     'item_to_produce': prod['item_code'],
                     'number_of_lifts': flt(prod['total_production_lifts']),
