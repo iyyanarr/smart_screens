@@ -1204,23 +1204,18 @@ function submitReport() {
                 fieldname: 'mould_observation',
                 fieldtype: 'Small Text',
                 description: 'Notes on mould conditions, performance, and maintenance needs'
-            },
-            {
-                label: 'Tool Observation',
-                fieldname: 'tool_observation',
-                fieldtype: 'Small Text',
-                description: 'Notes on tool conditions and any issues encountered'
             }
+            // REMOVED: Tool Observation field as per stakeholder request
         ],
         primary_action_label: 'Submit Report',
         primary_action(values) {
-            // Add remarks to report data
+            // Add remarks to report data (without tool_observation)
             reportData.remarks = {
                 general_remarks: values.general_remarks || '',
                 suggestions_for_improvement: values.suggestions_for_improvement || '',
                 safety_and_machinery: values.safety_and_machinery || '',
-                mould_observation: values.mould_observation || '',
-                tool_observation: values.tool_observation || ''
+                mould_observation: values.mould_observation || ''
+                // REMOVED: tool_observation field
             };
             
             dialog.hide();

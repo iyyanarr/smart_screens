@@ -26,7 +26,6 @@
   "remarks_section",
   "general_remarks",
   "safety_and_machinery",
-  "tool_observation",
   "mould_observation",
   "suggestions_for_improvement",
   "section_break_status",
@@ -148,11 +147,6 @@
    "fieldname": "safety_and_machinery",
    "fieldtype": "Text Editor",
    "label": "Safety and Machinery"
-  },
-  {
-   "fieldname": "tool_observation",
-   "fieldtype": "Text Editor",
-   "label": "Tool Observation"
   },
   {
    "fieldname": "mould_observation",

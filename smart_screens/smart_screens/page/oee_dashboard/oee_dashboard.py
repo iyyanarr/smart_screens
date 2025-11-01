@@ -721,7 +721,7 @@ def submit_oee_report(report_data):
             - data: List of production records
             - summary: Summary statistics
             - generated_at: Timestamp
-            - remarks: {general_remarks, suggestions_for_improvement, safety_and_machinery, mould_observation, tool_observation}
+            - remarks: {general_remarks, suggestions_for_improvement, safety_and_machinery, mould_observation}
     
     Returns:
         dict: {success: bool, report_name: str or None, error: str or None}
@@ -784,7 +784,7 @@ def submit_oee_report(report_data):
         report_doc.suggestions_for_improvement = remarks.get('suggestions_for_improvement', '')
         report_doc.safety_and_machinery = remarks.get('safety_and_machinery', '')
         report_doc.mould_observation = remarks.get('mould_observation', '')
-        report_doc.tool_observation = remarks.get('tool_observation', '')
+        # REMOVED: tool_observation field as per stakeholder request
         
         # Add production records to child table
         for record in production_records:
