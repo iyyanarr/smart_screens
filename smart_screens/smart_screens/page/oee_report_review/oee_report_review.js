@@ -253,7 +253,38 @@ function updatePagination() {
 
 // Make these functions global so they can be called from onclick handlers
 window.openReportForm = function(reportName) {
-    frappe.set_route('Form', 'Daily OEE Report', reportName);
+    // Get the production date from the report
+    frappe.call({
+        method: 'frappe.client.get_value',
+        args: {
+            doctype: 'Daily OEE Report',
+            filters: { name: reportName },
+            fieldname: 'production_date'
+        },
+        callback: function(r) {
+            if (r.message && r.message.production_date) {
+                // Navigate to OEE Dashboard with production date as query parameter
+                const productionDate = r.message.production_date;
+                
+                // Method 1: Using window.location with query parameters (most reliable)
+                const currentPath = window.location.pathname.split('/app')[0];
+                window.location.href = `${currentPath}/app/oee-dashboard?date=${productionDate}`;
+                
+                // Alternative Method 2: Using frappe.set_route with hash
+                // frappe.set_route('oee-dashboard');
+                // setTimeout(() => {
+                //     window.location.hash = `#oee-dashboard?date=${productionDate}`;
+                // }, 100);
+            } else {
+                // Fallback: just navigate to OEE Dashboard without date
+                frappe.set_route('oee-dashboard');
+            }
+        },
+        error: function() {
+            // Fallback on error
+            frappe.set_route('oee-dashboard');
+        }
+    });
 }
 
 window.viewReportDetails = function(reportName) {
@@ -301,10 +332,10 @@ function renderReportDetails(data) {
                     <h6>Summary Metrics</h6>
                     <table class="table table-sm table-bordered">
                         <tr><th>Total Records:</th><td>${report.total_records}</td></tr>
-                        <tr><th>Avg OEE:</th><td><strong>${report.avg_oee}%</strong></td></tr>
-                        <tr><th>Avg Availability:</th><td>${report.avg_availability}%</td></tr>
-                        <tr><th>Avg Performance:</th><td>${report.avg_performance}%</td></tr>
-                        <tr><th>Avg Quality:</th><td>${report.avg_quality}%</td></tr>
+                        <tr><th>Avg OEE:</th><td><strong>${parseFloat(report.avg_oee).toFixed(2)}%</strong></td></tr>
+                        <tr><th>Avg Availability:</th><td>${parseFloat(report.avg_availability).toFixed(2)}%</td></tr>
+                        <tr><th>Avg Performance:</th><td>${parseFloat(report.avg_performance).toFixed(2)}%</td></tr>
+                        <tr><th>Avg Quality:</th><td>${parseFloat(report.avg_quality).toFixed(2)}%</td></tr>
                     </table>
                 </div>
             </div>
@@ -314,14 +345,14 @@ function renderReportDetails(data) {
                 <table class="table table-sm table-bordered table-hover">
                     <thead class="thead-light">
                         <tr>
-                            <th>Date</th>
-                            <th>Shift</th>
-                            <th>Machine</th>
-                            <th>Lot</th>
                             <th>Item</th>
-                            <th class="text-right">OEE %</th>
-                            <th>Status</th>
+                            <th>Lot</th>
+                            <th class="text-center">Availability %</th>
+                            <th class="text-center">Performance %</th>
+                            <th class="text-center">Rejection %</th>
+                            <th class="text-center">OEE %</th>
                             <th>Reason Code</th>
+                            <th class="text-center">Status</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -335,16 +366,19 @@ function renderReportDetails(data) {
             ? '<span class="badge badge-warning">In Progress</span>'
             : '<span class="badge badge-danger">Pending</span>';
         
+        // Calculate rejection % (100 - quality)
+        const rejectionPct = rec.quality_pct ? (100 - parseFloat(rec.quality_pct)).toFixed(2) : '0.00';
+        
         html += `
             <tr>
-                <td>${frappe.datetime.str_to_user(rec.production_date)}</td>
-                <td>${rec.shift_type || '-'}</td>
-                <td>${rec.machine_reference || '-'}</td>
-                <td>${rec.lot_number || '-'}</td>
                 <td>${rec.item_code || '-'}</td>
-                <td class="text-right ${oeeClass}"><strong>${rec.oee_pct || 0}%</strong></td>
-                <td>${statusBadge}</td>
+                <td>${rec.lot_number || '-'}</td>
+                <td class="text-center">${parseFloat(rec.availability_pct || 0).toFixed(2)}%</td>
+                <td class="text-center">${parseFloat(rec.performance_pct || 0).toFixed(2)}%</td>
+                <td class="text-center">${rejectionPct}%</td>
+                <td class="text-center ${oeeClass}"><strong>${parseFloat(rec.oee_pct || 0).toFixed(2)}%</strong></td>
                 <td><small>${rec.reason_code || '-'}</small></td>
+                <td class="text-center">${statusBadge}</td>
             </tr>
         `;
     });

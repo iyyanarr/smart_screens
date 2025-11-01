@@ -17,8 +17,16 @@ frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
     
     page.main.html(frappe.render_template('oee_dashboard'));
     
-    // Initialize date filters with default values (latest available)
-    initializeDateFilters().then(() => {
+    // Check if date parameter was passed in URL (from OEE Report Review)
+    // Parse query parameters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const dateParam = urlParams.get('date');
+    
+    console.log('🔍 URL Search Params:', window.location.search);
+    console.log('🔍 Date Parameter from URL:', dateParam);
+    
+    // Initialize date filters with default values (latest available) or URL parameter
+    initializeDateFilters(dateParam).then(() => {
         // Initialize table sorting
         initializeTableSorting();
         // Load available processes
@@ -30,28 +38,51 @@ frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
     });
 };
 
-function initializeDateFilters() {
+function initializeDateFilters(dateFromUrl) {
     return new Promise((resolve) => {
         try {
-            const processType = (document.getElementById('process_filter')?.value) || 'Moulding';
-            frappe.call({
-                method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_latest_production_date',
-                args: { process_type: processType },
-                callback: function(r) {
-                    const d = (r && r.message) || new Date().toISOString().split('T')[0];
+            // If date parameter was passed from URL, use it with a slight delay to ensure DOM is ready
+            if (dateFromUrl) {
+                // Use setTimeout to ensure DOM element is available
+                setTimeout(() => {
                     const el = document.getElementById('production_date');
-                    if (el) el.value = d;
+                    if (el) {
+                        el.value = dateFromUrl;
+                        console.log('📅 Date set from URL parameter:', dateFromUrl);
+                    } else {
+                        console.warn('⚠️ production_date element not found, retrying...');
+                        // Retry once after a longer delay
+                        setTimeout(() => {
+                            const retryEl = document.getElementById('production_date');
+                            if (retryEl) {
+                                retryEl.value = dateFromUrl;
+                                console.log('📅 Date set from URL parameter (retry):', dateFromUrl);
+                            }
+                        }, 200);
+                    }
                     resolve();
-                },
-                error: function() {
-                    const el = document.getElementById('production_date');
-                    if (el) el.value = new Date().toISOString().split('T')[0];
-                    resolve();
+                }, 100);
+                return;
+            }
+            
+            // DISABLED: No longer automatically fetch latest production date
+            // Users must manually select a date or come from drilled-down view
+            console.log('📅 No date parameter provided - date field will remain empty');
+            
+            // Set to empty string (or you can set to today's date if preferred)
+            setTimeout(() => {
+                const el = document.getElementById('production_date');
+                if (el) {
+                    el.value = ''; // Leave blank - user must select date manually
+                    // Alternative: el.value = new Date().toISOString().split('T')[0]; // Set to today
                 }
-            });
+                resolve();
+            }, 100);
+            
         } catch (e) {
+            console.error('Error in initializeDateFilters:', e);
             const el = document.getElementById('production_date');
-            if (el) el.value = new Date().toISOString().split('T')[0];
+            if (el) el.value = '';
             resolve();
         }
     });
@@ -574,7 +605,7 @@ function updateTable(data) {
             <td class="text-right"><small>${row.availability_pct || 0}%</small></td>
             <td class="text-right"><small>${row.performance_pct || 0}%</small></td>
             <td class="text-right"><small>${row.quality_pct || 0}%</small></td>
-            <td class="text-right ${oeeClass} oee-clickable" onclick="showOEEDetails(event, ${index})"><strong>${row.oee_pct || 0}%</strong></td>
+            <td class="text-right ${oeeClass} oee-clickable" onclick="showOEEDetails(event, ${index})"><strong>${row.oee_pct || 0}%</small></td>
             <td class="text-center" style="vertical-align: middle;">
                 <div style="display: flex; flex-direction: column; align-items: center;">
                     ${inspectionDisplay}
@@ -1347,11 +1378,8 @@ function hideReportNameBadge() {
 }
 
 function viewCurrentReport() {
-    if (savedReportName) {
-        frappe.set_route('Form', 'Daily OEE Report', savedReportName);
-    } else if (existingReportInfo && existingReportInfo.report_name) {
-        frappe.set_route('Form', 'Daily OEE Report', existingReportInfo.report_name);
-    }
+    // Navigate to OEE Report Review page instead of the Daily OEE Report form
+    frappe.set_route('oee-report-review');
 }
 
 function applyFilters() {
