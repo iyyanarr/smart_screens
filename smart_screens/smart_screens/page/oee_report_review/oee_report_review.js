@@ -20,14 +20,17 @@ frappe.pages['oee-report-review'].on_page_load = function(wrapper) {
     
     page.main.html(frappe.render_template('oee_report_review'));
     
-    // Initialize date filters (default: last 30 days)
-    initializeDateFilters();
-    
-    // Bind event listeners
-    bindEventListeners();
-    
-    // Load initial data
-    loadDashboardData();
+    // Wait for DOM to be ready
+    setTimeout(() => {
+        // Initialize date filters (default: last 30 days)
+        initializeDateFilters();
+        
+        // Bind event listeners
+        bindEventListeners();
+        
+        // Load initial data
+        loadDashboardData();
+    }, 100);
 };
 
 function initializeDateFilters() {
@@ -47,39 +50,56 @@ function formatDateForInput(date) {
 
 function bindEventListeners() {
     // Apply filters button
-    document.getElementById('apply-filters-btn').addEventListener('click', function() {
+    document.getElementById('apply-filters-btn')?.addEventListener('click', function() {
         currentPage = 0;
         loadDashboardData();
     });
     
     // Refresh button
-    document.getElementById('refresh-btn').addEventListener('click', function() {
+    document.getElementById('refresh-btn')?.addEventListener('click', function() {
         loadDashboardData();
     });
     
     // Export button
-    document.getElementById('export-btn').addEventListener('click', function() {
+    document.getElementById('export-btn')?.addEventListener('click', function() {
         exportReports();
     });
     
     // Pagination
-    document.getElementById('prev-page').addEventListener('click', function() {
+    document.getElementById('prev-page')?.addEventListener('click', function() {
         if (currentPage > 0) {
             currentPage--;
             loadReportsList();
         }
     });
     
-    document.getElementById('next-page').addEventListener('click', function() {
+    document.getElementById('next-page')?.addEventListener('click', function() {
         if ((currentPage + 1) * pageLength < totalCount) {
             currentPage++;
             loadReportsList();
         }
     });
     
-    // Tab switching
-    document.querySelector('a[href="#analytics-tab"]').addEventListener('shown.bs.tab', function() {
-        loadAnalyticsData();
+    // Tab switching - Completely prevent URL hash change
+    $('a[data-toggle="tab"]').on('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const targetTab = $(this).attr('href');
+        
+        // Manually activate the tab
+        $('a[data-toggle="tab"]').removeClass('active');
+        $(this).addClass('active');
+        
+        $('.tab-pane').removeClass('show active');
+        $(targetTab).addClass('show active');
+        
+        // Load analytics data when switching to analytics tab
+        if (targetTab === '#analytics-tab') {
+            loadAnalyticsData();
+        }
+        
+        return false;
     });
 }
 
@@ -231,11 +251,12 @@ function updatePagination() {
     document.getElementById('next-page').disabled = (currentPage + 1) * pageLength >= totalCount;
 }
 
-function openReportForm(reportName) {
+// Make these functions global so they can be called from onclick handlers
+window.openReportForm = function(reportName) {
     frappe.set_route('Form', 'Daily OEE Report', reportName);
 }
 
-function viewReportDetails(reportName) {
+window.viewReportDetails = function(reportName) {
     currentReportName = reportName;
     showLoading();
     
