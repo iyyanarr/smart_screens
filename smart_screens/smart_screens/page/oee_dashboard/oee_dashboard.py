@@ -303,7 +303,48 @@ def get_shift_options(production_date=None, process_type='Moulding'):
 
 @frappe.whitelist()
 def get_reason_codes():
-    """Return predefined CAR reason codes for resolution panel dropdown."""
+    """
+    Get OEE reason codes from OEE Reason Code DocType.
+    Returns only active codes sorted by sort_order and then by reason_code.
+    Falls back to hardcoded list if DocType doesn't exist or is empty.
+    
+    Returns:
+        list: List of active reason codes
+    """
+    try:
+        # Try to fetch from OEE Reason Code DocType
+        reason_codes = frappe.get_all(
+            'OEE Reason Code',
+            filters={'is_active': 1},
+            fields=['reason_code', 'category', 'priority', 'color_code'],
+            order_by='sort_order asc, reason_code asc'
+        )
+        
+        # If we have codes in the DocType, return them
+        if reason_codes:
+            # Return just the reason_code text for dropdown compatibility
+            return [code['reason_code'] for code in reason_codes]
+        
+        # If DocType is empty, fall back to hardcoded list
+        frappe.log_error("OEE Reason Code DocType is empty, using hardcoded fallback", 
+                        "OEE Reason Codes")
+        return get_hardcoded_reason_codes()
+        
+    except Exception as e:
+        # If DocType doesn't exist yet (before migration), use hardcoded fallback
+        frappe.log_error(f"Error fetching reason codes from DocType: {str(e)}", 
+                        "OEE Reason Codes")
+        return get_hardcoded_reason_codes()
+
+
+def get_hardcoded_reason_codes():
+    """
+    Fallback hardcoded reason codes for backward compatibility.
+    Used when OEE Reason Code DocType doesn't exist or is empty.
+    
+    Returns:
+        list: List of hardcoded reason codes
+    """
     return [
         "COMPOUND SHORTAGE",
         "MACHINE BREAKDOWN",
