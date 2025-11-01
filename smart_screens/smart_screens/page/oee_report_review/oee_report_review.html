@@ -1,0 +1,280 @@
+<div class="oee-report-review-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h3 class="mb-0">📊 OEE Report Review Center</h3>
+                <small class="text-muted">Comprehensive review and analysis of Daily OEE Reports</small>
+            </div>
+            <div class="col-md-4 text-right">
+                <button class="btn btn-sm btn-primary" id="refresh-btn">
+                    <i class="fa fa-refresh"></i> Refresh
+                </button>
+                <button class="btn btn-sm btn-success" id="export-btn">
+                    <i class="fa fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-card card">
+        <div class="card-body py-3">
+            <div class="row">
+                <div class="col-md-2">
+                    <label class="filter-label">From Date</label>
+                    <input type="date" id="from-date" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-2">
+                    <label class="filter-label">To Date</label>
+                    <input type="date" id="to-date" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-2">
+                    <label class="filter-label">Shift</label>
+                    <select id="shift-filter" class="form-control form-control-sm">
+                        <option value="">All Shifts</option>
+                        <option value="A">Shift A</option>
+                        <option value="B">Shift B</option>
+                        <option value="C">Shift C</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="filter-label">Machine</label>
+                    <input type="text" id="machine-filter" class="form-control form-control-sm" placeholder="Machine...">
+                </div>
+                <div class="col-md-2">
+                    <label class="filter-label">OEE Range</label>
+                    <select id="oee-range" class="form-control form-control-sm">
+                        <option value="">All</option>
+                        <option value="low">Low (&lt;70%)</option>
+                        <option value="medium">Medium (70-85%)</option>
+                        <option value="high">High (&gt;85%)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary btn-sm btn-block" id="apply-filters-btn" style="margin-top: 24px;">
+                        <i class="fa fa-filter"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards Section -->
+    <div class="summary-section">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="summary-card card">
+                    <div class="card-body">
+                        <div class="summary-icon">📋</div>
+                        <div class="summary-content">
+                            <div class="summary-value" id="total-reports">0</div>
+                            <div class="summary-label">Total Reports</div>
+                            <div class="summary-detail">
+                                <span id="submitted-reports">0</span> Submitted | 
+                                <span id="draft-reports">0</span> Draft
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-card card">
+                    <div class="card-body">
+                        <div class="summary-icon">📈</div>
+                        <div class="summary-content">
+                            <div class="summary-value" id="avg-oee">0%</div>
+                            <div class="summary-label">Average OEE</div>
+                            <div class="summary-detail">
+                                Across <span id="unique-dates">0</span> days
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-card card">
+                    <div class="card-body">
+                        <div class="summary-icon">🏭</div>
+                        <div class="summary-content">
+                            <div class="summary-value" id="total-records">0</div>
+                            <div class="summary-label">Production Records</div>
+                            <div class="summary-detail">
+                                Total production entries
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-card card">
+                    <div class="card-body">
+                        <div class="summary-icon">✅</div>
+                        <div class="summary-content">
+                            <div class="summary-value">
+                                <span id="resolved-count" class="text-success">0</span> / 
+                                <span id="pending-count" class="text-danger">0</span>
+                            </div>
+                            <div class="summary-label">Resolution Status</div>
+                            <div class="summary-detail">
+                                <span id="in-progress-count">0</span> In Progress
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Section -->
+    <div class="tabs-section">
+        <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" data-toggle="tab" href="#reports-tab" role="tab">
+                    📊 Reports List
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-toggle="tab" href="#analytics-tab" role="tab">
+                    📈 Analytics
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- Reports List Tab -->
+            <div class="tab-pane fade show active" id="reports-tab" role="tabpanel">
+                <div class="reports-table-section card">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm mb-0" id="reports-table">
+                                <thead class="thead-dark">
+                                    <tr>
+                                        <th>Report ID</th>
+                                        <th>Production Date</th>
+                                        <th>Shift</th>
+                                        <th>Machine Filter</th>
+                                        <th class="text-center">Records</th>
+                                        <th class="text-center">OEE %</th>
+                                        <th class="text-center">Avail %</th>
+                                        <th class="text-center">Perf %</th>
+                                        <th class="text-center">Qual %</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Resolution</th>
+                                        <th class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reports-table-body">
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Pagination -->
+                        <div class="pagination-section">
+                            <div class="row align-items-center p-3">
+                                <div class="col-md-6">
+                                    <span id="pagination-info">Showing 0 of 0 reports</span>
+                                </div>
+                                <div class="col-md-6 text-right">
+                                    <div class="btn-group" id="pagination-controls">
+                                        <button class="btn btn-sm btn-outline-secondary" id="prev-page">
+                                            <i class="fa fa-chevron-left"></i> Previous
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" id="next-page">
+                                            Next <i class="fa fa-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div class="tab-pane fade" id="analytics-tab" role="tabpanel">
+                <div class="analytics-section">
+                    <div class="row">
+                        <!-- OEE Trend Chart -->
+                        <div class="col-md-12 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">📈 OEE Trend Over Time</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="oee-trend-chart" style="height: 300px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top Problematic Machines -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">🏭 Top Problematic Machines</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="top-machines-list"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Most Common Reason Codes -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">⚠️ Most Common Issues</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="reason-codes-chart" style="height: 300px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shift Comparison -->
+                        <div class="col-md-12 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">🌓 Shift-Wise Performance Comparison</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="shift-comparison-chart" style="height: 250px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Report Details Modal -->
+    <div class="modal fade" id="report-details-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">📋 Report Details</h5>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="report-details-content">
+                    <!-- Details will be populated here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="open-report-btn">
+                        <i class="fa fa-external-link"></i> Open Full Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
