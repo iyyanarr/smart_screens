@@ -233,6 +233,7 @@ class ResolutionPanel {
         this.btnSaveNext = document.getElementById('res-save-next');
         this.btnCancel = document.getElementById('res-cancel');
         this.reasonSelect = document.getElementById('res-reason-code');
+        this.actionCodeSelect = document.getElementById('res-corrective-action-code');
         this.addActionRowBtn = document.getElementById('add-action-row');
         this.actionsTbody = document.getElementById('corrective-actions-tbody');
         this.inputs = {
@@ -244,6 +245,7 @@ class ResolutionPanel {
         };
         this.currentIndex = null;
         this.reasonCodesLoaded = false;
+        this.correctiveActionCodesLoaded = false;
         this.actionRowCounter = 0;
         this._bind();
     }
@@ -285,8 +287,9 @@ class ResolutionPanel {
         const row = sortedData[index];
         if (!row) return;
 
-        // Load reason codes once
+        // Load reason codes and corrective action codes once
         await this.ensureReasonCodes();
+        await this.ensureCorrectiveActionCodes();
 
         // Fill summary
         const lot = row.lot_number || '-';
@@ -386,6 +389,34 @@ class ResolutionPanel {
             this.reasonCodesLoaded = true;
         } catch (e) {
             console.error('Failed to load reason codes', e);
+        }
+    }
+
+    async ensureCorrectiveActionCodes() {
+        if (this.correctiveActionCodesLoaded) return;
+        try {
+            const r = await new Promise((resolve, reject) => {
+                frappe.call({
+                    method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_corrective_action_codes',
+                    callback: resolve,
+                    error: reject
+                });
+            });
+            const codes = (r && r.message) || [];
+            // Populate select
+            if (this.actionCodeSelect) {
+                // preserve first placeholder
+                this.actionCodeSelect.querySelectorAll('option:not(:first-child)')?.forEach(o => o.remove());
+                codes.forEach(code => {
+                    const opt = document.createElement('option');
+                    opt.value = code;
+                    opt.textContent = code;
+                    this.actionCodeSelect.appendChild(opt);
+                });
+            }
+            this.correctiveActionCodesLoaded = true;
+        } catch (e) {
+            console.error('Failed to load corrective action codes', e);
         }
     }
 
@@ -647,6 +678,8 @@ function showOEEDetails(event, rowIndex) {
     // Populate production summary header
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
+    document.getElementById('modal-machine').textContent = rowData.machine_reference || '-';
+    document.getElementById('modal-mold').textContent = rowData.mold_reference || '-';
     document.getElementById('modal-lot').textContent = rowData.lot_number || '';
     document.getElementById('modal-item').textContent = rowData.item_code || '';
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
@@ -1249,6 +1282,153 @@ function submitReport() {
         return;
     }
     
+    // Check if we already have a saved draft report
+    if (savedReportName) {
+        // Submit the existing draft report instead of creating a new one
+        console.log('📝 Submitting existing draft report:', savedReportName);
+        
+        // Show dialog to collect/update remarks fields before submission
+        const dialog = new frappe.ui.Dialog({
+            title: 'Submit Daily OEE Report',
+            fields: [
+                {
+                    label: 'Report Remarks',
+                    fieldtype: 'Section Break',
+                },
+                {
+                    label: 'General Remarks',
+                    fieldname: 'general_remarks',
+                    fieldtype: 'Small Text',
+                    description: 'Overall observations and notes about the production day'
+                },
+                {
+                    label: 'Suggestions for Improvement',
+                    fieldname: 'suggestions_for_improvement',
+                    fieldtype: 'Small Text',
+                    description: 'Ideas and recommendations to improve OEE and production efficiency'
+                },
+                {
+                    label: 'Safety and Machinery',
+                    fieldname: 'safety_and_machinery',
+                    fieldtype: 'Small Text',
+                    description: 'Safety incidents, concerns, and machinery maintenance observations'
+                },
+                {
+                    label: 'Mould Observation',
+                    fieldname: 'mould_observation',
+                    fieldtype: 'Small Text',
+                    description: 'Notes on mould conditions, performance, and maintenance needs'
+                }
+            ],
+            primary_action_label: 'Submit Report',
+            primary_action(values) {
+                dialog.hide();
+                showLoading();
+                
+                // First, fetch the latest version of the draft document
+                frappe.call({
+                    method: 'frappe.client.get',
+                    args: {
+                        doctype: 'Daily OEE Report',
+                        name: savedReportName
+                    },
+                    callback: function(get_r) {
+                        if (!get_r || !get_r.message) {
+                            hideLoading();
+                            frappe.msgprint('Error loading report. Please try again.');
+                            return;
+                        }
+                        
+                        const doc = get_r.message;
+                        
+                        // Update remarks fields
+                        doc.general_remarks = values.general_remarks || '';
+                        doc.suggestions_for_improvement = values.suggestions_for_improvement || '';
+                        doc.safety_and_machinery = values.safety_and_machinery || '';
+                        doc.mould_observation = values.mould_observation || '';
+                        
+                        // Save the updated document first
+                        frappe.call({
+                            method: 'frappe.client.save',
+                            args: {
+                                doc: doc
+                            },
+                            callback: function(save_r) {
+                                if (!save_r || !save_r.message) {
+                                    hideLoading();
+                                    frappe.msgprint('Error updating remarks. Please try again.');
+                                    return;
+                                }
+                                
+                                // Now submit the updated document
+                                const updated_doc = save_r.message;
+                                updated_doc.docstatus = 1; // Set to submitted
+                                
+                                frappe.call({
+                                    method: 'frappe.client.submit',
+                                    args: {
+                                        doc: updated_doc
+                                    },
+                                    callback: function(submit_r) {
+                                        hideLoading();
+                                        
+                                        if (submit_r && submit_r.message) {
+                                            frappe.show_alert({
+                                                message: 'Report submitted successfully',
+                                                indicator: 'green'
+                                            });
+                                            
+                                            // Reset report state
+                                            reportGenerated = false;
+                                            reportData = null;
+                                            const submittedReportName = savedReportName;
+                                            savedReportName = null;
+                                            hideReportActionButtons();
+                                            hideReportNameBadge();
+                                            
+                                            // Show success message with view option
+                                            frappe.msgprint({
+                                                title: 'Report Submitted',
+                                                message: `Report "${submittedReportName}" has been submitted successfully.`,
+                                                primary_action: {
+                                                    label: 'View Report',
+                                                    action: function() {
+                                                        frappe.set_route('Form', 'Daily OEE Report', submittedReportName);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    },
+                                    error: function(err) {
+                                        hideLoading();
+                                        console.error('Error submitting draft report:', err);
+                                        frappe.msgprint('Error submitting report. Please check if all required fields are filled.');
+                                    }
+                                });
+                            },
+                            error: function(err) {
+                                hideLoading();
+                                console.error('Error saving updated document:', err);
+                                frappe.msgprint('Error updating document before submission.');
+                            }
+                        });
+                    },
+                    error: function(err) {
+                        hideLoading();
+                        console.error('Error loading draft report:', err);
+                        frappe.msgprint('Error loading report. Please refresh and try again.');
+                    }
+                });
+            }
+        });
+        
+        dialog.show();
+        return;
+    }
+    
+    // No saved report yet - create and submit a new one
+    console.log('📝 Creating and submitting new report');
+    
     // Show dialog to collect remarks fields before submission
     const dialog = new frappe.ui.Dialog({
         title: 'Submit Daily OEE Report',
@@ -1281,17 +1461,15 @@ function submitReport() {
                 fieldtype: 'Small Text',
                 description: 'Notes on mould conditions, performance, and maintenance needs'
             }
-            // REMOVED: Tool Observation field as per stakeholder request
         ],
         primary_action_label: 'Submit Report',
         primary_action(values) {
-            // Add remarks to report data (without tool_observation)
+            // Add remarks to report data
             reportData.remarks = {
                 general_remarks: values.general_remarks || '',
                 suggestions_for_improvement: values.suggestions_for_improvement || '',
                 safety_and_machinery: values.safety_and_machinery || '',
                 mould_observation: values.mould_observation || ''
-                // REMOVED: tool_observation field
             };
             
             dialog.hide();

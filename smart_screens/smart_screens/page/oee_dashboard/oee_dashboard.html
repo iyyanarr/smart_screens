@@ -186,7 +186,10 @@
                 <!-- Simplified Corrective Action Fields (replacing child table) -->
                 <div class="form-group">
                     <label for="res-corrective-action-code">Corrective Action Code</label>
-                    <input type="text" id="res-corrective-action-code" class="form-control" placeholder="Enter action code...">
+                    <select id="res-corrective-action-code" class="form-control">
+                        <option value="">Select Action Code</option>
+                        <!-- options will be loaded dynamically -->
+                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -230,15 +233,23 @@
                                     <small class="text-muted d-block" style="font-size: 0.7rem;">Shift</small>
                                     <strong id="modal-shift" style="font-size: 0.85rem;">-</strong>
                                 </div>
-                                <div class="col-md-3 col-6 mb-1">
+                                <div class="col-md-2 col-6 mb-1">
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Machine</small>
+                                    <strong id="modal-machine" style="font-size: 0.85rem;">-</strong>
+                                </div>
+                                <div class="col-md-2 col-6 mb-1">
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Mould</small>
+                                    <strong id="modal-mold" style="font-size: 0.85rem;">-</strong>
+                                </div>
+                                <div class="col-md-2 col-6 mb-1">
                                     <small class="text-muted d-block" style="font-size: 0.7rem;">Lot Number</small>
                                     <strong id="modal-lot" style="font-size: 0.85rem;">-</strong>
                                 </div>
-                                <div class="col-md-3 col-6 mb-1">
+                                <div class="col-md-2 col-6 mb-1">
                                     <small class="text-muted d-block" style="font-size: 0.7rem;">Item</small>
                                     <strong id="modal-item" style="font-size: 0.85rem;">-</strong>
                                 </div>
-                                <div class="col-md-2 col-12 mb-1">
+                                <div class="col-md-12 col-12 mb-1">
                                     <small class="text-muted d-block" style="font-size: 0.7rem;">Operator</small>
                                     <strong id="modal-operator" style="font-size: 0.85rem;">-</strong>
                                 </div>

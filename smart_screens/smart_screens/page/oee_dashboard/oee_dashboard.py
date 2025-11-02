@@ -335,6 +335,42 @@ def get_reason_codes():
         return get_hardcoded_reason_codes()
 
 
+@frappe.whitelist()
+def get_corrective_action_codes():
+    """
+    Get OEE corrective action codes from OEE Corrective Action Code DocType.
+    Returns only active codes sorted by sort_order and then by corrective_action_code.
+    Falls back to hardcoded list if DocType doesn't exist or is empty.
+    
+    Returns:
+        list: List of active corrective action codes
+    """
+    try:
+        # Try to fetch from OEE Corrective Action Code DocType
+        action_codes = frappe.get_all(
+            'OEE Corrective Action Code',
+            filters={'is_active': 1},
+            fields=['corrective_action_code', 'category', 'priority', 'color_code'],
+            order_by='sort_order asc, corrective_action_code asc'
+        )
+        
+        # If we have codes in the DocType, return them
+        if action_codes:
+            # Return just the corrective_action_code text for dropdown compatibility
+            return [code['corrective_action_code'] for code in action_codes]
+        
+        # If DocType is empty, fall back to hardcoded list
+        frappe.log_error("OEE Corrective Action Code DocType is empty, using hardcoded fallback", 
+                        "OEE Corrective Action Codes")
+        return get_hardcoded_corrective_action_codes()
+        
+    except Exception as e:
+        # If DocType doesn't exist yet (before migration), use hardcoded fallback
+        frappe.log_error(f"Error fetching corrective action codes from DocType: {str(e)}", 
+                        "OEE Corrective Action Codes")
+        return get_hardcoded_corrective_action_codes()
+
+
 def get_hardcoded_reason_codes():
     """
     Fallback hardcoded reason codes for backward compatibility.
@@ -358,6 +394,32 @@ def get_hardcoded_reason_codes():
         "OPERATOR DELAY",
         "LOADING PLATE NOT AVAILABLE",
         "MOULD ISSUE",
+    ]
+
+
+def get_hardcoded_corrective_action_codes():
+    """
+    Fallback hardcoded corrective action codes for backward compatibility.
+    Used when OEE Corrective Action Code DocType doesn't exist or is empty.
+    
+    Returns:
+        list: List of hardcoded corrective action codes
+    """
+    return [
+        "COMPOUND ARRANGED",
+        "MACHINE REPAIRED",
+        "MOULD CHANGED",
+        "MOULD CLEANED",
+        "OPERATOR REPLACED",
+        "PLANNING ADJUSTED",
+        "QUALITY ISSUE RESOLVED",
+        "TRIAL COMPLETED",
+        "COMPOUND REPLACED",
+        "SHELL ARRANGED",
+        "SHELL QUALITY IMPROVED",
+        "OPERATOR TRAINED",
+        "LOADING PLATE ARRANGED",
+        "MOULD REPAIRED",
     ]
 
 
