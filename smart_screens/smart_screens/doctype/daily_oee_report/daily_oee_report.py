@@ -160,7 +160,7 @@ def check_existing_report(production_date, shift_filter='', machine_filter=''):
     existing_reports = frappe.get_all(
         "Daily OEE Report",
         filters=filters,
-        fields=["name", "status", "docstatus", "total_records", "production_date"],
+        fields=["name", "docstatus", "total_records", "production_date"],
         order_by="creation desc",
         limit=1
     )
@@ -179,6 +179,9 @@ def check_existing_report(production_date, shift_filter='', machine_filter=''):
     
     report = existing_reports[0]
     report_name = report['name']
+    
+    # Determine status from docstatus
+    status = 'Draft' if report['docstatus'] == 0 else 'Submitted'
     
     # Get resolution statistics - safely handle if child table doesn't exist yet
     resolved_count = 0
@@ -204,7 +207,7 @@ def check_existing_report(production_date, shift_filter='', machine_filter=''):
     return {
         'exists': True,
         'report_name': report_name,
-        'status': report['status'],
+        'status': status,
         'docstatus': report['docstatus'],
         'total_records': report['total_records'] or 0,
         'resolved_count': resolved_count,
