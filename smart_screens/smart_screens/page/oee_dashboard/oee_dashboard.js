@@ -644,33 +644,78 @@ function showOEEDetails(event, rowIndex) {
     
     console.log('🔍 DEBUG - showOEEDetails rowData:', rowData);
     
-    // Populate modal with data
+    // Populate production summary header
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
     document.getElementById('modal-lot').textContent = rowData.lot_number || '';
     document.getElementById('modal-item').textContent = rowData.item_code || '';
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
     
-    // OEE Score
-    document.getElementById('modal-oee-score').textContent = (rowData.oee_pct || 0) + '%';
+    // Extract data with defaults
+    const plannedTime = rowData.planned_time_minutes || 450;
+    const downtime = rowData.downtime_minutes || 0;
+    const availableTime = rowData.available_time_minutes || 450;
+    const cycleTime = rowData.cycle_time_seconds || 0;
+    const actualQty = rowData.actual_quantity || 0;
+    const nopProduced = rowData.number_of_products || 0;
+    const lotRejectionPct = rowData.rejection_percentage || 0;
+    const availabilityPct = rowData.availability_pct || 0;
+    const performancePct = rowData.performance_pct || 0;
+    const qualityPct = rowData.quality_pct || 0;
+    const oeePct = rowData.oee_pct || 0;
     
-    // Availability Details
-    document.getElementById('modal-availability-pct').textContent = (rowData.availability_pct || 0) + '%';
-    document.getElementById('modal-planned-time').textContent = rowData.planned_time_minutes || 450;
-    document.getElementById('modal-downtime').textContent = (rowData.downtime_minutes != null) ? rowData.downtime_minutes.toFixed(1) : '0.0';
-    document.getElementById('modal-available-time').textContent = rowData.available_time_minutes || 450;
+    // AVAILABILITY COLUMN
+    // Required: Planned Time
+    document.getElementById('modal-required-availability').textContent = plannedTime + ' mins';
     
-    // Performance Details
-    document.getElementById('modal-performance-pct').textContent = (rowData.performance_pct || 0) + '%';
-    document.getElementById('modal-cycle-time').textContent = (rowData.cycle_time_seconds != null) ? rowData.cycle_time_seconds.toFixed(2) : '0.00';
-    document.getElementById('modal-actual-qty').textContent = rowData.actual_quantity || 0;
-    document.getElementById('modal-perf-available-time').textContent = rowData.available_time_minutes || 450;
+    // Actual: Available Time (Planned - Downtime)
+    document.getElementById('modal-actual-availability').textContent = availableTime.toFixed(1) + ' mins';
     
-    // Quality Details
-    document.getElementById('modal-quality-pct').textContent = (rowData.quality_pct || 0) + '%';
-    document.getElementById('modal-good-pieces').textContent = rowData.good_pieces || 0;
-    document.getElementById('modal-total-inspected').textContent = rowData.total_inspected || 0;
-    document.getElementById('modal-rejected-pieces').textContent = rowData.rejected_pieces || 0;
+    // %: Availability %
+    document.getElementById('modal-availability-pct').textContent = availabilityPct.toFixed(2) + '%';
+    
+    // Remarks: Downtime
+    document.getElementById('modal-availability-remark').textContent = 'Downtime: ' + downtime.toFixed(1) + ' mins';
+    
+    // PERFORMANCE COLUMN
+    // Required: Ideal Cycle Count (Available Time / Cycle Time)
+    const idealCycleCount = cycleTime > 0 ? Math.floor((availableTime * 60) / cycleTime) : 0;
+    document.getElementById('modal-required-performance').textContent = idealCycleCount + ' lifts';
+    
+    // Actual: Actual Quantity produced
+    document.getElementById('modal-actual-performance').textContent = actualQty + ' lifts';
+    
+    // %: Performance %
+    document.getElementById('modal-performance-pct').textContent = performancePct.toFixed(2) + '%';
+    
+    // Remarks: Cycle Time
+    document.getElementById('modal-performance-remark').textContent = 'Cycle Time: ' + cycleTime.toFixed(2) + 's';
+    
+    // QUALITY COLUMN
+    // Calculate total pieces produced: actual_quantity × no_of_cavities
+    const noOfCavities = rowData.no_of_cavities || 1;
+    const totalPiecesProduced = actualQty * noOfCavities;
+    
+    // Required: Total Pieces Produced
+    document.getElementById('modal-required-quality').textContent = totalPiecesProduced + ' pcs';
+    
+    // Actual: Good Pieces = Total Pieces × (1 - Lot Rejection %)
+    const goodPieces = Math.round(totalPiecesProduced * (1 - (lotRejectionPct / 100)));
+    document.getElementById('modal-actual-quality').textContent = goodPieces + ' pcs';
+    
+    // %: Quality % (100 - Lot Rejection %)
+    document.getElementById('modal-quality-pct').textContent = qualityPct.toFixed(2) + '%';
+    
+    // Remarks: Lot Rejection %
+    document.getElementById('modal-quality-remark').textContent = 'Lot Rej: ' + lotRejectionPct.toFixed(2) + '%';
+    
+    // OEE COLUMN
+    // Actual: OEE %
+    document.getElementById('modal-oee-score').textContent = oeePct.toFixed(2) + '%';
+    
+    // Formula: Shows the quality calculation
+    const oeeFormula = `Good Pcs = ${totalPiecesProduced} × (1 - ${lotRejectionPct.toFixed(2)}%) = ${goodPieces} pcs`;
+    document.getElementById('modal-oee-formula').textContent = oeeFormula;
     
     // Show the modal
     $('#oeeDetailModal').modal('show');

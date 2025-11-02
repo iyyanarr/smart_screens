@@ -74,6 +74,8 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
             target_qty = adapter.get_target_quantity(entry)
             actual_qty = adapter.get_actual_quantity(entry)
             cycle_time = adapter.calculate_cycle_time(entry)
+            
+            # Get quality data from adapter (already checks for Lot Inspection with docstatus=1)
             quality_data = adapter.get_quality_data(entry)
             
             # Calculate available time
@@ -83,71 +85,64 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
             availability = calculator.calculate_availability(planned_time, downtime)
             performance = calculator.calculate_performance(cycle_time, actual_qty, available_time)
             
-            # Calculate quality
-            if quality_data['total_pieces'] > 0:
-                quality = calculator.calculate_quality(
-                    quality_data['good_pieces'],
-                    quality_data['total_pieces']
+            # Calculate quality using ONLY Method 2: Quality = (100 - Rejection %)
+            # Only use quality data if Lot Inspection is submitted (docstatus=1)
+            if quality_data['has_inspection'] and quality_data['rejection_percentage'] >= 0:
+                # Use rejection percentage from Lot Inspection Entry
+                quality = calculator.calculate_quality_from_rejection(
+                    quality_data['rejection_percentage']
                 )
             else:
-                # If no inspection data, use rejection percentage or assume 100%
-                if quality_data['rejection_percentage'] > 0:
-                    quality = calculator.calculate_quality_from_rejection(
-                        quality_data['rejection_percentage']
-                    )
-                else:
-                    quality = 1.0  # Assume 100% quality if no data
+                # No submitted Lot Inspection found - Quality = 0%
+                quality = 0.0
             
             # Calculate overall OEE
             oee = calculator.calculate_oee(availability, performance, quality)
             
-            # Build result object
+            # Build result dictionary
             result = {
-                'name': entry.get('name'),  # Include actual production entry ID
-                'production_date': adapter.get_production_date(entry),
-                'production_date_formatted': formatdate(adapter.get_production_date(entry)),
+                'name': entry.get('name'),
+                'production_date': str(adapter.get_production_date(entry)),
+                'production_date_formatted': frappe.utils.formatdate(adapter.get_production_date(entry), 'dd-MM-yyyy'),
                 'shift_type': adapter.get_shift_type(entry),
-                'process_type': process_type,
-                'machine_reference': entry.get('machine_name', 'N/A'),  # NEW: Use machine_name from Job Card
-                'mould_reference': adapter.get_machine_reference(entry),  # Keep mould separate
-                'lot_number': adapter.get_lot_number(entry),
-                'item_code': adapter.get_item_code(entry),
                 'operator_name': entry.get('operator_name', ''),
+                'machine_reference': adapter.get_machine_reference(entry),
+                'machine_name': entry.get('machine_name', 'N/A'),
+                'item_code': adapter.get_item_code(entry),
+                'lot_number': adapter.get_lot_number(entry),
+                'work_plan_no': entry.get('work_plan_no', ''),
                 
-                # Planning & Production Data
-                'planned_time_minutes': planned_time,
-                'downtime_minutes': downtime,
-                'available_time_minutes': available_time,
-                'target_quantity': target_qty,
-                'actual_quantity': actual_qty,
-                'cycle_time_seconds': round(cycle_time, 2),
-                'no_of_cavities': entry.get('no_of_running_cavities', 0),
-                'variance_qty': actual_qty - target_qty,
+                # Production metrics
+                'target_quantity': flt(target_qty, 2),
+                'actual_quantity': flt(actual_qty, 2),
+                'variance_qty': flt(actual_qty - target_qty, 2),
                 
-                # NEW: NoP (Number of Products) fields
-                'number_of_products': entry.get('number_of_products', 0),
-                'production_weight_kg': entry.get('production_weight_kg', 0),
-                'blank_weight_grams': entry.get('blank_weight_grams', 0),
+                # Number of Products (Total Pieces) = actual_quantity × no_of_cavities
+                'number_of_products': int(actual_qty * int(entry.get('no_of_running_cavities', 0))),
                 
-                # Quality Data
+                # OEE Percentages
+                'oee_pct': flt(oee, 2),
+                'availability_pct': flt(availability * 100, 2),
+                'performance_pct': flt(performance * 100, 2),
+                'quality_pct': flt(quality * 100, 2),
+                
+                # OEE Breakdown
+                'planned_time_minutes': flt(planned_time, 2),
+                'downtime_minutes': flt(downtime, 2),
+                'available_time_minutes': flt(available_time, 2),
+                'cycle_time_seconds': flt(cycle_time, 2),
+                'no_of_cavities': int(entry.get('no_of_running_cavities', 0)),
+                
+                # Quality Data - directly from adapter (already correct)
                 'total_inspected': quality_data['total_pieces'],
                 'good_pieces': quality_data['good_pieces'],
                 'rejected_pieces': quality_data['rejected_pieces'],
-                'rejection_percentage': quality_data['rejection_percentage'],
-                
-                # OEE Metrics (as percentages for display)
-                'availability_pct': round(availability * 100, 2),
-                'performance_pct': round(performance * 100, 2),
-                'quality_pct': round(quality * 100, 2),
-                'oee_pct': round(oee, 2),
-                
-                # Production Equipment Efficiency (Availability × Performance)
-                'production_equipment_efficiency': round(availability * performance * 100, 2),
+                'rejection_percentage': flt(quality_data['rejection_percentage'], 2),
                 
                 # Status badges
                 'has_target': target_qty > 0,
                 'has_production': actual_qty > 0,
-                'has_quality_data': quality_data['total_pieces'] > 0,
+                'has_quality_data': quality_data['has_inspection'],
                 
                 # Raw values for calculations
                 '_availability': availability,
@@ -178,15 +173,18 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                     # Don't fail the entire row if resolution fields can't be fetched
                     pass
             
-            # Check lot inspection status
-            lot_number = adapter.get_lot_number(entry)
-            inspection_status = check_lot_inspection_status(lot_number, process_type)
-            result.update({
-                'lot_inspection_status': inspection_status.get('status'),
-                'lot_inspection_name': inspection_status.get('inspection_name'),
-                'has_lot_inspection': inspection_status.get('has_inspection'),
-                'lot_inspection_submitted': inspection_status.get('is_submitted')
-            })
+            # Add lot inspection status to result
+            # quality_data['has_inspection'] already indicates if Lot Inspection is submitted
+            if quality_data['has_inspection']:
+                result['lot_inspection_status'] = 'Submitted'
+                result['lot_inspection_name'] = quality_data.get('inspection_entry')
+                result['has_lot_inspection'] = True
+                result['lot_inspection_submitted'] = True
+            else:
+                result['lot_inspection_status'] = 'Not Found'
+                result['lot_inspection_name'] = None
+                result['has_lot_inspection'] = False
+                result['lot_inspection_submitted'] = False
 
             oee_results.append(result)
             
@@ -455,105 +453,6 @@ def get_latest_production_date(process_type: str = 'Moulding'):
         return today()
     except Exception:
         return today()
-
-
-def check_lot_inspection_status(lot_number, process_type='Moulding'):
-    """
-    Check if Lot Inspection entry exists for a given lot and its submission status
-    
-    Args:
-        lot_number: Lot number to check
-        process_type: Process type (Moulding, etc.)
-    
-    Returns:
-        dict: {
-            'has_inspection': bool,
-            'is_submitted': bool,
-            'inspection_name': str or None,
-            'status': 'Submitted' | 'Draft' | 'Not Found'
-        }
-    """
-    # Handle empty or None lot number
-    if not lot_number or str(lot_number).strip() == '':
-        frappe.log_error(
-            message=f"Empty lot number received: '{lot_number}'",
-            title="Lot Inspection Check - Empty Lot"
-        )
-        return {
-            'has_inspection': False,
-            'is_submitted': False,
-            'inspection_name': None,
-            'status': 'Not Found'
-        }
-    
-    try:
-        # DEBUG: Log the lot number being checked
-        frappe.logger().info(f"🔍 Checking inspection status for lot: '{lot_number}'")
-        
-        # Check for Lot Inspection Entry
-        # Query uses lot_no field and inspection_type = 'Lot Inspection'
-        inspection_entries = frappe.db.sql("""
-            SELECT name, docstatus, inspection_type
-            FROM `tabInspection Entry`
-            WHERE lot_no = %s 
-            AND inspection_type = 'Lot Inspection'
-            ORDER BY creation DESC
-            LIMIT 1
-        """, (lot_number,), as_dict=True)
-        
-        # DEBUG: Log the query results
-        frappe.logger().info(f"🔍 Query result for lot '{lot_number}': {inspection_entries}")
-        
-        # Check if we got results
-        if inspection_entries and len(inspection_entries) > 0:
-            entry = inspection_entries[0]
-            docstatus = int(entry.get('docstatus', 0))
-            is_submitted = (docstatus == 1)
-            
-            # Determine status based on docstatus
-            # 0 = Draft, 1 = Submitted, 2 = Cancelled
-            if docstatus == 0:
-                status = 'Draft'
-            elif docstatus == 1:
-                status = 'Submitted'
-            elif docstatus == 2:
-                status = 'Cancelled'
-            else:
-                status = 'Draft'
-            
-            result = {
-                'has_inspection': True,
-                'is_submitted': is_submitted,
-                'inspection_name': entry.get('name'),
-                'status': status
-            }
-            frappe.logger().info(f"✅ Found inspection for lot '{lot_number}': {result}")
-            return result
-        else:
-            # No inspection found - this is normal and not an error
-            result = {
-                'has_inspection': False,
-                'is_submitted': False,
-                'inspection_name': None,
-                'status': 'Not Found'
-            }
-            frappe.logger().info(f"⚠️ No inspection found for lot '{lot_number}'")
-            return result
-    
-    except Exception as e:
-        # Log error but don't fail - return "Not Found" status
-        error_msg = f"Error checking lot inspection for lot '{lot_number}': {str(e)}\n{frappe.get_traceback()}"
-        frappe.logger().error(f"❌ {error_msg}")
-        frappe.log_error(
-            message=error_msg,
-            title="Lot Inspection Check Error"
-        )
-        return {
-            'has_inspection': False,
-            'is_submitted': False,
-            'inspection_name': None,
-            'status': 'Not Found'
-        }
 
 
 @frappe.whitelist()

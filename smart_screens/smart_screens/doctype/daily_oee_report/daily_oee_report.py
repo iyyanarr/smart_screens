@@ -253,6 +253,20 @@ def get_report_data(report_name):
             # Format production date for display
             prod_date_formatted = frappe.utils.formatdate(row.production_date, 'dd-MM-yyyy') if row.production_date else ''
             
+            # Check lot inspection status to determine if quality metrics should be shown
+            lot_inspection_status = get_lot_inspection_status(row.production_entry)
+            
+            # Only show quality metrics if lot inspection is submitted
+            if lot_inspection_status == 'Submitted':
+                total_inspected = int(getattr(row, 'total_inspected', 0))
+                good_pieces = int(getattr(row, 'good_pieces', 0))
+                rejected_pieces = int(getattr(row, 'rejected_pieces', 0))
+            else:
+                # Inspection pending or not found - show 0 for all quality metrics
+                total_inspected = 0
+                good_pieces = 0
+                rejected_pieces = 0
+            
             production_records.append({
                 'name': row.production_entry,
                 'production_date': str(row.production_date) if row.production_date else '',
@@ -277,13 +291,13 @@ def get_report_data(report_name):
                 'available_time_minutes': flt(getattr(row, 'available_time_minutes', 450), 2),
                 'cycle_time_seconds': flt(getattr(row, 'cycle_time_seconds', 0), 2),
                 'no_of_cavities': int(getattr(row, 'no_of_cavities', 0)),
-                'total_inspected': int(getattr(row, 'total_inspected', 0)),
-                'good_pieces': int(getattr(row, 'good_pieces', 0)),
-                'rejected_pieces': int(getattr(row, 'rejected_pieces', 0)),
+                'total_inspected': total_inspected,  # Conditionally set based on inspection status
+                'good_pieces': good_pieces,  # Conditionally set based on inspection status
+                'rejected_pieces': rejected_pieces,  # Conditionally set based on inspection status
                 'resolution_status': getattr(row, 'resolution_status', 'Pending'),
                 'resolved_record': getattr(row, 'resolved_record', ''),
                 # Add lot inspection status (check if exists in production entry)
-                'lot_inspection_status': get_lot_inspection_status(row.production_entry)
+                'lot_inspection_status': lot_inspection_status
             })
         
         # Build summary

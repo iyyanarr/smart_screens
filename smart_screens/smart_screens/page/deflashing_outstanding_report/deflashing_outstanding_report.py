@@ -432,89 +432,189 @@ def clear_deflashing_cache():
 	get_cached_receipt_summary.cache_clear()
 
 # ============================================================================
-# NEW: BATCH DETAILS VIEW - Item Group "Mat" from U2-Store Warehouse
+# NEW: BATCH DETAILS VIEW - Using SPP Batch Balance Report API
 # ============================================================================
 
 @frappe.whitelist()
 def get_batch_details_mat_items(as_of_date):
 	"""
 	Get batch details for Item Group = "Mat" from U2-Store - SPP INDIA warehouse
-	Shows all batches currently in stock at the specified warehouse
-	OPTIMIZED: Fast query with proper error handling
+	OPTIMIZED: Includes BOTH old-style batches AND new batch bundles
 	"""
 	try:
-		# First, get the basic stock data (fast query - tested working)
-		query = """
+		from frappe.utils import cint, flt
+		
+		# Query 1: Old-style batches (batch_no directly in Stock Ledger Entry)
+		query1 = """
 		SELECT 
-			sle.item_code as item,
+			sle.item_code,
+			sle.warehouse,
 			sle.batch_no,
-			i.item_group,
-			SUM(sle.actual_qty) as pending_qty,
-			i.stock_uom as qty_uom
+			SUM(sle.actual_qty) as balance_qty,
+			SUM(sle.stock_value_difference) as balance_value
 		FROM 
 			`tabStock Ledger Entry` sle
 		INNER JOIN 
 			`tabItem` i ON sle.item_code = i.name
 		WHERE 
-			sle.posting_date <= %s
+			sle.docstatus < 2
+			AND sle.is_cancelled = 0
+			AND sle.batch_no IS NOT NULL
+			AND sle.batch_no != ''
+			AND sle.posting_date <= %s
 			AND sle.warehouse = 'U2-Store - SPP INDIA'
 			AND i.item_group = 'Mat'
-			AND sle.is_cancelled = 0
 		GROUP BY 
-			sle.item_code, sle.batch_no, i.item_group, i.stock_uom
+			sle.item_code, sle.batch_no, sle.warehouse
 		HAVING 
 			SUM(sle.actual_qty) > 0
-		ORDER BY 
-			sle.item_code, sle.batch_no
-		LIMIT 500
 		"""
 		
-		data = frappe.db.sql(query, [as_of_date], as_dict=True)
+		# Query 2: New-style batch bundles (Serial and Batch Entry)
+		query2 = """
+		SELECT 
+			sle.item_code,
+			sle.warehouse,
+			bp.batch_no,
+			SUM(bp.qty) as balance_qty,
+			SUM(bp.stock_value_difference) as balance_value
+		FROM 
+			`tabStock Ledger Entry` sle
+		INNER JOIN 
+			`tabSerial and Batch Entry` bp ON bp.parent = sle.serial_and_batch_bundle
+		INNER JOIN 
+			`tabItem` i ON sle.item_code = i.name
+		WHERE 
+			sle.docstatus < 2
+			AND sle.is_cancelled = 0
+			AND sle.has_batch_no = 1
+			AND sle.posting_date <= %s
+			AND sle.warehouse = 'U2-Store - SPP INDIA'
+			AND i.item_group = 'Mat'
+		GROUP BY 
+			sle.item_code, bp.batch_no, sle.warehouse
+		HAVING 
+			SUM(bp.qty) > 0
+		"""
 		
-		if not data:
+		# Execute both queries
+		batch_data1 = frappe.db.sql(query1, (as_of_date,), as_dict=True)
+		batch_data2 = frappe.db.sql(query2, (as_of_date,), as_dict=True)
+		
+		# Combine results and merge duplicates (same item + batch might appear in both)
+		combined_data = {}
+		
+		for row in batch_data1 + batch_data2:
+			key = (row['item_code'], row['batch_no'], row['warehouse'])
+			if key in combined_data:
+				# Merge quantities if same batch appears in both sources
+				combined_data[key]['balance_qty'] += row['balance_qty']
+				combined_data[key]['balance_value'] += row.get('balance_value', 0)
+			else:
+				combined_data[key] = {
+					'item_code': row['item_code'],
+					'batch_no': row['batch_no'],
+					'warehouse': row['warehouse'],
+					'balance_qty': row['balance_qty'],
+					'balance_value': row.get('balance_value', 0)
+				}
+		
+		batch_data = list(combined_data.values())
+		
+		if not batch_data:
 			return {
 				'status': 'success',
 				'data': [],
-				'total_records': 0
+				'total_records': 0,
+				'message': 'No Mat items with positive quantity found in U2-Store warehouse'
 			}
 		
-		# Now fetch SPP batch numbers for these batches (fast individual lookups)
-		batch_nos = [row['batch_no'] for row in data if row['batch_no']]
+		float_precision = cint(frappe.db.get_default("float_precision")) or 3
 		
+		# Get item details in one query
+		item_codes = list(set([row['item_code'] for row in batch_data]))
+		item_details = {}
+		if item_codes:
+			item_data = frappe.db.sql("""
+				SELECT name, item_name, stock_uom, item_group
+				FROM `tabItem`
+				WHERE name IN %s
+			""", [item_codes], as_dict=True)
+			
+			for item in item_data:
+				item_details[item.name] = item
+		
+		# Get batch details in one query
+		batch_nos = list(set([row['batch_no'] for row in batch_data]))
+		batch_details_map = {}
 		if batch_nos:
-			# Get SPP batch numbers in one query - using IN clause with placeholders
-			placeholders = ','.join(['%s'] * len(batch_nos))
-			spp_query = f"""
-			SELECT batch_no, spp_batch_number
-			FROM `tabStock Entry Detail`
-			WHERE batch_no IN ({placeholders})
-			AND spp_batch_number IS NOT NULL
-			GROUP BY batch_no
-			"""
+			batch_info = frappe.db.sql("""
+				SELECT name, manufacturing_date, expiry_date
+				FROM `tabBatch`
+				WHERE name IN %s
+			""", [batch_nos], as_dict=True)
 			
-			spp_data = frappe.db.sql(spp_query, tuple(batch_nos), as_dict=True)
+			for batch in batch_info:
+				batch_details_map[batch.name] = batch
+		
+		# Get SPP batch numbers in one query
+		spp_batch_map = {}
+		if batch_nos:
+			spp_data = frappe.db.sql("""
+				SELECT DISTINCT batch_no, spp_batch_number
+				FROM `tabStock Entry Detail`
+				WHERE batch_no IN %s
+				AND spp_batch_number IS NOT NULL
+			""", [batch_nos], as_dict=True)
 			
-			# Create a lookup dictionary
-			spp_lookup = {row['batch_no']: row['spp_batch_number'] for row in spp_data}
+			for row in spp_data:
+				if row['spp_batch_number']:
+					spp_batch_map[row['batch_no']] = row['spp_batch_number']
+		
+		# Build final result
+		processed_data = []
+		total_balance = 0
+		
+		for row in batch_data:
+			item_info = item_details.get(row['item_code'], {})
+			batch_info = batch_details_map.get(row['batch_no'], {})
+			spp_batch = spp_batch_map.get(row['batch_no'], '-')
 			
-			# Add SPP batch numbers to the data
-			for row in data:
-				row['lot_number'] = spp_lookup.get(row['batch_no'], '-')
-		else:
-			for row in data:
-				row['lot_number'] = '-'
+			balance_qty = flt(row['balance_qty'], float_precision)
+			total_balance += balance_qty
+			
+			processed_data.append({
+				'item': row['item_code'],
+				'item_name': item_info.get('item_name', ''),
+				'item_group': item_info.get('item_group', 'Mat'),
+				'batch_no': row['batch_no'],
+				'lot_number': spp_batch,
+				'pending_qty': balance_qty,
+				'qty_uom': item_info.get('stock_uom', 'Kg'),
+				'warehouse': row['warehouse'],
+				'manufacturing_date': batch_info.get('manufacturing_date'),
+				'expiry_date': batch_info.get('expiry_date')
+			})
+		
+		# Sort by item code and batch number
+		processed_data.sort(key=lambda x: (x['item'], x['batch_no']))
 		
 		return {
 			'status': 'success',
-			'data': data,
-			'total_records': len(data)
+			'data': processed_data,
+			'total_records': len(processed_data),
+			'total_balance_qty': round(total_balance, 3),
+			'message': f'Found {len(processed_data)} Mat items in U2-Store warehouse. Total Balance: {round(total_balance, 3)} Kg'
 		}
 		
 	except Exception as e:
-		frappe.log_error(f"Error in get_batch_details_mat_items: {str(e)}", "Batch Details View")
+		frappe.log_error(
+			title="Batch Details Error",
+			message=f"Error: {str(e)}\n\nTraceback:\n{frappe.get_traceback()}"
+		)
 		return {
 			'status': 'error',
-			'message': str(e),
+			'message': f"Failed to fetch batch details: {str(e)}",
 			'data': [],
 			'total_records': 0
 		}

@@ -326,7 +326,7 @@ class MouldingAdapter(ProcessAdapter):
         3. If total_inspected_qty_nos is 0 but we have rejection data:
            - Use actual_production_pieces as total_inspected
            - Calculate quality = (total_pieces - rejected) / total_pieces
-        4. If no inspection found, assume 100% quality (pending inspection)
+        4. If no inspection found, return 0 for all quality metrics (inspection pending)
         """
         lot_no = production_entry.get('lot_number')
         
@@ -384,12 +384,11 @@ class MouldingAdapter(ProcessAdapter):
             
             # CASE 2: Both total_inspected and total_rejected are 0
             # Inspection entry exists but no data recorded
-            # Use actual production as total inspected with 100% quality
+            # Return 0 for all metrics until inspection data is entered
             if total_inspected == 0 and total_rejected == 0:
-                actual_pieces = flt(production_entry.get('total_pieces_produced', 0))
                 return {
-                    'good_pieces': int(actual_pieces),
-                    'total_pieces': int(actual_pieces),
+                    'good_pieces': 0,
+                    'total_pieces': 0,
                     'rejected_pieces': 0,
                     'rejection_percentage': 0.0,
                     'inspection_entry': inspection_record.name,
@@ -411,11 +410,10 @@ class MouldingAdapter(ProcessAdapter):
                 'has_inspection': True
             }
         
-        # No Lot Inspection found - assume 100% quality (inspection pending)
-        actual_pieces = flt(production_entry.get('total_pieces_produced', 0))
+        # No Lot Inspection found - return 0 for all quality metrics (inspection pending)
         return {
-            'good_pieces': int(actual_pieces),
-            'total_pieces': int(actual_pieces),
+            'good_pieces': 0,
+            'total_pieces': 0,
             'rejected_pieces': 0,
             'rejection_percentage': 0.0,
             'inspection_entry': None,

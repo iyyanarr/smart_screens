@@ -211,15 +211,15 @@
     <div class="modal fade" id="oeeDetailModal" tabindex="-1" role="dialog" aria-labelledby="oeeDetailModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
-                <div class="modal-header py-2">
+                <div class="modal-header py-2 bg-primary text-white">
                     <h6 class="modal-title mb-0" id="oeeDetailModalLabel">📊 OEE Details Breakdown</h6>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body p-2">
-                    <!-- Production Summary - Compact -->
-                    <div class="card bg-light mb-2">
+                <div class="modal-body p-3">
+                    <!-- Production Summary Header -->
+                    <div class="card bg-light mb-3">
                         <div class="card-body p-2">
                             <div class="row">
                                 <div class="col-md-2 col-6 mb-1">
@@ -246,81 +246,83 @@
                         </div>
                     </div>
                     
-                    <!-- OEE Score - Compact -->
-                    <div class="text-center mb-2 py-1">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Overall OEE Score</small>
-                        <h2 id="modal-oee-score" class="font-weight-bold text-primary mb-0" style="font-size: 2rem;">0%</h2>
+                    <!-- Concise 4-Column OEE Breakdown Table -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm mb-0" style="font-size: 0.85rem;">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th style="width: 20%;">Metric</th>
+                                    <th class="text-center" style="width: 20%; background-color: #28a745; color: white;">
+                                        <strong>Availability</strong>
+                                    </th>
+                                    <th class="text-center" style="width: 20%; background-color: #17a2b8; color: white;">
+                                        <strong>Performance</strong>
+                                    </th>
+                                    <th class="text-center" style="width: 20%; background-color: #ffc107; color: black;">
+                                        <strong>Quality</strong>
+                                    </th>
+                                    <th class="text-center" style="width: 20%; background-color: #6c757d; color: white;">
+                                        <strong>OEE</strong>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Required</strong></td>
+                                    <td class="text-center" id="modal-required-availability">450 mins</td>
+                                    <td class="text-center" id="modal-required-performance">0 lifts</td>
+                                    <td class="text-center" id="modal-required-quality">0 pcs</td>
+                                    <td class="text-center text-muted">-</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Actual</strong></td>
+                                    <td class="text-center" id="modal-actual-availability">450 mins</td>
+                                    <td class="text-center" id="modal-actual-performance">0 lifts</td>
+                                    <td class="text-center" id="modal-actual-quality">0 pcs</td>
+                                    <td class="text-center">
+                                        <strong id="modal-oee-score" class="text-primary" style="font-size: 1.2rem;">0%</strong>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>%</strong></td>
+                                    <td class="text-center">
+                                        <strong id="modal-availability-pct" class="text-success">0%</</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        <strong id="modal-performance-pct" class="text-info">0%</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        <strong id="modal-quality-pct" class="text-warning">0%</strong>
+                                    </td>
+                                    <td class="text-center text-muted">-</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Remarks</strong></td>
+                                    <td class="text-center">
+                                        <small id="modal-availability-remark" class="text-muted">Downtime: 0 mins</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <small id="modal-performance-remark" class="text-muted">Cycle Time: 0s</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <small id="modal-quality-remark" class="text-muted">Lot Rej: 0%</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <small id="modal-oee-formula" class="text-muted">A×P×Q</small>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                     
-                    <!-- Availability Details - Compact -->
-                    <div class="card border-success mb-2">
-                        <div class="card-header bg-success text-white py-1 px-2">
-                            <small class="mb-0"><strong>🟢 Availability</strong> - <span id="modal-availability-pct">0%</span></small>
-                        </div>
+                    <!-- Formula Legend -->
+                    <div class="card bg-light mt-3">
                         <div class="card-body p-2">
-                            <table class="table table-sm table-borderless mb-0" style="font-size: 0.8rem;">
-                                <tr>
-                                    <td class="py-1">Planned Production Time:</td>
-                                    <td class="text-right py-1"><strong id="modal-planned-time">450</strong> minutes</td>
-                                </tr>
-                                <tr>
-                                    <td class="py-1">Downtime:</td>
-                                    <td class="text-right py-1"><strong id="modal-downtime" class="text-danger">0.0</strong> minutes</td>
-                                </tr>
-                                <tr class="border-top">
-                                    <td class="py-1"><strong>Available Production Time:</strong></td>
-                                    <td class="text-right py-1"><strong id="modal-available-time">450</strong> minutes</td>
-                                </tr>
-                            </table>
-                            <small class="text-muted" style="font-size: 0.7rem;">Formula: (Planned Time - Downtime) / Planned Time × 100</small>
-                        </div>
-                    </div>
-                    
-                    <!-- Performance Details - Compact -->
-                    <div class="card border-info mb-2">
-                        <div class="card-header bg-info text-white py-1 px-2">
-                            <small class="mb-0"><strong>🔵 Performance</strong> - <span id="modal-performance-pct">0%</span></small>
-                        </div>
-                        <div class="card-body p-2">
-                            <table class="table table-sm table-borderless mb-0" style="font-size: 0.8rem;">
-                                <tr>
-                                    <td class="py-1">Cycle Time (Standard):</td>
-                                    <td class="text-right py-1"><strong id="modal-cycle-time">0.00</strong> seconds</td>
-                                </tr>
-                                <tr>
-                                    <td class="py-1">Actual Quantity Produced:</td>
-                                    <td class="text-right py-1"><strong id="modal-actual-qty">0</strong> pieces</td>
-                                </tr>
-                                <tr>
-                                    <td class="py-1">Available Time:</td>
-                                    <td class="text-right py-1"><strong id="modal-perf-available-time">450</strong> minutes</td>
-                                </tr>
-                            </table>
-                            <small class="text-muted" style="font-size: 0.7rem;">Formula: (Cycle Time × Actual Quantity) / (Available Time × 60) × 100</small>
-                        </div>
-                    </div>
-                    
-                    <!-- Quality Details - Compact -->
-                    <div class="card border-warning mb-2">
-                        <div class="card-header bg-warning text-dark py-1 px-2">
-                            <small class="mb-0"><strong>🟡 Quality</strong> - <span id="modal-quality-pct">0%</span></small>
-                        </div>
-                        <div class="card-body p-2">
-                            <table class="table table-sm table-borderless mb-0" style="font-size: 0.8rem;">
-                                <tr>
-                                    <td class="py-1">Good Pieces:</td>
-                                    <td class="text-right py-1"><strong id="modal-good-pieces" class="text-success">0</strong> pieces</td>
-                                </tr>
-                                <tr>
-                                    <td class="py-1">Rejected Pieces:</td>
-                                    <td class="text-right py-1"><strong id="modal-rejected-pieces" class="text-danger">0</strong> pieces</td>
-                                </tr>
-                                <tr class="border-top">
-                                    <td class="py-1"><strong>Total Inspected:</strong></td>
-                                    <td class="text-right py-1"><strong id="modal-total-inspected">0</strong> pieces</td>
-                                </tr>
-                            </table>
-                            <small class="text-muted" style="font-size: 0.7rem;">Formula: Good Pieces / Total Inspected × 100</small>
+                            <small class="text-muted d-block mb-1"><strong>📐 Calculation Formulas:</strong></small>
+                            <small class="text-muted d-block">• <strong>Availability</strong> = (Planned Time - Downtime) / Planned Time × 100</small>
+                            <small class="text-muted d-block">• <strong>Performance</strong> = Actual Quantity / Ideal Cycle Count × 100</small>
+                            <small class="text-muted d-block">• <strong>Quality</strong> = Good Pieces / NoP Produced × 100</small>
+                            <small class="text-muted d-block">• <strong>OEE</strong> = Availability × Performance × Quality / 10000</small>
                         </div>
                     </div>
                 </div>
@@ -706,10 +708,6 @@
 @media (max-width: 576px) {
     .resolution-panel { 
         width: 100vw;
-    }
-    
-    .resolution-panel__footer {
-        flex-wrap: wrap;
     }
     
     .resolution-panel__footer button {
