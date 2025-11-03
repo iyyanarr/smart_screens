@@ -184,6 +184,46 @@ class ProductFinderPage {
 					box-shadow: 0 0 0 3px rgba(67,233,123,0.2);
 				}
 				
+				/* Warehouse Select Dropdown */
+				.form-group select {
+					width: 100%;
+					height: 50px;
+					padding: 0 16px;
+					background: rgba(255,255,255,0.1);
+					border: 2px solid rgba(255,255,255,0.2);
+					border-radius: 8px;
+					color: white;
+					font-size: 16px;
+					font-weight: 600;
+					transition: all 0.2s;
+					cursor: pointer;
+					appearance: none;
+					background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+					background-repeat: no-repeat;
+					background-position: right 16px center;
+					background-size: 20px;
+					padding-right: 45px;
+				}
+				
+				.form-group select option {
+					background: #2d3748;
+					color: white;
+					padding: 10px;
+					font-weight: 600;
+				}
+				
+				.form-group select:hover {
+					border-color: rgba(67,233,123,0.5);
+					background: rgba(255,255,255,0.15);
+				}
+				
+				.form-group select:focus {
+					outline: none;
+					border-color: #43e97b;
+					background: rgba(67,233,123,0.1);
+					box-shadow: 0 0 0 3px rgba(67,233,123,0.2);
+				}
+				
 				.or-divider {
 					text-align: center;
 					margin: 25px 0;
@@ -432,6 +472,18 @@ class ProductFinderPage {
 					<div class="search-card">
 						<h3><i class="fa fa-search"></i> Search Product</h3>
 						
+						<!-- Warehouse Selector -->
+						<div class="form-group">
+							<label><i class="fa fa-warehouse"></i> Select Warehouse</label>
+							<select id="warehouse-select" class="form-control">
+								<option value="U1-Inspection - SPP INDIA">U1-Inspection - SPP INDIA</option>
+								<option value="U1-Store - SPP INDIA">U1-Store - SPP INDIA</option>
+								<option value="U1 SFG - SPP">U1 SFG - SPP</option>
+								<option value="Sheeting Warehouse - SPP">Sheeting Warehouse - SPP</option>
+								<option value="Stores - SPP">Stores - SPP</option>
+							</select>
+						</div>
+						
 						<div class="form-group">
 							<label><i class="fa fa-cube"></i> Item Code</label>
 							<input 
@@ -639,6 +691,7 @@ class ProductFinderPage {
 	search_by_item() {
 		const self = this;
 		const item_code = $('#item-code-input').val().trim();
+		const warehouse = $('#warehouse-select').val(); // Get selected warehouse
 		
 		if (!item_code) {
 			frappe.msgprint('Please enter an item code');
@@ -658,13 +711,13 @@ class ProductFinderPage {
 			method: 'smart_screens.smart_screens.api.bin_tracker.find_product_by_item',
 			args: {
 				item_code: item_code,
-				warehouse: 'U1-Store - SPP INDIA', // Use default warehouse
+				warehouse: warehouse, // Use selected warehouse
 				show_all: false
 			},
 			callback: function(r) {
 				if (r.message && r.message.success) {
 					self.current_item = item_code;
-					self.warehouse = 'U1-Store - SPP INDIA';
+					self.warehouse = warehouse; // Store selected warehouse
 					self.display_fifo_result(r.message);
 				} else {
 					self.show_error(r.message.message || 'No batches found for this item');
@@ -679,6 +732,7 @@ class ProductFinderPage {
 	search_by_batch() {
 		const self = this;
 		const batch = $('#batch-number-input').val().trim();
+		const warehouse = $('#warehouse-select').val(); // Get selected warehouse
 		
 		if (!batch) {
 			frappe.msgprint('Please enter a batch number');
@@ -698,12 +752,12 @@ class ProductFinderPage {
 			method: 'smart_screens.smart_screens.api.bin_tracker.find_product_by_batch',
 			args: {
 				batch: batch,
-				warehouse: 'U1-Store - SPP INDIA' // Use default warehouse
+				warehouse: warehouse // Use selected warehouse
 			},
 			callback: function(r) {
 				if (r.message && r.message.success) {
 					self.current_batch = batch;
-					self.warehouse = 'U1-Store - SPP INDIA';
+					self.warehouse = warehouse; // Store selected warehouse
 					self.display_batch_result(r.message);
 				} else {
 					self.show_error(r.message.message || 'Batch not found');
