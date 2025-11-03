@@ -1028,6 +1028,17 @@ class BinStatusMonitorPage {
 					max-width: 100%;
 				}
 				
+				.bin-item {
+					color: rgba(255, 255, 255, 0.75);
+					font-size: 9px;
+					font-weight: 600;
+					text-align: center;
+					word-break: break-word;
+					max-width: 100%;
+					margin-top: 2px;
+					display: block;
+				}
+				
 				.fifo-icon {
 					color: #ef4444;
 					font-size: 12px;
@@ -1496,6 +1507,7 @@ class BinStatusMonitorPage {
 						 data-bin-id="${bin.bin_id}"
 						 title="Batch: ${bin.batch}&#10;Item: ${bin.item_name || bin.item_code}&#10;Status: ${is_checked_out ? 'Checked Out' : 'Checked In'}&#10;${has_bin_fifo ? 'FIFO Alert!' : ''}">
 						<span class="bin-batch">${bin.batch}</span>
+						<span class="bin-item">${bin.item_code}</span>
 						${has_bin_fifo ? '<i class="fa fa-exclamation-triangle fifo-icon"></i>' : ''}
 						${is_checked_out ? '<i class="fa fa-sign-out checkout-icon"></i>' : ''}
 					</div>
