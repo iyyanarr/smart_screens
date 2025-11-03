@@ -478,9 +478,12 @@ class ProductFinderPage {
 							<select id="warehouse-select" class="form-control">
 								<option value="U1-Inspection - SPP INDIA">U1-Inspection - SPP INDIA</option>
 								<option value="U1-Store - SPP INDIA">U1-Store - SPP INDIA</option>
+								<option value="U2-Store - SPP INDIA">U2-Store - SPP INDIA</option>
+								<option value="U2 Rejection - SPP INDIA">U2 Rejection - SPP INDIA</option>
 								<option value="U1 SFG - SPP">U1 SFG - SPP</option>
 								<option value="Sheeting Warehouse - SPP">Sheeting Warehouse - SPP</option>
 								<option value="Stores - SPP">Stores - SPP</option>
+								<option value="Unit-1 Transit Store - SPP INDIA">Unit-1 Transit Store - SPP INDIA</option>
 							</select>
 						</div>
 						
