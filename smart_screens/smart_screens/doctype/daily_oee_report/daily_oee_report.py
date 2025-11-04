@@ -273,11 +273,13 @@ def get_report_data(report_name):
                 'production_date_formatted': prod_date_formatted,
                 'shift_type': row.shift_type or '',
                 'operator_name': row.operator_name or '',
-                'machine_reference': row.machine_reference or '',
+                'machine_reference': row.machine_reference or '',  # Mould reference
+                'machine_name': getattr(row, 'machine_name', 'N/A'),  # FIX: Add machine name
                 'item_code': row.item_code or '',
                 'lot_number': row.lot_number or '',
                 'target_quantity': flt(row.target_quantity, 2),
                 'actual_quantity': flt(row.actual_quantity, 2),
+                'number_of_products': flt(getattr(row, 'number_of_products', 0), 2),  # FIX: Add NoP field
                 'variance_qty': flt(row.variance_qty, 2),
                 'oee_pct': flt(row.oee_pct, 2),
                 'production_equipment_efficiency': flt(row.production_efficiency_pct, 2),
@@ -491,10 +493,12 @@ def generate_daily_oee_report(filters):
                 "shift_type": record.get('shift_type', ''),
                 "operator_name": record.get('operator_name', ''),
                 "machine_reference": record.get('machine_reference', ''),
+                "machine_name": record.get('machine_name', ''),  # FIX: Add machine name
                 "item_code": record.get('item_code', ''),
                 "lot_number": record.get('lot_number', ''),
                 "target_quantity": flt(record.get('target_quantity', 0)),
                 "actual_quantity": flt(record.get('actual_quantity', 0)),
+                "number_of_products": int(record.get('number_of_products', 0)),  # FIX: Add NoP
                 "variance_qty": flt(record.get('variance_qty', 0)),
                 "oee_pct": flt(record.get('oee_pct', 0)),
                 "production_efficiency_pct": flt(record.get('production_efficiency_pct', 0)),
@@ -540,10 +544,12 @@ def generate_daily_oee_report(filters):
             "shift_type": record.get('shift_type', ''),
             "operator_name": record.get('operator_name', ''),
             "machine_reference": record.get('machine_reference', ''),
+            "machine_name": record.get('machine_name', ''),  # FIX: Add machine name
             "item_code": record.get('item_code', ''),
             "lot_number": record.get('lot_number', ''),
             "target_quantity": flt(record.get('target_quantity', 0)),
             "actual_quantity": flt(record.get('actual_quantity', 0)),
+            "number_of_products": int(record.get('number_of_products', 0)),  # FIX: Add NoP
             "variance_qty": flt(record.get('variance_qty', 0)),
             "oee_pct": flt(record.get('oee_pct', 0)),
             "production_efficiency_pct": flt(record.get('production_efficiency_pct', 0)),

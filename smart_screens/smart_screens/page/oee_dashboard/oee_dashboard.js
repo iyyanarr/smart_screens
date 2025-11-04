@@ -629,6 +629,7 @@ function updateTable(data) {
             <td>${row.shift_type || ''}</td>
             <td><small>${row.operator_name || '-'}</small></td>
             <td><small><strong>${row.machine_reference || ''}</strong></small></td>
+            <td><small><strong>${row.machine_name || 'N/A'}</strong></small></td>
             <td><small><strong>${row.item_code || ''}</strong></small></td>
             <td><small><span class="badge badge-info">${row.lot_number || ''}</span></small></td>
             <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>

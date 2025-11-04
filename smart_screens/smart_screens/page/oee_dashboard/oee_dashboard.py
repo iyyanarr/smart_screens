@@ -117,8 +117,9 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 'actual_quantity': flt(actual_qty, 2),
                 'variance_qty': flt(actual_qty - target_qty, 2),
                 
-                # Number of Products (Total Pieces) = actual_quantity × no_of_cavities
-                'number_of_products': int(actual_qty * int(entry.get('no_of_running_cavities', 0))),
+                # FIX: Use number_of_products from adapter (Production Weight / Blank Weight)
+                # NOT actual_quantity × cavities (that's total_pieces_produced)
+                'number_of_products': entry.get('number_of_products', 0),
                 
                 # OEE Percentages
                 'oee_pct': flt(oee, 2),
@@ -600,10 +601,12 @@ def save_oee_report(report_data):
                     'shift_type': record.get('shift_type'),
                     'operator_name': record.get('operator_name'),
                     'machine_reference': record.get('machine_reference'),
+                    'machine_name': record.get('machine_name', ''),  # FIX: Add machine name from Job Card
                     'item_code': record.get('item_code'),
                     'lot_number': record.get('lot_number'),
                     'target_quantity': flt(record.get('target_quantity', 0)),
                     'actual_quantity': flt(record.get('actual_quantity', 0)),
+                    'number_of_products': flt(record.get('number_of_products', 0)),  # FIX: Add NoP field
                     'variance_qty': flt(record.get('variance_qty', 0)),
                     'oee_pct': oee_pct,
                     'production_efficiency_pct': flt(record.get('production_equipment_efficiency', 0)),
@@ -665,10 +668,12 @@ def save_oee_report(report_data):
                 'shift_type': record.get('shift_type'),
                 'operator_name': record.get('operator_name'),
                 'machine_reference': record.get('machine_reference'),
+                'machine_name': record.get('machine_name', ''),  # FIX: Add machine name from Job Card
                 'item_code': record.get('item_code'),
                 'lot_number': record.get('lot_number'),
                 'target_quantity': flt(record.get('target_quantity', 0)),
                 'actual_quantity': flt(record.get('actual_quantity', 0)),
+                'number_of_products': flt(record.get('number_of_products', 0)),  # FIX: Add NoP field
                 'variance_qty': flt(record.get('variance_qty', 0)),
                 'oee_pct': oee_pct,
                 'production_efficiency_pct': flt(record.get('production_equipment_efficiency', 0)),
@@ -803,10 +808,12 @@ def submit_oee_report(report_data):
                 'shift_type': record.get('shift_type'),
                 'operator_name': record.get('operator_name'),
                 'machine_reference': record.get('machine_reference'),
+                'machine_name': record.get('machine_name', ''),  # FIX: Add machine name from Job Card
                 'item_code': record.get('item_code'),
                 'lot_number': record.get('lot_number'),
                 'target_quantity': flt(record.get('target_quantity', 0)),
                 'actual_quantity': flt(record.get('actual_quantity', 0)),
+                'number_of_products': flt(record.get('number_of_products', 0)),  # FIX: Add NoP field
                 'variance_qty': flt(record.get('variance_qty', 0)),
                 'oee_pct': oee_pct,
                 'production_efficiency_pct': flt(record.get('production_equipment_efficiency', 0)),
