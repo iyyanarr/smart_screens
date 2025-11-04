@@ -591,6 +591,16 @@ class ResolutionPanel {
         try {
             showLoading();
             
+            // Prepare OEE metrics from the row
+            const oee_metrics = {
+                oee_pct: row.oee_pct || 0,
+                availability_pct: row.availability_pct || 0,
+                performance_pct: row.performance_pct || 0,
+                quality_pct: row.quality_pct || 0,
+                target_quantity: row.target_quantity || 0,
+                actual_quantity: row.actual_quantity || 0
+            };
+
             // Create Corrective Action Resolved document
             const r = await new Promise((resolve, reject) => {
                 frappe.call({
@@ -598,7 +608,8 @@ class ResolutionPanel {
                     args: {
                         production_entry: row.name,
                         parent_daily_oee_report: savedReportName,
-                        resolution_data: data
+                        resolution_data: data,
+                        oee_metrics: oee_metrics
                     },
                     callback: resolve,
                     error: reject

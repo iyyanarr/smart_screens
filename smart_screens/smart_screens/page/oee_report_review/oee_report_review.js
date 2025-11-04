@@ -360,15 +360,22 @@ function renderReportDetails(data) {
     
     records.forEach(rec => {
         const oeeClass = rec.oee_pct < 70 ? 'text-danger' : (rec.oee_pct < 85 ? 'text-warning' : 'text-success');
-        const statusBadge = rec.resolution_status === 'Resolved' 
+        const statusBadge = rec.resolution_status === 'Resolved'
             ? '<span class="badge badge-success">Resolved</span>'
             : rec.resolution_status === 'In Progress'
             ? '<span class="badge badge-warning">In Progress</span>'
             : '<span class="badge badge-danger">Pending</span>';
-        
+
         // Calculate rejection % (100 - quality)
         const rejectionPct = rec.quality_pct ? (100 - parseFloat(rec.quality_pct)).toFixed(2) : '0.00';
-        
+
+        // Make reason code clickable if there's a resolved record
+        const reasonCodeHtml = rec.resolved_record && rec.reason_code
+            ? `<a href="#" onclick="viewCARDetails('${rec.resolved_record}'); return false;" class="text-primary" style="cursor: pointer;">
+                <small><i class="fa fa-file-text-o"></i> ${rec.reason_code}</small>
+               </a>`
+            : `<small>${rec.reason_code || '-'}</small>`;
+
         html += `
             <tr>
                 <td>${rec.item_code || '-'}</td>
@@ -377,7 +384,7 @@ function renderReportDetails(data) {
                 <td class="text-center">${parseFloat(rec.performance_pct || 0).toFixed(2)}%</td>
                 <td class="text-center">${rejectionPct}%</td>
                 <td class="text-center ${oeeClass}"><strong>${parseFloat(rec.oee_pct || 0).toFixed(2)}%</strong></td>
-                <td><small>${rec.reason_code || '-'}</small></td>
+                <td>${reasonCodeHtml}</td>
                 <td class="text-center">${statusBadge}</td>
             </tr>
         `;
@@ -630,4 +637,270 @@ function showLoading() {
 
 function hideLoading() {
     document.getElementById('loading-overlay').style.display = 'none';
+}
+
+// Global function to view CAR details in modal
+window.viewCARDetails = function(carName) {
+    if (!carName) {
+        frappe.msgprint('No CAR record found');
+        return;
+    }
+
+    showLoading();
+
+    frappe.call({
+        method: 'smart_screens.smart_screens.page.oee_report_review.oee_report_review.get_car_details',
+        args: { car_name: carName },
+        callback: function(r) {
+            hideLoading();
+
+            if (r.message) {
+                renderCARModal(r.message);
+                $('#car-details-modal').modal('show');
+            } else {
+                frappe.msgprint('CAR details not found');
+            }
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error loading CAR details:', err);
+            frappe.msgprint('Error loading CAR details');
+        }
+    });
+}
+
+function renderCARModal(car) {
+    // Create modal if it doesn't exist
+    if ($('#car-details-modal').length === 0) {
+        const modalHTML = `
+            <div class="modal fade" id="car-details-modal" tabindex="-1" role="dialog" aria-labelledby="carModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl" role="document" style="max-width: 95%;">
+                    <div class="modal-content">
+                        <div class="modal-header" style="background-color: #36414c; color: white; padding: 10px 15px;">
+                            <h5 class="modal-title" id="carModalLabel" style="margin: 0; color: white;">
+                                <i class="fa fa-file-text-o"></i> Corrective Action Report Details
+                            </h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color: white; opacity: 1;">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body" id="car-details-content" style="max-height: 75vh; overflow-y: auto; padding: 15px;">
+                            <!-- Content will be populated here -->
+                        </div>
+                        <div class="modal-footer" style="padding: 8px 15px;">
+                            <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="open-car-form-btn">
+                                <i class="fa fa-external-link"></i> Open CAR Form
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('body').append(modalHTML);
+    }
+
+    // Populate modal content
+    const statusBadge = car.status === 'Closed'
+        ? '<span class="badge badge-success">Closed</span>'
+        : car.status === 'Verified'
+        ? '<span class="badge badge-info">Verified</span>'
+        : '<span class="badge badge-warning">Resolved</span>';
+
+    const oeeClass = car.oee_pct < 70 ? 'text-danger' : (car.oee_pct < 85 ? 'text-warning' : 'text-success');
+
+    let html = `
+        <style>
+            .car-compact-card { margin-bottom: 10px; border: 1px solid #d1d8dd; }
+            .car-compact-card .card-header {
+                background-color: #f5f7fa;
+                color: #36414c;
+                padding: 6px 12px;
+                font-weight: 600;
+                border-bottom: 1px solid #d1d8dd;
+            }
+            .car-compact-card .card-body { padding: 10px 12px; }
+            .car-compact-table { margin-bottom: 0; }
+            .car-compact-table th {
+                width: 35%;
+                padding: 3px 8px;
+                font-weight: 600;
+                font-size: 13px;
+                color: #555;
+            }
+            .car-compact-table td {
+                padding: 3px 8px;
+                font-size: 13px;
+            }
+            .car-metric-box {
+                text-align: center;
+                padding: 8px;
+                border: 1px solid #d1d8dd;
+                border-radius: 4px;
+                background: #f5f7fa;
+            }
+            .car-metric-box h6 {
+                font-size: 11px;
+                margin-bottom: 4px;
+                color: #6c757d;
+                text-transform: uppercase;
+            }
+            .car-metric-box h4 {
+                font-size: 20px;
+                margin: 0;
+                font-weight: bold;
+            }
+            .car-text-content {
+                border: 1px solid #d1d8dd;
+                border-radius: 4px;
+                padding: 8px;
+                background: #ffffff;
+                font-size: 13px;
+                max-height: 100px;
+                overflow-y: auto;
+            }
+        </style>
+        <div class="car-details-view">
+            <!-- Header Section -->
+            <div class="row" style="margin-bottom: 10px;">
+                <div class="col-12">
+                    <h5 style="color: #36414c; margin-bottom: 5px; font-weight: bold;">${car.name}</h5>
+                    <p style="margin: 0; font-size: 13px; color: #6c757d;">
+                        <strong>Resolved:</strong> ${car.resolved_date_formatted || '-'} |
+                        <strong>By:</strong> ${car.resolved_by || '-'} |
+                        ${statusBadge}
+                    </p>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Left Column -->
+                <div class="col-md-6">
+                    <!-- Reference Information -->
+                    <div class="card car-compact-card">
+                        <div class="card-header">
+                            <i class="fa fa-link"></i> Reference Information
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm table-borderless car-compact-table">
+                                <tr><th>Production Entry:</th><td>${car.production_entry || '-'}</td></tr>
+                                <tr><th>Production Date:</th><td>${car.production_date_formatted || '-'}</td></tr>
+                                <tr><th>Daily OEE Report:</th><td>${car.parent_daily_oee_report || '-'}</td></tr>
+                                <tr><th>Shift / Operator:</th><td>${car.shift_type || '-'} / ${car.operator_name || '-'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Production Data -->
+                    <div class="card car-compact-card">
+                        <div class="card-header">
+                            <i class="fa fa-industry"></i> Production Data
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm table-borderless car-compact-table">
+                                <tr><th>Machine/Press:</th><td><strong>${car.machine_reference || '-'}</strong></td></tr>
+                                <tr><th>Item Code:</th><td>${car.item_code || '-'}</td></tr>
+                                <tr><th>Lot Number:</th><td><strong>${car.lot_number || '-'}</strong></td></tr>
+                                <tr><th>Target Quantity:</th><td>${car.target_quantity ? parseFloat(car.target_quantity).toLocaleString() : '0'}</td></tr>
+                                <tr><th>Actual Quantity:</th><td>${car.actual_quantity ? parseFloat(car.actual_quantity).toLocaleString() : '0'}</td></tr>
+                                <tr><th>Variance:</th><td class="${car.variance_qty < 0 ? 'text-danger' : 'text-success'}">
+                                    <strong>${car.variance_qty ? parseFloat(car.variance_qty).toLocaleString() : '0'}</strong>
+                                </td></tr>
+                            </table>
+
+                            <!-- Performance Metrics -->
+                            <div class="row" style="margin-top: 8px;">
+                                <div class="col-4">
+                                    <div class="car-metric-box">
+                                        <h6>OEE %</h6>
+                                        <h4 class="${oeeClass}">${car.oee_pct ? parseFloat(car.oee_pct).toFixed(2) : '0.00'}%</h4>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="car-metric-box">
+                                        <h6>Efficiency %</h6>
+                                        <h4>${car.production_efficiency_pct ? parseFloat(car.production_efficiency_pct).toFixed(2) : '0.00'}%</h4>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="car-metric-box">
+                                        <h6>Rejection %</h6>
+                                        <h4 class="text-danger">${car.rejection_percentage ? parseFloat(car.rejection_percentage).toFixed(2) : '0.00'}%</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tracking Information -->
+                    <div class="card car-compact-card">
+                        <div class="card-header">
+                            <i class="fa fa-tasks"></i> Tracking
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm table-borderless car-compact-table">
+                                <tr><th>Responsible Person:</th><td>${car.scan_operator || '-'}</td></tr>
+                                <tr><th>Target Date:</th><td>${car.target_date_formatted || '-'}</td></tr>
+                                <tr><th>Status:</th><td>${statusBadge}</td></tr>
+                                <tr><th>Completion Date:</th><td>${car.completion_date_formatted || '-'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="col-md-6">
+                    <!-- Root Cause Analysis -->
+                    <div class="card car-compact-card">
+                        <div class="card-header">
+                            <i class="fa fa-search"></i> Root Cause Analysis
+                        </div>
+                        <div class="card-body">
+                            <div style="margin-bottom: 10px;">
+                                <strong style="font-size: 12px; color: #666;">Reason Code:</strong><br>
+                                <span class="badge badge-danger" style="font-size: 13px; margin-top: 3px;">${car.reason_code || '-'}</span>
+                                <span style="margin-left: 10px; font-size: 13px;">
+                                    <strong>Action Code:</strong> ${car.corrective_action_code || '-'}
+                                </span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong style="font-size: 12px; color: #666;">Problem Description:</strong>
+                                <div class="car-text-content">
+                                    ${car.problem_description || '<em style="color: #999;">No description provided</em>'}
+                                </div>
+                            </div>
+                            <div>
+                                <strong style="font-size: 12px; color: #666;">Corrective Action Details:</strong>
+                                <div class="car-text-content">
+                                    ${car.corrective_action_details || '<em style="color: #999;">No details provided</em>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Remarks -->
+                    ${car.remarks ? `
+                    <div class="card car-compact-card">
+                        <div class="card-header">
+                            <i class="fa fa-comment"></i> Remarks
+                        </div>
+                        <div class="card-body">
+                            <div class="car-text-content">
+                                ${car.remarks}
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('car-details-content').innerHTML = html;
+
+    // Set up open CAR form button
+    document.getElementById('open-car-form-btn').onclick = function() {
+        $('#car-details-modal').modal('hide');
+        frappe.set_route('Form', 'Corrective Action Resolved', car.name);
+    };
 }

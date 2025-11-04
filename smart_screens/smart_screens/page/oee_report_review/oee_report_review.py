@@ -300,6 +300,101 @@ def get_analytics_data(filters=None):
 
 
 @frappe.whitelist()
+def get_car_details(car_name):
+    """
+    Get full Corrective Action Report details for modal display
+
+    Args:
+        car_name: Name of the Corrective Action Resolved record
+
+    Returns:
+        dict: Full CAR details including all fields
+    """
+    if not car_name:
+        return None
+
+    try:
+        car_doc = frappe.get_doc('Corrective Action Resolved', car_name)
+
+        # If production data is missing on CAR, fetch from linked Production Entry
+        prod_entry = None
+        if car_doc.production_entry:
+            try:
+                prod_entry = frappe.get_doc('Moulding Production Entry', car_doc.production_entry)
+            except:
+                pass
+
+        # Use CAR data if available, otherwise fallback to production entry
+        machine_reference = car_doc.machine_reference or (prod_entry.mould_reference if prod_entry else None)
+        item_code = car_doc.item_code or (prod_entry.item_to_produce if prod_entry else None)
+        lot_number = car_doc.lot_number or ((prod_entry.scan_lot_number or prod_entry.batch_no) if prod_entry else None)
+        shift_type = car_doc.shift_type or (prod_entry.shift_type if prod_entry else None)
+        operator_name = car_doc.operator_name or (getattr(prod_entry, 'operator_name', None) if prod_entry else None)
+        production_date = car_doc.production_date or (prod_entry.moulding_date if prod_entry else None)
+
+        # Calculate quantities if from production entry
+        if prod_entry and not car_doc.actual_quantity:
+            actual_quantity = (prod_entry.number_of_lifts or 0) * (prod_entry.no_of_running_cavities or 0)
+            target_quantity = car_doc.target_quantity or 0
+            variance_qty = actual_quantity - target_quantity
+        else:
+            actual_quantity = car_doc.actual_quantity
+            target_quantity = car_doc.target_quantity
+            variance_qty = car_doc.variance_qty
+
+        # Return comprehensive CAR data
+        return {
+            'name': car_doc.name,
+            'naming_series': car_doc.naming_series,
+
+            # Reference Information
+            'parent_car_unresolved': car_doc.parent_car_unresolved,
+            'parent_daily_oee_report': car_doc.parent_daily_oee_report,
+            'production_entry': car_doc.production_entry,
+            'production_date': production_date,
+            'production_date_formatted': formatdate(production_date) if production_date else '',
+            'resolved_date': car_doc.resolved_date,
+            'resolved_date_formatted': formatdate(car_doc.resolved_date) if car_doc.resolved_date else '',
+            'resolved_by': car_doc.resolved_by,
+
+            # Production Data (from CAR or Production Entry)
+            'shift_type': shift_type,
+            'operator_name': operator_name,
+            'machine_reference': machine_reference,
+            'item_code': item_code,
+            'lot_number': lot_number,
+            'target_quantity': target_quantity,
+            'actual_quantity': actual_quantity,
+            'variance_qty': variance_qty,
+            'oee_pct': car_doc.oee_pct,
+            'production_efficiency_pct': car_doc.production_efficiency_pct,
+            'rejection_percentage': car_doc.rejection_percentage,
+
+            # Root Cause Analysis
+            'reason_code': car_doc.reason_code,
+            'problem_description': car_doc.problem_description,
+            'corrective_action_code': car_doc.corrective_action_code,
+            'corrective_action_details': car_doc.corrective_action_details,
+
+            # Tracking
+            'scan_operator': car_doc.scan_operator,
+            'target_date': car_doc.target_date,
+            'target_date_formatted': formatdate(car_doc.target_date) if car_doc.target_date else '',
+            'status': car_doc.status,
+            'completion_date': car_doc.completion_date,
+            'completion_date_formatted': formatdate(car_doc.completion_date) if car_doc.completion_date else '',
+
+            # Remarks
+            'remarks': car_doc.remarks
+        }
+    except frappe.DoesNotExistError:
+        frappe.throw(_('Corrective Action Report {0} not found').format(car_name))
+    except Exception as e:
+        frappe.log_error(message=str(e), title='Error fetching CAR details')
+        frappe.throw(_('Error fetching CAR details: {0}').format(str(e)))
+
+
+@frappe.whitelist()
 def export_reports(filters=None, export_format='excel'):
     """
     Export OEE Reports to Excel/PDF

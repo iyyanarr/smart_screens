@@ -858,11 +858,11 @@ def submit_oee_report(report_data):
 
 
 @frappe.whitelist()
-def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None, resolution_data=None):
+def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None, resolution_data=None, oee_metrics=None):
     """
     Create a Corrective Action Report (CAR) from OEE Dashboard
     Links the CAR to the production entry and optionally to the Daily OEE Report
-    
+
     Args:
         production_entry: Name of the production entry (e.g., Moulding Production Entry)
         parent_daily_oee_report: Name of the parent Daily OEE Report (optional)
@@ -874,26 +874,40 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
             - responsible_person
             - target_completion_date
             - resolution_remarks
-    
+        oee_metrics: Dictionary containing OEE metrics from the dashboard row:
+            - oee_pct
+            - availability_pct
+            - performance_pct
+            - quality_pct
+            - target_quantity
+            - actual_quantity
+
     Returns:
         dict: {success: bool, car_name: str or None, error: str or None}
     """
     try:
         import json
-        
+
         # Parse resolution_data if it's a JSON string
         if isinstance(resolution_data, str):
             resolution_data = json.loads(resolution_data)
-        
+
         if not resolution_data:
             resolution_data = {}
-        
+
+        # Parse oee_metrics if it's a JSON string
+        if isinstance(oee_metrics, str):
+            oee_metrics = json.loads(oee_metrics)
+
+        if not oee_metrics:
+            oee_metrics = {}
+
         if not production_entry:
             return {
                 'success': False,
                 'error': 'Production entry is required'
             }
-        
+
         # Get the production entry document to extract details
         production_doc = None
         try:
@@ -904,48 +918,58 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
                 'success': False,
                 'error': f'Production entry {production_entry} not found'
             }
-        
+
         # Create new Corrective Action Resolved document
         car_doc = frappe.new_doc('Corrective Action Resolved')
-        
+
         # Set header fields from production entry
         car_doc.production_date = production_doc.get('moulding_date')
         car_doc.shift_type = production_doc.get('shift_type') or 'Unknown'
-        car_doc.machine_reference = production_doc.get('machine_no')
-        car_doc.item_code = production_doc.get('item_code')
-        car_doc.lot_number = production_doc.get('lot_no')
+        car_doc.machine_reference = production_doc.get('machine_no') or production_doc.get('mould_reference')
+        car_doc.item_code = production_doc.get('item_code') or production_doc.get('item_to_produce')
+        car_doc.lot_number = production_doc.get('lot_no') or production_doc.get('scan_lot_number') or production_doc.get('batch_no')
         car_doc.operator_name = production_doc.get('operator_name')
-        
+
+        # Set OEE metrics from dashboard row
+        car_doc.oee_pct = oee_metrics.get('oee_pct', 0)
+        car_doc.production_efficiency_pct = oee_metrics.get('performance_pct', 0)
+        car_doc.rejection_percentage = oee_metrics.get('quality_pct', 0)
+
+        # Set quantities
+        car_doc.target_quantity = oee_metrics.get('target_quantity', 0)
+        car_doc.actual_quantity = oee_metrics.get('actual_quantity', 0)
+        car_doc.variance_qty = (oee_metrics.get('actual_quantity', 0) - oee_metrics.get('target_quantity', 0))
+
         # Link to production entry
         car_doc.production_entry = production_entry
         car_doc.production_entry_type = 'Moulding Production Entry'
-        
+
         # Link to Daily OEE Report if provided
         if parent_daily_oee_report:
             car_doc.parent_daily_oee_report = parent_daily_oee_report
-        
+
         # Set resolution fields
         car_doc.reason_code = resolution_data.get('reason_code', '')
         car_doc.problem_description = resolution_data.get('problem_description', '')
-        
+
         # FIX: Save corrective action fields with correct field names
         car_doc.corrective_action_code = resolution_data.get('corrective_action_code', '')
         car_doc.corrective_action_details = resolution_data.get('corrective_action_details', '')
-        
+
         # FIX: Save remarks to correct field name (remarks, not resolution_remarks)
         car_doc.remarks = resolution_data.get('resolution_remarks', '')
-        
+
         # Optional fields (map to correct CAR field names)
         if resolution_data.get('responsible_person'):
             car_doc.scan_operator = resolution_data.get('responsible_person')
-        
+
         if resolution_data.get('target_completion_date'):
             car_doc.target_date = resolution_data.get('target_completion_date')
-        
+
         # Set status based on whether it's a draft or complete
         is_draft = resolution_data.get('is_draft', False)
         car_doc.resolution_status = 'In Progress' if is_draft else 'Resolved'
-        
+
         # Set resolved by/on if it's complete
         if not is_draft:
             from frappe.utils import now_datetime
