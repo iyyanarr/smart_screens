@@ -155,6 +155,16 @@ function loadData() {
     const lotFilter = null;
     const itemFilter = null;
     
+    // ===== ENHANCED DEBUG LOGGING =====
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🔄 LOADING OEE DATA');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📅 Production Date:', productionDate);
+    console.log('🏭 Process Type:', processType);
+    console.log('⏰ Shift Filter:', shiftFilter);
+    console.log('🔧 Machine Filter:', machineFilter);
+    console.log('═══════════════════════════════════════════════════════');
+    
     // Load main OEE data
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_data',
@@ -170,11 +180,109 @@ function loadData() {
             if (r.message) {
                 currentData = r.message;
                 sortedData = [...currentData];
+                
+                // ===== DETAILED RECORD LOGGING =====
+                console.log('═══════════════════════════════════════════════════════');
+                console.log('✅ OEE DATA RECEIVED - TOTAL RECORDS:', currentData.length);
+                console.log('═══════════════════════════════════════════════════════');
+                
+                // Log full data array (collapsed by default)
+                console.groupCollapsed('📦 Full Data Array (click to expand)');
+                console.table(currentData);
+                console.groupEnd();
+                
+                // Analyze lot numbers for duplicates
+                const lotCounts = {};
+                const lotDetails = {};
+                
+                currentData.forEach((record, index) => {
+                    const lotNumber = record.lot_number || 'NO_LOT';
+                    
+                    // Count occurrences
+                    if (!lotCounts[lotNumber]) {
+                        lotCounts[lotNumber] = 0;
+                        lotDetails[lotNumber] = [];
+                    }
+                    lotCounts[lotNumber]++;
+                    
+                    // Store details for duplicate analysis
+                    lotDetails[lotNumber].push({
+                        index: index,
+                        production_entry: record.name,
+                        operator: record.operator_name,
+                        machine: record.machine_name,
+                        shift: record.shift_type,
+                        oee: record.oee_pct,
+                        actual_qty: record.actual_quantity,
+                        mould_ref: record.machine_reference
+                    });
+                });
+                
+                // Identify and log duplicates
+                const duplicateLots = Object.keys(lotCounts).filter(lot => lotCounts[lot] > 1);
+                
+                if (duplicateLots.length > 0) {
+                    console.log('⚠️ DUPLICATE LOT NUMBERS DETECTED:', duplicateLots.length);
+                    console.log('═══════════════════════════════════════════════════════');
+                    
+                    duplicateLots.forEach(lot => {
+                        const count = lotCounts[lot];
+                        const details = lotDetails[lot];
+                        
+                        console.group(`🔴 DUPLICATE: Lot "${lot}" appears ${count} times`);
+                        console.log('Details of each occurrence:');
+                        details.forEach((detail, idx) => {
+                            console.log(`  [${idx + 1}/${count}] Entry: ${detail.production_entry}`);
+                            console.log(`      ├─ Operator: ${detail.operator || 'N/A'}`);
+                            console.log(`      ├─ Machine: ${detail.machine || 'N/A'}`);
+                            console.log(`      ├─ Mould: ${detail.mould_ref || 'N/A'}`);
+                            console.log(`      ├─ Shift: ${detail.shift || 'N/A'}`);
+                            console.log(`      ├─ OEE: ${detail.oee}%`);
+                            console.log(`      └─ Qty: ${detail.actual_qty}`);
+                        });
+                        console.groupEnd();
+                    });
+                    
+                    console.log('═══════════════════════════════════════════════════════');
+                    console.log('📊 DUPLICATE SUMMARY:');
+                    console.log('Total Records:', currentData.length);
+                    console.log('Unique Lots:', Object.keys(lotCounts).length);
+                    console.log('Duplicate Lots:', duplicateLots.length);
+                    console.log('═══════════════════════════════════════════════════════');
+                } else {
+                    console.log('✅ NO DUPLICATES FOUND - All lot numbers are unique');
+                    console.log('═══════════════════════════════════════════════════════');
+                }
+                
+                // Log individual records with detailed info
+                console.groupCollapsed(`📋 Individual Record Details (${currentData.length} records)`);
+                currentData.forEach((record, index) => {
+                    console.group(`Record #${index + 1}: ${record.lot_number || 'NO_LOT'}`);
+                    console.log('Production Entry:', record.name);
+                    console.log('Lot Number:', record.lot_number);
+                    console.log('Item Code:', record.item_code);
+                    console.log('Operator:', record.operator_name);
+                    console.log('Machine Name:', record.machine_name);
+                    console.log('Machine/Mould Ref:', record.machine_reference);
+                    console.log('Shift:', record.shift_type);
+                    console.log('Date:', record.production_date_formatted);
+                    console.log('OEE %:', record.oee_pct);
+                    console.log('Actual Qty:', record.actual_quantity);
+                    console.log('Number of Products:', record.number_of_products);
+                    console.log('Availability %:', record.availability_pct);
+                    console.log('Performance %:', record.performance_pct);
+                    console.log('Quality %:', record.quality_pct);
+                    console.log('Resolution Status:', record.resolution_status || 'None');
+                    console.log('Full Record:', record);
+                    console.groupEnd();
+                });
+                console.groupEnd();
+                
                 updateTable(sortedData);
             }
         },
         error: function(err) {
-            console.error('Error loading OEE data:', err);
+            console.error('❌ ERROR loading OEE data:', err);
             frappe.msgprint('Error loading OEE data. Please try again.');
             hideLoading();
         }

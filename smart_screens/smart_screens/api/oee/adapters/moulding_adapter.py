@@ -44,21 +44,30 @@ class MouldingAdapter(ProcessAdapter):
                 shift_condition = f"AND wp.shift_type = '{filters.get('shift')}'"
         
         # STEP 1: Get Work Planning data filtered by DATE (from_date to to_date)
+        # FIX: Use subqueries instead of LEFT JOINs to prevent Cartesian product duplicates
         work_plan_query = f"""
-            SELECT 
+            SELECT
                 wp.name as work_plan_no,
                 wp.date as planned_date,
                 wpi.lot_number,
                 wpi.item as item_code,
                 wpi.mould as mould_ref,
-                ms.noof_cavities as no_of_cavities,
-                COALESCE(wpit.target_qty, 0) as target_lifts,
+                (SELECT noof_cavities
+                 FROM `tabMould Specification`
+                 WHERE mould_ref = wpi.mould
+                   AND spp_ref = wpi.item
+                   AND docstatus = 1
+                 ORDER BY creation DESC
+                 LIMIT 1) as no_of_cavities,
+                (SELECT target_qty
+                 FROM `tabWork Plan Item Target`
+                 WHERE item = wpi.item
+                 ORDER BY target_qty DESC
+                 LIMIT 1) as target_lifts,
                 COALESCE(wp.shift_type, 'Unknown') as shift_type,
                 'Work Planning' as source
             FROM `tabWork Planning` wp
             INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
-            LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
-            LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item
             WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
             AND wp.docstatus = 1
             AND wpi.lot_number IS NOT NULL
@@ -72,20 +81,26 @@ class MouldingAdapter(ProcessAdapter):
         work_plan_data = frappe.db.sql(work_plan_query, as_dict=True)
         
         # STEP 2: Get Add-on Work Planning data filtered by DATE (from_date to to_date)
+        # FIX: Use subquery instead of LEFT JOIN to prevent Cartesian product duplicates
         addon_work_plan_query = f"""
-            SELECT 
+            SELECT
                 awp.name as work_plan_no,
                 awp.date as planned_date,
                 awpi.lot_number,
                 awpi.item as item_code,
                 awpi.mould as mould_ref,
-                COALESCE(ms.noof_cavities, 0) as no_of_cavities,
+                (SELECT noof_cavities
+                 FROM `tabMould Specification`
+                 WHERE mould_ref = awpi.mould
+                   AND spp_ref = awpi.item
+                   AND docstatus = 1
+                 ORDER BY creation DESC
+                 LIMIT 1) as no_of_cavities,
                 0 as target_lifts,
                 COALESCE(awp.shift_type, 'Unknown') as shift_type,
                 'Add-on Work Planning' as source
             FROM `tabAdd On Work Planning` awp
             INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
-            LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
             WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
             AND awp.docstatus = 1
             AND awpi.lot_number IS NOT NULL
