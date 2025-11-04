@@ -67,13 +67,18 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             wpi.mould as mould_ref,
             wpi.lot_number as lot_no,
             0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
+            (SELECT noof_cavities
+             FROM `tabMould Specification`
+             WHERE mould_ref = wpi.mould
+               AND spp_ref = wpi.item
+               AND docstatus = 1
+             ORDER BY creation DESC
+             LIMIT 1) as no_of_cavities,
             'Work Planning' as source_type,
             wp.docstatus,
             wpi.creation as lot_creation_time
         FROM `tabWork Planning` wp
         INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
-        LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         AND wpi.mould IS NOT NULL
         AND wpi.lot_number IS NOT NULL
@@ -93,13 +98,18 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             awpi.mould as mould_ref,
             awpi.lot_number as lot_no,
             0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
+            (SELECT noof_cavities
+             FROM `tabMould Specification`
+             WHERE mould_ref = awpi.mould
+               AND spp_ref = awpi.item
+               AND docstatus = 1
+             ORDER BY creation DESC
+             LIMIT 1) as no_of_cavities,
             'Add On Work Planning' as source_type,
             awp.docstatus,
             awpi.creation as lot_creation_time
         FROM `tabAdd On Work Planning` awp
         INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
-        LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
         WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
         AND awpi.mould IS NOT NULL
         AND awpi.lot_number IS NOT NULL
@@ -114,29 +124,35 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
     table_a_data = frappe.db.sql(table_a_query, as_dict=True)
 
     # STEP 2: Get production lifts data (submitted values only)
-    production_lifts_query = f"""
-        SELECT 
-            mpe.moulding_date as production_date,
-            mpe.shift_type,
-            mpe.mould_ref,
-            COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_no,
-            SUM(mpe.number_of_lifts) as total_production_lifts,
-            SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced
-        FROM `tabMoulding Production Entry` mpe
-        WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
-        AND mpe.docstatus = 1
-        AND COALESCE(mpe.scan_lot_number, mpe.batch_no) IS NOT NULL
-        AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
-        GROUP BY mpe.moulding_date, mpe.shift_type, mpe.mould_ref, COALESCE(mpe.scan_lot_number, mpe.batch_no)
-    """
+    # FIX: Match by lot number only (not by date/shift), using Work Planning date as reference
+    # Get lot numbers from work planning data first
+    work_plan_lot_numbers = list(set([row['lot_no'] for row in table_a_data]))
 
-    production_data = frappe.db.sql(production_lifts_query, as_dict=True)
+    if not work_plan_lot_numbers:
+        production_data = []
+        production_lookup = {}
+    else:
+        lot_numbers_condition = "'" + "','".join(work_plan_lot_numbers) + "'"
 
-    # Create a lookup dictionary for production data
-    production_lookup = {}
-    for prod in production_data:
-        key = f"{prod.production_date}|{prod.shift_type}|{prod.mould_ref}|{prod.lot_no}"
-        production_lookup[key] = prod
+        production_lifts_query = f"""
+            SELECT
+                COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_no,
+                mpe.mould_reference as mould_ref,
+                SUM(mpe.number_of_lifts) as total_production_lifts,
+                SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced
+            FROM `tabMoulding Production Entry` mpe
+            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_condition})
+            AND mpe.docstatus = 1
+            GROUP BY COALESCE(mpe.scan_lot_number, mpe.batch_no), mpe.mould_reference
+        """
+
+        production_data = frappe.db.sql(production_lifts_query, as_dict=True)
+
+        # Create a lookup dictionary for production data by lot_no|mould_ref
+        production_lookup = {}
+        for prod in production_data:
+            key = f"{prod.lot_no}|{prod.mould_ref}"
+            production_lookup[key] = prod
 
     # STEP 3: Apply selection rules to get Table B (unique combinations) with selected lot data
     # Group Table A by Production Date, Shift Type, Mould Ref
@@ -148,8 +164,8 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         if unique_key not in unique_combinations:
             unique_combinations[unique_key] = []
         
-        # Add production lifts data if available
-        prod_key = f"{row.production_date}|{row.shift_type}|{row.mould_ref}|{row.lot_no}"
+        # Add production lifts data if available (match by lot_no|mould_ref only)
+        prod_key = f"{row.lot_no}|{row.mould_ref}"
         if prod_key in production_lookup:
             row['production_lifts'] = production_lookup[prod_key]['total_production_lifts']
             row['total_pieces_produced'] = production_lookup[prod_key]['total_pieces_produced']
@@ -185,7 +201,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             # Format the selected lot data for display
             result = {
                 'work_plan_no': selected_lot['work_plan_no'],
-                'work_plan_submission_datetime': formatdate(selected_lot['work_plan_submission_datetime'], "dd-mm-yyyy HH:MM:SS"),
+                'work_plan_submission_datetime': str(selected_lot['work_plan_submission_datetime']),
                 'production_date': selected_lot['production_date'],
                 'production_date_formatted': formatdate(selected_lot['production_date']),
                 'shift_type': selected_lot['shift_type'],
@@ -198,7 +214,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'docstatus': selected_lot['docstatus'],
                 'total_pieces_produced': selected_lot.get('total_pieces_produced', 0),
                 'has_production': selected_lot['has_production'],
-                'planned_pieces': (selected_lot['no_of_cavities'] or 0) * selected_lot['production_lifts'] if selected_lot['production_lifts'] > 0 else 0
+                'planned_pieces': int(selected_lot['no_of_cavities'] or 0) * int(selected_lot['production_lifts'] or 0) if selected_lot['production_lifts'] and selected_lot['production_lifts'] > 0 else 0
             }
             
             final_results.append(result)
@@ -386,13 +402,18 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             wpi.mould as mould_ref,
             wpi.lot_number as lot_no,
             0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
+            (SELECT noof_cavities
+             FROM `tabMould Specification`
+             WHERE mould_ref = wpi.mould
+               AND spp_ref = wpi.item
+               AND docstatus = 1
+             ORDER BY creation DESC
+             LIMIT 1) as no_of_cavities,
             'Work Planning' as source_type,
             wp.docstatus,
             wpi.creation as lot_creation_time
         FROM `tabWork Planning` wp
         INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
-        LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
         WHERE wp.date BETWEEN '{from_date}' AND '{to_date}'
         AND wpi.mould IS NOT NULL
         AND wpi.lot_number IS NOT NULL
@@ -412,13 +433,18 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             awpi.mould as mould_ref,
             awpi.lot_number as lot_no,
             0 as production_lifts,
-            ms.noof_cavities as no_of_cavities,
+            (SELECT noof_cavities
+             FROM `tabMould Specification`
+             WHERE mould_ref = awpi.mould
+               AND spp_ref = awpi.item
+               AND docstatus = 1
+             ORDER BY creation DESC
+             LIMIT 1) as no_of_cavities,
             'Add On Work Planning' as source_type,
             awp.docstatus,
             awpi.creation as lot_creation_time
         FROM `tabAdd On Work Planning` awp
         INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
-        LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
         WHERE awp.date BETWEEN '{from_date}' AND '{to_date}'
         AND awpi.mould IS NOT NULL
         AND awpi.lot_number IS NOT NULL
@@ -433,29 +459,35 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
     table_a_data = frappe.db.sql(table_a_query, as_dict=True)
 
     # STEP 2: Get production lifts data (submitted values only)
-    production_lifts_query = f"""
-        SELECT 
-            mpe.moulding_date as production_date,
-            mpe.shift_type,
-            mpe.mould_ref,
-            COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_no,
-            SUM(mpe.number_of_lifts) as total_production_lifts,
-            SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced
-        FROM `tabMoulding Production Entry` mpe
-        WHERE mpe.moulding_date BETWEEN '{from_date}' AND '{to_date}'
-        AND mpe.docstatus = 1
-        AND COALESCE(mpe.scan_lot_number, mpe.batch_no) IS NOT NULL
-        AND COALESCE(mpe.scan_lot_number, mpe.batch_no) != ''
-        GROUP BY mpe.moulding_date, mpe.shift_type, mpe.mould_ref, COALESCE(mpe.scan_lot_number, mpe.batch_no)
-    """
+    # FIX: Match by lot number only (not by date/shift), using Work Planning date as reference
+    # Get lot numbers from work planning data first
+    work_plan_lot_numbers = list(set([row['lot_no'] for row in table_a_data]))
 
-    production_data = frappe.db.sql(production_lifts_query, as_dict=True)
+    if not work_plan_lot_numbers:
+        production_data = []
+        production_lookup = {}
+    else:
+        lot_numbers_condition = "'" + "','".join(work_plan_lot_numbers) + "'"
 
-    # Create a lookup dictionary for production data
-    production_lookup = {}
-    for prod in production_data:
-        key = f"{prod.production_date}|{prod.shift_type}|{prod.mould_ref}|{prod.lot_no}"
-        production_lookup[key] = prod
+        production_lifts_query = f"""
+            SELECT
+                COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_no,
+                mpe.mould_reference as mould_ref,
+                SUM(mpe.number_of_lifts) as total_production_lifts,
+                SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced
+            FROM `tabMoulding Production Entry` mpe
+            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_condition})
+            AND mpe.docstatus = 1
+            GROUP BY COALESCE(mpe.scan_lot_number, mpe.batch_no), mpe.mould_reference
+        """
+
+        production_data = frappe.db.sql(production_lifts_query, as_dict=True)
+
+        # Create a lookup dictionary for production data by lot_no|mould_ref
+        production_lookup = {}
+        for prod in production_data:
+            key = f"{prod.lot_no}|{prod.mould_ref}"
+            production_lookup[key] = prod
 
     # STEP 3: Apply selection rules to get Table B (unique combinations) with selected lot data
     # Group Table A by Production Date, Shift Type, Mould Ref
@@ -467,8 +499,8 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
         if unique_key not in unique_combinations:
             unique_combinations[unique_key] = []
         
-        # Add production lifts data if available
-        prod_key = f"{row.production_date}|{row.shift_type}|{row.mould_ref}|{row.lot_no}"
+        # Add production lifts data if available (match by lot_no|mould_ref only)
+        prod_key = f"{row.lot_no}|{row.mould_ref}"
         if prod_key in production_lookup:
             row['production_lifts'] = production_lookup[prod_key]['total_production_lifts']
             row['total_pieces_produced'] = production_lookup[prod_key]['total_pieces_produced']
@@ -504,7 +536,7 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             # Format the selected lot data for display
             result = {
                 'work_plan_no': selected_lot['work_plan_no'],
-                'work_plan_submission_datetime': formatdate(selected_lot['work_plan_submission_datetime'], "dd-mm-yyyy HH:MM:SS"),
+                'work_plan_submission_datetime': str(selected_lot['work_plan_submission_datetime']),
                 'production_date': selected_lot['production_date'],
                 'production_date_formatted': formatdate(selected_lot['production_date']),
                 'shift_type': selected_lot['shift_type'],
@@ -517,7 +549,7 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
                 'docstatus': selected_lot['docstatus'],
                 'total_pieces_produced': selected_lot.get('total_pieces_produced', 0),
                 'has_production': selected_lot['has_production'],
-                'planned_pieces': (selected_lot['no_of_cavities'] or 0) * selected_lot['production_lifts'] if selected_lot['production_lifts'] > 0 else 0
+                'planned_pieces': int(selected_lot['no_of_cavities'] or 0) * int(selected_lot['production_lifts'] or 0) if selected_lot['production_lifts'] and selected_lot['production_lifts'] > 0 else 0
             }
             
             final_results.append(result)
