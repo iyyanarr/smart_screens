@@ -679,8 +679,10 @@ function showOEEDetails(event, rowIndex) {
     // Populate production summary header
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
-    document.getElementById('modal-machine').textContent = rowData.machine_reference || '-';
-    document.getElementById('modal-mold').textContent = rowData.mold_reference || '-';
+    // FIX: Show actual machine name (from Job Card workstation)
+    document.getElementById('modal-machine').textContent = rowData.machine_name || 'N/A';
+    // FIX: Show mould reference (from machine_reference field)
+    document.getElementById('modal-mold').textContent = rowData.machine_reference || '-';
     document.getElementById('modal-lot').textContent = rowData.lot_number || '';
     document.getElementById('modal-item').textContent = rowData.item_code || '';
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
