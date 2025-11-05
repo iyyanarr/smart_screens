@@ -811,6 +811,7 @@ function showOEEDetails(event, rowIndex) {
     const downtime = rowData.downtime_minutes || 0;
     const availableTime = rowData.available_time_minutes || 450;
     const cycleTime = rowData.cycle_time_seconds || 0;
+    const targetQty = rowData.target_quantity || 0;
     const actualQty = rowData.actual_quantity || 0;
     const nopProduced = rowData.number_of_products || 0;
     const lotRejectionPct = rowData.rejection_percentage || 0;
@@ -818,24 +819,23 @@ function showOEEDetails(event, rowIndex) {
     const performancePct = rowData.performance_pct || 0;
     const qualityPct = rowData.quality_pct || 0;
     const oeePct = rowData.oee_pct || 0;
-    
+
     // AVAILABILITY COLUMN
     // Required: Planned Time
     document.getElementById('modal-required-availability').textContent = plannedTime + ' mins';
-    
+
     // Actual: Available Time (Planned - Downtime)
     document.getElementById('modal-actual-availability').textContent = availableTime.toFixed(1) + ' mins';
-    
+
     // %: Availability %
     document.getElementById('modal-availability-pct').textContent = availabilityPct.toFixed(2) + '%';
-    
+
     // Remarks: Downtime
     document.getElementById('modal-availability-remark').textContent = 'Downtime: ' + downtime.toFixed(1) + ' mins';
-    
+
     // PERFORMANCE COLUMN
-    // Required: Ideal Cycle Count (Available Time / Cycle Time)
-    const idealCycleCount = cycleTime > 0 ? Math.floor((availableTime * 60) / cycleTime) : 0;
-    document.getElementById('modal-required-performance').textContent = idealCycleCount + ' lifts';
+    // Required: Target Quantity (from Work Plan Item Target)
+    document.getElementById('modal-required-performance').textContent = targetQty + ' lifts';
     
     // Actual: Actual Quantity produced
     document.getElementById('modal-actual-performance').textContent = actualQty + ' lifts';
