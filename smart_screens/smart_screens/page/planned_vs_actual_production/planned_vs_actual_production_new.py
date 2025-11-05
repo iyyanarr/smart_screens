@@ -137,7 +137,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         lot_numbers_condition = "'" + "','".join(production_lot_numbers) + "'"
         
         work_plan_query = f"""
-            SELECT 
+            SELECT
                 wp.name as work_plan_no,
                 wp.creation as work_plan_submission_datetime,
                 wp.date as production_date,
@@ -146,13 +146,25 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 wpi.mould as mould_ref,
                 wpi.lot_number as lot_no,
                 ms.noof_cavities as no_of_cavities,
-                COALESCE(wpit.target_qty, 0) as target_lifts,
+                COALESCE((SELECT wpit.target_qty
+                          FROM `tabWork Plan Item Target` wpit
+                          WHERE wpit.item = wpi.item
+                            AND wpit.shift_type = (
+                                SELECT
+                                    CASE
+                                        WHEN st.end_time > st.start_time THEN TIMEDIFF(st.end_time, st.start_time)
+                                        ELSE TIMEDIFF(ADDTIME(st.end_time, '24:00:00'), st.start_time)
+                                    END
+                                FROM `tabShift Type` st
+                                WHERE st.name = wp.shift_type
+                                LIMIT 1
+                            )
+                          LIMIT 1), 0) as target_lifts,
                 'Work Planning' as source_type,
                 wp.docstatus
             FROM `tabWork Planning` wp
             INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
             LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
-            LEFT JOIN `tabWork Plan Item Target` wpit ON wpi.item = wpit.item
             WHERE wpi.lot_number IN ({lot_numbers_condition})
             AND wpi.mould IS NOT NULL
             AND wpi.lot_number IS NOT NULL
@@ -166,7 +178,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         
         # Also check Add On Work Planning
         addon_work_plan_query = f"""
-            SELECT 
+            SELECT
                 awp.name as work_plan_no,
                 awp.creation as work_plan_submission_datetime,
                 awp.date as production_date,
@@ -175,13 +187,25 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 awpi.mould as mould_ref,
                 awpi.lot_number as lot_no,
                 ms.noof_cavities as no_of_cavities,
-                COALESCE(wpit.target_qty, 0) as target_lifts,
+                COALESCE((SELECT wpit.target_qty
+                          FROM `tabWork Plan Item Target` wpit
+                          WHERE wpit.item = awpi.item
+                            AND wpit.shift_type = (
+                                SELECT
+                                    CASE
+                                        WHEN st.end_time > st.start_time THEN TIMEDIFF(st.end_time, st.start_time)
+                                        ELSE TIMEDIFF(ADDTIME(st.end_time, '24:00:00'), st.start_time)
+                                    END
+                                FROM `tabShift Type` st
+                                WHERE st.name = awp.shift_type
+                                LIMIT 1
+                            )
+                          LIMIT 1), 0) as target_lifts,
                 'Add On Work Planning' as source_type,
                 awp.docstatus
             FROM `tabAdd On Work Planning` awp
             INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
             LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
-            LEFT JOIN `tabWork Plan Item Target` wpit ON awpi.item = wpit.item
             WHERE awpi.lot_number IN ({lot_numbers_condition})
             AND awpi.mould IS NOT NULL
             AND awpi.lot_number IS NOT NULL
