@@ -81,7 +81,7 @@ class MouldingAdapter(ProcessAdapter):
         work_plan_data = frappe.db.sql(work_plan_query, as_dict=True)
         
         # STEP 2: Get Add-on Work Planning data filtered by DATE (from_date to to_date)
-        # FIX: Use subquery instead of LEFT JOIN to prevent Cartesian product duplicates
+        # FIX: Use same Work Plan Item Target lookup as regular Work Planning
         addon_work_plan_query = f"""
             SELECT
                 awp.name as work_plan_no,
@@ -96,7 +96,11 @@ class MouldingAdapter(ProcessAdapter):
                    AND docstatus = 1
                  ORDER BY creation DESC
                  LIMIT 1) as no_of_cavities,
-                0 as target_lifts,
+                (SELECT target_qty
+                 FROM `tabWork Plan Item Target`
+                 WHERE item = awpi.item
+                 ORDER BY target_qty DESC
+                 LIMIT 1) as target_lifts,
                 COALESCE(awp.shift_type, 'Unknown') as shift_type,
                 'Add-on Work Planning' as source
             FROM `tabAdd On Work Planning` awp
