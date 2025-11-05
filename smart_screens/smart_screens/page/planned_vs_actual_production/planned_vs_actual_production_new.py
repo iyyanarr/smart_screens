@@ -175,12 +175,13 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 awpi.mould as mould_ref,
                 awpi.lot_number as lot_no,
                 ms.noof_cavities as no_of_cavities,
-                0 as target_lifts,
+                COALESCE(wpit.target_qty, 0) as target_lifts,
                 'Add On Work Planning' as source_type,
                 awp.docstatus
             FROM `tabAdd On Work Planning` awp
             INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
             LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
+            LEFT JOIN `tabWork Plan Item Target` wpit ON awpi.item = wpit.item
             WHERE awpi.lot_number IN ({lot_numbers_condition})
             AND awpi.mould IS NOT NULL
             AND awpi.lot_number IS NOT NULL
