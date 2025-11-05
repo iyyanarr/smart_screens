@@ -1,0 +1,23 @@
+{
+ "creation": "2025-11-05 14:30:00.000000",
+ "doctype": "Page",
+ "modified": "2025-11-05 14:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "rejection-analysis-report",
+ "owner": "Administrator",
+ "page_name": "rejection-analysis-report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Quality Manager"
+  }
+ ],
+ "standard": "No",
+ "title": "Rejection Analysis Report"
+}

@@ -1,0 +1,293 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2025-11-05 14:30:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "production_info_section",
+  "production_entry",
+  "production_date",
+  "shift_type",
+  "column_break_1",
+  "item_code",
+  "lot_no",
+  "mould_ref",
+  "column_break_2",
+  "operator_name",
+  "press_number",
+  "rejection_data_section",
+  "patrol_rej_pct",
+  "line_rej_pct",
+  "column_break_3",
+  "lot_rej_pct",
+  "final_insp_rej_pct",
+  "car_details_section",
+  "problem_description",
+  "corrective_action",
+  "column_break_4",
+  "cause_non_detection",
+  "cause_occurrence",
+  "why_why_analysis_section",
+  "why_1",
+  "why_2",
+  "why_3",
+  "column_break_5",
+  "why_4",
+  "why_5",
+  "remarks_section",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "REJ-CAR-.YYYY.-",
+   "set_only_once": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "production_info_section",
+   "fieldtype": "Section Break",
+   "label": "Production Information"
+  },
+  {
+   "fieldname": "production_entry",
+   "fieldtype": "Link",
+   "label": "Production Entry",
+   "options": "Moulding Production Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "production_date",
+   "fieldtype": "Date",
+   "label": "Production Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "shift_type",
+   "fieldtype": "Data",
+   "label": "Shift Type"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item Code",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "lot_no",
+   "fieldtype": "Data",
+   "label": "Lot No",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "mould_ref",
+   "fieldtype": "Data",
+   "label": "Mould Reference"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "operator_name",
+   "fieldtype": "Data",
+   "label": "Operator Name"
+  },
+  {
+   "fieldname": "press_number",
+   "fieldtype": "Data",
+   "label": "Press Number"
+  },
+  {
+   "fieldname": "rejection_data_section",
+   "fieldtype": "Section Break",
+   "label": "Rejection Data"
+  },
+  {
+   "fieldname": "patrol_rej_pct",
+   "fieldtype": "Percent",
+   "label": "Patrol Rejection %",
+   "precision": 2
+  },
+  {
+   "fieldname": "line_rej_pct",
+   "fieldtype": "Percent",
+   "label": "Line Rejection %",
+   "precision": 2
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lot_rej_pct",
+   "fieldtype": "Percent",
+   "label": "LOT Rejection %",
+   "precision": 2
+  },
+  {
+   "fieldname": "final_insp_rej_pct",
+   "fieldtype": "Percent",
+   "label": "Final Inspection Rejection %",
+   "precision": 2
+  },
+  {
+   "fieldname": "car_details_section",
+   "fieldtype": "Section Break",
+   "label": "CAR Details"
+  },
+  {
+   "fieldname": "problem_description",
+   "fieldtype": "Long Text",
+   "label": "Problem Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "corrective_action",
+   "fieldtype": "Long Text",
+   "label": "Corrective Action",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cause_non_detection",
+   "fieldtype": "Long Text",
+   "label": "Cause for Non Detection"
+  },
+  {
+   "fieldname": "cause_occurrence",
+   "fieldtype": "Long Text",
+   "label": "Cause for Occurrence"
+  },
+  {
+   "fieldname": "why_why_analysis_section",
+   "fieldtype": "Section Break",
+   "label": "WHY-WHY Analysis"
+  },
+  {
+   "fieldname": "why_1",
+   "fieldtype": "Data",
+   "label": "1. WHY?"
+  },
+  {
+   "fieldname": "why_2",
+   "fieldtype": "Data",
+   "label": "2. WHY?"
+  },
+  {
+   "fieldname": "why_3",
+   "fieldtype": "Data",
+   "label": "3. WHY?"
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "why_4",
+   "fieldtype": "Data",
+   "label": "4. WHY?"
+  },
+  {
+   "fieldname": "why_5",
+   "fieldtype": "Data",
+   "label": "5. WHY?"
+  },
+  {
+   "fieldname": "remarks_section",
+   "fieldtype": "Section Break",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Long Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Rejection CAR",
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-11-05 14:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Rejection CAR",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Manufacturing Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Quality Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Production User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
