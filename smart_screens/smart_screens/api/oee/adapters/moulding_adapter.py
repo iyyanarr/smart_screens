@@ -59,10 +59,19 @@ class MouldingAdapter(ProcessAdapter):
                    AND docstatus = 1
                  ORDER BY creation DESC
                  LIMIT 1) as no_of_cavities,
-                (SELECT target_qty
-                 FROM `tabWork Plan Item Target`
-                 WHERE item = wpi.item
-                 ORDER BY target_qty DESC
+                (SELECT wpit.target_qty
+                 FROM `tabWork Plan Item Target` wpit
+                 WHERE wpit.item = wpi.item
+                   AND wpit.shift_type = (
+                       SELECT
+                           CASE
+                               WHEN st.end_time > st.start_time THEN TIMEDIFF(st.end_time, st.start_time)
+                               ELSE TIMEDIFF(ADDTIME(st.end_time, '24:00:00'), st.start_time)
+                           END
+                       FROM `tabShift Type` st
+                       WHERE st.name = wp.shift_type
+                       LIMIT 1
+                   )
                  LIMIT 1) as target_lifts,
                 COALESCE(wp.shift_type, 'Unknown') as shift_type,
                 'Work Planning' as source
@@ -81,7 +90,7 @@ class MouldingAdapter(ProcessAdapter):
         work_plan_data = frappe.db.sql(work_plan_query, as_dict=True)
         
         # STEP 2: Get Add-on Work Planning data filtered by DATE (from_date to to_date)
-        # FIX: Use same Work Plan Item Target lookup as regular Work Planning
+        # FIX: Match target_qty using shift duration calculated from Shift Type
         addon_work_plan_query = f"""
             SELECT
                 awp.name as work_plan_no,
@@ -96,10 +105,19 @@ class MouldingAdapter(ProcessAdapter):
                    AND docstatus = 1
                  ORDER BY creation DESC
                  LIMIT 1) as no_of_cavities,
-                (SELECT target_qty
-                 FROM `tabWork Plan Item Target`
-                 WHERE item = awpi.item
-                 ORDER BY target_qty DESC
+                (SELECT wpit.target_qty
+                 FROM `tabWork Plan Item Target` wpit
+                 WHERE wpit.item = awpi.item
+                   AND wpit.shift_type = (
+                       SELECT
+                           CASE
+                               WHEN st.end_time > st.start_time THEN TIMEDIFF(st.end_time, st.start_time)
+                               ELSE TIMEDIFF(ADDTIME(st.end_time, '24:00:00'), st.start_time)
+                           END
+                       FROM `tabShift Type` st
+                       WHERE st.name = awp.shift_type
+                       LIMIT 1
+                   )
                  LIMIT 1) as target_lifts,
                 COALESCE(awp.shift_type, 'Unknown') as shift_type,
                 'Add-on Work Planning' as source
