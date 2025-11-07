@@ -105,12 +105,24 @@ def get_aggregated_stock_data(filters=None):
     to_date = filters.get("to_date")
     warehouse = filters.get("warehouse")
     warehouse_type = filters.get("warehouse_type")
+    exclude_problematic_batches = filters.get("exclude_problematic_batches", True)
     
     # Set default dates if not provided
     if not from_date:
         from_date = "1900-01-01"
     if not to_date:
         to_date = frappe.utils.nowdate()
+
+    # **NEW: Get excluded batches**
+    excluded_batches = []
+    excluded_batches_count = 0
+    if exclude_problematic_batches:
+        excluded_batches = frappe.get_all(
+            "Excluded Stock Batch",
+            filters={"status": "Active"},
+            pluck="batch_no"
+        )
+        excluded_batches_count = len(excluded_batches)
 
     # Step 1: Get all stock ledger entries using simple, direct approach
     posting_datetime = get_datetime(add_to_date(to_date, days=1))
@@ -133,6 +145,13 @@ def get_aggregated_stock_data(filters=None):
             warehouse_placeholders = ', '.join(['%s'] * len(warehouses))
             warehouse_condition = f"AND sle.warehouse IN ({warehouse_placeholders})"
             warehouse_params.extend(warehouses)
+    
+    # **NEW: Add batch exclusion condition**
+    batch_exclusion_condition = ""
+    if excluded_batches:
+        excluded_batch_placeholders = ', '.join(['%s'] * len(excluded_batches))
+        batch_exclusion_condition = f"AND (sle.batch_no IS NULL OR sle.batch_no NOT IN ({excluded_batch_placeholders}))"
+        warehouse_params.extend(excluded_batches)
     
     # Simplified query - no GROUP BY to avoid double counting
     sle_query = """
@@ -158,8 +177,9 @@ def get_aggregated_stock_data(filters=None):
             AND sle.item_code NOT LIKE 't.%%'
             AND i.disabled = 0
             {warehouse_condition}
+            {batch_exclusion_condition}
         ORDER BY sle.item_code, sle.posting_date, sle.posting_time
-    """.format(warehouse_condition=warehouse_condition)
+    """.format(warehouse_condition=warehouse_condition, batch_exclusion_condition=batch_exclusion_condition)
     
     # Prepare query parameters
     query_params = [posting_datetime] + warehouse_params
@@ -349,6 +369,7 @@ def get_aggregated_stock_data(filters=None):
         "conversion_status": f"Mat: {conversion_applied} batches converted to Nos, {conversion_skipped} remain in Kg. Coverage is higher for 2025 production data. F/P items: Already in Nos" if conversion_applied > 0 or conversion_skipped > 0 else "No Mat items found",
         "sle_records_processed": len(sle_data),
         "iwb_combinations": len(iwb_map),
+        "excluded_batches_count": excluded_batches_count,
         "note": "F and P items are naturally in Nos. Only T (Mat) items need Kg-to-Nos conversion using Production Batch Weight data."
     }
 
@@ -663,4 +684,151 @@ def get_common_code_details(common_code, filters=None):
             "warehouse": warehouse,
             "warehouse_type": warehouse_type,
         },
+    }
+
+@frappe.whitelist()
+def get_batch_details_by_common_code(common_code, filters=None):
+    """
+    Get batch-wise details (Opening | In | Out | Balance) for a specific common code
+    Shows all batches across Mat, Products, and Finished Product stages
+    """
+    if not common_code:
+        return {"batches": [], "total_batches": 0}
+    
+    if isinstance(filters, str):
+        filters = json.loads(filters)
+    
+    filters = filters or {}
+    from_date = filters.get("from_date") or "1900-01-01"
+    to_date = filters.get("to_date") or frappe.utils.nowdate()
+    warehouse = filters.get("warehouse")
+    warehouse_type = filters.get("warehouse_type")
+    exclude_problematic_batches = filters.get("exclude_problematic_batches", True)
+    
+    posting_datetime = get_datetime(add_to_date(to_date, days=1))
+    from_date_obj = getdate(from_date)
+    to_date_obj = getdate(to_date)
+    
+    # Get excluded batches
+    excluded_batches = []
+    if exclude_problematic_batches:
+        excluded_batches = frappe.get_all(
+            "Excluded Stock Batch",
+            filters={"status": "Active"},
+            pluck="batch_no"
+        )
+    
+    # Build warehouse condition
+    warehouse_condition = ""
+    warehouse_params = []
+    
+    if warehouse:
+        warehouse_condition = "AND sle.warehouse = %s"
+        warehouse_params.append(warehouse)
+    elif warehouse_type:
+        warehouses = frappe.get_all(
+            "Warehouse",
+            filters={"warehouse_type": warehouse_type, "is_group": 0},
+            pluck="name"
+        )
+        if warehouses:
+            warehouse_placeholders = ', '.join(['%s'] * len(warehouses))
+            warehouse_condition = f"AND sle.warehouse IN ({warehouse_placeholders})"
+            warehouse_params.extend(warehouses)
+    
+    # Query batch-level data
+    batch_query = f"""
+        SELECT 
+            sle.item_code,
+            sle.batch_no,
+            sle.warehouse,
+            sle.posting_date,
+            sle.actual_qty,
+            LEFT(sle.item_code, 1) as prefix,
+            i.item_group,
+            i.stock_uom,
+            i.item_name
+        FROM `tabStock Ledger Entry` sle
+        INNER JOIN `tabItem` i ON sle.item_code = i.name
+        WHERE 
+            sle.docstatus < 2
+            AND sle.is_cancelled = 0
+            AND sle.posting_datetime < %s
+            AND SUBSTRING(sle.item_code, 2, 4) = %s
+            AND sle.batch_no IS NOT NULL
+            AND sle.batch_no != ''
+            {warehouse_condition}
+        ORDER BY sle.batch_no, sle.posting_date
+    """
+    
+    query_params = [posting_datetime, common_code] + warehouse_params
+    batch_data = frappe.db.sql(batch_query, query_params, as_dict=1)
+    
+    # Get Mat conversion factors
+    conversion_factors = get_mat_kg_to_nos_conversion_factors()
+    
+    # Aggregate by batch
+    batch_map = {}
+    for row in batch_data:
+        batch_no = row.batch_no
+        
+        if batch_no not in batch_map:
+            batch_map[batch_no] = {
+                "batch_no": batch_no,
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "warehouse": row.warehouse,
+                "item_group": row.item_group,
+                "stock_uom": row.stock_uom,
+                "prefix": row.prefix,
+                "opening_qty": 0.0,
+                "in_qty": 0.0,
+                "out_qty": 0.0,
+                "balance_qty": 0.0,
+                "is_excluded": batch_no in excluded_batches
+            }
+        
+        batch_info = batch_map[batch_no]
+        posting_date = getdate(row.posting_date)
+        actual_qty = flt(row.actual_qty)
+        
+        # Calculate opening, in, out, balance
+        if posting_date < from_date_obj:
+            batch_info["opening_qty"] += actual_qty
+        elif posting_date >= from_date_obj and posting_date <= to_date_obj:
+            if actual_qty > 0:
+                batch_info["in_qty"] += actual_qty
+            else:
+                batch_info["out_qty"] += abs(actual_qty)
+        
+        batch_info["balance_qty"] += actual_qty
+    
+    # Apply Mat conversion if needed
+    for batch_no, batch_info in batch_map.items():
+        if batch_info["item_group"] == "Mat" and batch_no in conversion_factors:
+            conversion_factor = conversion_factors[batch_no]['conversion_factor']
+            if conversion_factor > 0:
+                batch_info["opening_qty"] *= conversion_factor
+                batch_info["in_qty"] *= conversion_factor
+                batch_info["out_qty"] *= conversion_factor
+                batch_info["balance_qty"] *= conversion_factor
+                batch_info["converted"] = True
+                batch_info["conversion_factor"] = conversion_factor
+    
+    # Convert to list and sort
+    batches = list(batch_map.values())
+    
+    # Sort: excluded batches last, then by item_group (Mat -> Products -> Finished)
+    stage_order = {"Mat": 1, "Products": 2, "Finished Product": 3}
+    batches.sort(key=lambda x: (
+        x["is_excluded"],
+        stage_order.get(x["item_group"], 99),
+        x["batch_no"]
+    ))
+    
+    return {
+        "batches": batches,
+        "total_batches": len(batches),
+        "excluded_count": sum(1 for b in batches if b["is_excluded"]),
+        "active_count": sum(1 for b in batches if not b["is_excluded"])
     }

@@ -80,6 +80,15 @@ class AggregatedStockMovement {
 					options: 'Warehouse Type'
 				},
 				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Exclude Problematic Batches',
+					fieldtype: 'Check',
+					fieldname: 'exclude_problematic_batches',
+					default: 1
+				},
+				{
 					fieldtype: 'Section Break'
 				}
 			],
@@ -93,14 +102,19 @@ class AggregatedStockMovement {
 	add_filters() {
 		this.page.add_inner_button(__('Refresh'), () => this.make_report());
 		this.page.add_inner_button(__('Validate Data'), () => this.validate_data());
-		// Add Export CSV button
 		this.page.add_inner_button(__('Export CSV'), () => this.export_to_csv());
+		
+		// **NEW: Add Manage Excluded Batches button**
+		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
+			frappe.set_route('List', 'Excluded Stock Batch');
+		});
 		
 		// Add event listeners to filters
 		this.filters.from_date.$input.on('change', () => this.make_report());
 		this.filters.to_date.$input.on('change', () => this.make_report());
 		this.filters.warehouse.$input.on('change', () => this.make_report());
 		this.filters.warehouse_type.$input.on('change', () => this.make_report());
+		this.filters.exclude_problematic_batches.$input.on('change', () => this.make_report());
 		
 		// Add debounced filter for item code
 		this.filters.item_code_filter.$input.on('input', 
@@ -135,7 +149,8 @@ class AggregatedStockMovement {
 			from_date: this.filters.from_date.get_value(),
 			to_date: this.filters.to_date.get_value(),
 			warehouse: this.filters.warehouse.get_value(),
-			warehouse_type: this.filters.warehouse_type.get_value()
+			warehouse_type: this.filters.warehouse_type.get_value(),
+			exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
 		};
 		
 		// Clear any previous report
@@ -247,6 +262,7 @@ class AggregatedStockMovement {
 								<th colspan="4" class="products-header">Products</th>
 								<th colspan="4" class="finished-product-header">Finished Product</th>
 								<th rowspan="2" class="grand-total-header sortable" data-sort="total">Total <i class="sort-icon fa ${this.get_sort_icon('total')}"></i></th>
+								<th rowspan="2" class="actions-header">Actions</th>
 							</tr>
 							<tr>
 								<th class="mat-subheader sortable" data-sort="Mat_opening">
@@ -313,6 +329,12 @@ class AggregatedStockMovement {
 					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}">${this.format_number(item["Finished Product"].closing_qty)}</td>
 					
 					<td class="grand-total-cell" style="background-color: ${this.get_color_intensity(item["total"].closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}">${this.format_number(item["total"].closing_qty)}</td>
+					
+					<td class="actions-cell">
+						<button class="btn btn-xs btn-default view-batches-btn" data-code="${item.common_code}" title="View Batch Details">
+							<i class="fa fa-list"></i> Batches
+						</button>
+					</td>
 				</tr>`;
 		});
 		
@@ -337,6 +359,8 @@ class AggregatedStockMovement {
 				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
 				
 				<td class="grand-total-total" style="background-color: ${this.get_color_intensity(grand_total.closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
+				
+				<td></td>
 			</tr>`;
 		
 		html += `
@@ -380,6 +404,13 @@ class AggregatedStockMovement {
 			e.preventDefault();
 			const code = $(e.currentTarget).data('code');
 			this.show_common_code_details(code);
+		});
+
+		// **NEW: Bind batch details button click**
+		this.$report_container.on('click', '.view-batches-btn', (e) => {
+			e.preventDefault();
+			const code = $(e.currentTarget).data('code');
+			this.show_batch_details_panel(code);
 		});
 	}
 
@@ -664,79 +695,79 @@ class AggregatedStockMovement {
 				.sortable:hover { background-color: rgba(44, 62, 80, 0.08); }
 				.sort-icon { margin-left: 4px; opacity: 0.7; }
 				
-				/* Professional header styling with monochromatic blue-gray theme */
+				/* Professional header styling with SOLID dark colors (NO GRADIENTS) */
 				.common-code-header { 
-					background-color: #2c3e50; 
+					background-color: #1e293b !important; 
 					color: white; 
 					font-weight: 600; 
 				}
 				
-				/* Mat columns - darkest tone */
+				/* Mat columns - Solid Blue (#1e40af) */
 				.mat-header { 
-					background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%); 
+					background: #1e40af !important; 
 					color: white; 
 					font-weight: 600; 
 				}
 				.mat-subheader { 
-					background: linear-gradient(135deg, #5d6d7e 0%, #566573 100%); 
+					background: #1d4ed8 !important; 
 					color: white; 
 					font-weight: 500; 
 				}
 				.mat-cell { 
-					border-left: 3px solid #ecf0f1;
+					border-left: 3px solid #dbeafe;
 					/* Background color applied dynamically via inline styles */
 				}
 				.mat-total { 
 					font-weight: 600; 
-					border-left: 3px solid #d5dbdb;
+					border-left: 3px solid #bfdbfe;
 					/* Background color applied dynamically via inline styles */
 				}
 				
-				/* Products columns - medium tone */
+				/* Products columns - Solid Red/Orange (#c2410c) */
 				.products-header { 
-					background: linear-gradient(135deg, #5d6d7e 0%, #566573 100%); 
+					background: #c2410c !important; 
 					color: white; 
 					font-weight: 600; 
 				}
 				.products-subheader { 
-					background: linear-gradient(135deg, #85929e 0%, #7d8a97 100%); 
+					background: #ea580c !important; 
 					color: white; 
 					font-weight: 500; 
 				}
 				.products-cell { 
-					border-left: 3px solid #eef2f3;
+					border-left: 3px solid #fed7aa;
 					/* Background color applied dynamically via inline styles */
 				}
 				.products-total { 
 					font-weight: 600; 
-					border-left: 3px solid #d8e2e3;
+					border-left: 3px solid #fdba74;
 					/* Background color applied dynamically via inline styles */
 				}
 				
-				/* Finished Product columns - lighter tone */
+				/* Finished Product columns - Solid Green (#15803d) */
 				.finished-product-header { 
-					background: linear-gradient(135deg, #85929e 0%, #7d8a97 100%); 
+					background: #15803d !important; 
 					color: white; 
 					font-weight: 600; 
 				}
 				.finished-product-subheader { 
-					background: linear-gradient(135deg, #aab7b8 0%, #a3b1b2 100%); 
+					background: #16a34a !important; 
 					color: white; 
 					font-weight: 500; 
 				}
 				.finished-product-cell { 
-					border-left: 3px solid #f4f6f6;
+					border-left: 3px solid #bbf7d0;
 					/* Background color applied dynamically via inline styles */
 				}
 				.finished-product-total { 
 					font-weight: 600; 
-					border-left: 3px solid #e5ebec;
+					border-left: 3px solid #86efac;
 					/* Background color applied dynamically via inline styles */
 				}
 				
-				/* Grand Total column - accent tone */
+				/* Grand Total column - Solid Dark Gray */
 				.grand-total-header { 
-					background: linear-gradient(135deg, #2c3e50 0%, #1b2631 100%); 
+					background: #0f172a !important; 
 					color: white; 
 					font-weight: 600; 
 				}
@@ -749,7 +780,33 @@ class AggregatedStockMovement {
 					background-color: #e9ecef; 
 					font-weight: 700; 
 					border-left: 3px solid #d1d7dd;
-					color: #2c3e50;
+					color: #0f172a;
+				}
+
+				/* Actions Column - Solid Dark */
+				.actions-header {
+					background: #475569 !important;
+					color: white !important;
+					font-weight: 700 !important;
+				}
+				.actions-cell {
+					text-align: center !important;
+					padding: 8px !important;
+				}
+				.view-batches-btn {
+					background: #1e293b !important;
+					color: white !important;
+					border: none !important;
+					padding: 6px 14px !important;
+					font-weight: 700 !important;
+					font-size: 12px !important;
+					text-transform: uppercase !important;
+					cursor: pointer !important;
+					border-radius: 4px !important;
+					transition: background 0.2s !important;
+				}
+				.view-batches-btn:hover {
+					background: #334155 !important;
 				}
 				
 				/* Alternating row colors removed - using dynamic value-based colors instead */
@@ -961,6 +1018,23 @@ class AggregatedStockMovement {
 		dialog.show();
 	}
 
+	// **UPDATED: Show batch details in FULL SCREEN page with URL parameters**
+	show_batch_details_panel(common_code) {
+		const filters = {
+			from_date: this.filters.from_date.get_value(),
+			to_date: this.filters.to_date.get_value(),
+			warehouse: this.filters.warehouse.get_value(),
+			warehouse_type: this.filters.warehouse_type.get_value(),
+			exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
+		};
+		
+		// Store filters in localStorage for persistence
+		localStorage.setItem('batch_details_filters', JSON.stringify(filters));
+		
+		// Navigate to batch details page with common_code in URL
+		frappe.set_route('batch-wise-stock-details', common_code);
+	}
+
 	// Loading skeleton UI
 	show_loading() {
 		const skeletonRows = 6;
@@ -995,10 +1069,11 @@ class AggregatedStockMovement {
 								<th colspan="4" class="products-header skeleton skeleton-header">&nbsp;</th>
 								<th colspan="4" class="finished-product-header skeleton skeleton-header">&nbsp;</th>
 								<th class="grand-total-header skeleton skeleton-header">&nbsp;</th>
+								<th class="actions-header skeleton skeleton-header">&nbsp;</th>
 							</tr>
 							<tr>
 								<th class="sticky-column skeleton skeleton-header">&nbsp;</th>
-								${'<th class="skeleton skeleton-header">&nbsp;</th>'.repeat(13)}
+								${'<th class="skeleton skeleton-header">&nbsp;</th>'.repeat(14)}
 							</tr>
 						</thead>
 						<tbody>

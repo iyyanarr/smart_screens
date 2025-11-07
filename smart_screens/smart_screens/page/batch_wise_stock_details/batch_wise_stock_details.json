@@ -1,0 +1,23 @@
+{
+ "creation": "2025-11-07 10:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-11-07 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "batch-wise-stock-details",
+ "owner": "Administrator",
+ "page_name": "Batch-Wise Stock Details",
+ "roles": [
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "standard": "No",
+ "system_page": 0,
+ "title": "Batch-Wise Stock Details"
+}
