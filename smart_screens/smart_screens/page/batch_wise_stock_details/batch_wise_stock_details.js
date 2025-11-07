@@ -33,10 +33,14 @@ class BatchWiseStockDetails {
 			return;
 		}
 		
-		// **NEW: Initialize active tab**
+		// **NEW: Initialize active tab and sorting**
 		this.active_tab = 'Mat';
+		this.sort_by = 'batch_no';
+		this.sort_order = 'asc';
+		this.search_text = '';
 		
 		this.setup_page();
+		this.make_filters();
 		this.load_batch_details();
 	}
 	
@@ -54,6 +58,68 @@ class BatchWiseStockDetails {
 		
 		// Create container
 		this.$container = $('<div class="batch-details-container">').appendTo(this.page.main);
+	}
+	
+	// **NEW: Create filter fields**
+	make_filters() {
+		const filter_html = `
+			<div class="batch-filters-section">
+				<div class="filter-row">
+					<div class="filter-group">
+						<label>From Date</label>
+						<input type="date" class="form-control filter-from-date" value="${this.filters.from_date || ''}" />
+					</div>
+					<div class="filter-group">
+						<label>To Date</label>
+						<input type="date" class="form-control filter-to-date" value="${this.filters.to_date || ''}" />
+					</div>
+					<div class="filter-group">
+						<label>Warehouse</label>
+						<input type="text" class="form-control filter-warehouse" placeholder="All Warehouses" value="${this.filters.warehouse || ''}" />
+					</div>
+					<div class="filter-group">
+						<label>Search Batch</label>
+						<input type="text" class="form-control filter-search" placeholder="Search batch number..." />
+					</div>
+					<div class="filter-group">
+						<button class="btn btn-primary btn-apply-filters">
+							<i class="fa fa-filter"></i> Apply Filters
+						</button>
+					</div>
+				</div>
+			</div>
+		`;
+		
+		this.$container.html(filter_html);
+		this.bind_filter_events();
+	}
+	
+	// **NEW: Bind filter events**
+	bind_filter_events() {
+		// **FIXED: Unbind previous events to prevent duplicates**
+		this.$container.off('click', '.btn-apply-filters');
+		this.$container.off('input', '.filter-search');
+		
+		this.$container.on('click', '.btn-apply-filters', () => {
+			this.filters.from_date = this.$container.find('.filter-from-date').val();
+			this.filters.to_date = this.$container.find('.filter-to-date').val();
+			this.filters.warehouse = this.$container.find('.filter-warehouse').val();
+			
+			// Save to localStorage
+			localStorage.setItem('batch_details_filters', JSON.stringify(this.filters));
+			
+			this.load_batch_details();
+		});
+		
+		// **FIXED: Properly debounce the search input**
+		const debouncedSearch = frappe.utils.debounce((search_val) => {
+			this.search_text = search_val.toLowerCase();
+			this.apply_search_and_sort();
+		}, 300);
+		
+		this.$container.on('input', '.filter-search', (e) => {
+			debouncedSearch($(e.currentTarget).val());
+		});
 	}
 	
 	load_batch_details() {
@@ -96,41 +162,47 @@ class BatchWiseStockDetails {
 			}
 		});
 		
+		// Store original batches for search/sort
+		this.original_batches = JSON.parse(JSON.stringify(this.grouped_batches));
+		
 		let html = `
 			<div class="batch-wise-report">
-				<!-- Header Section -->
-				<div class="report-header">
-					<div class="header-content">
-						<h2 class="item-code-title">Item Code: <span class="highlight">${this.common_code}</span></h2>
-						<div class="stats-bar">
-							<div class="stat-card active">
-								<i class="fa fa-check-circle"></i>
-								<div class="stat-value">${active_count}</div>
-								<div class="stat-label">Active Batches</div>
-							</div>
-							${excluded_count > 0 ? `
-								<div class="stat-card excluded">
-									<i class="fa fa-ban"></i>
-									<div class="stat-value">${excluded_count}</div>
-									<div class="stat-label">Excluded Batches</div>
-								</div>
-							` : ''}
-							<div class="stat-card total">
-								<i class="fa fa-cube"></i>
-								<div class="stat-value">${batches.length}</div>
-								<div class="stat-label">Total Batches</div>
-							</div>
+				<!-- **UPDATED: Combined Filter and Header Section** -->
+				<div class="batch-filters-section">
+					<div class="header-row">
+						<h2 class="item-code-title">
+							Item Code: <span class="highlight">${this.common_code}</span>
+							<span class="batch-count">
+								(${active_count} Active${excluded_count > 0 ? `, ${excluded_count} Excluded` : ''}, ${batches.length} Total)
+							</span>
+						</h2>
+					</div>
+					<div class="filter-row">
+						<div class="filter-group">
+							<label>From Date</label>
+							<input type="date" class="form-control filter-from-date" value="${this.filters.from_date || ''}" />
+						</div>
+						<div class="filter-group">
+							<label>To Date</label>
+							<input type="date" class="form-control filter-to-date" value="${this.filters.to_date || ''}" />
+						</div>
+						<div class="filter-group">
+							<label>Warehouse</label>
+							<input type="text" class="form-control filter-warehouse" placeholder="All Warehouses" value="${this.filters.warehouse || ''}" />
+						</div>
+						<div class="filter-group">
+							<label>Search Batch</label>
+							<input type="text" class="form-control filter-search" placeholder="Search batch number..." />
+						</div>
+						<div class="filter-group">
+							<button class="btn btn-primary btn-apply-filters">
+								<i class="fa fa-filter"></i> Apply
+							</button>
 						</div>
 					</div>
 				</div>
 				
-				<!-- Filter Info -->
-				<div class="filter-info">
-					<span><i class="fa fa-calendar"></i> ${this.filters?.from_date || 'All'} to ${this.filters?.to_date || 'All'}</span>
-					<span><i class="fa fa-warehouse"></i> ${this.filters?.warehouse || this.filters?.warehouse_type || 'All Warehouses'}</span>
-				</div>
-				
-				<!-- **NEW: Tabs for Stages** -->
+					<!-- **NEW: Tabs for Stages** -->
 				<div class="stage-tabs">
 					<div class="tabs-nav">
 						<button class="tab-btn ${this.active_tab === 'Mat' ? 'active' : ''}" data-stage="Mat">
@@ -156,6 +228,8 @@ class BatchWiseStockDetails {
 		this.$container.html(html);
 		this.apply_styles();
 		this.bind_tab_events();
+		this.bind_filter_events();
+		this.bind_sort_events();
 	}
 	
 	// **NEW: Render content for a single stage tab**
@@ -191,38 +265,52 @@ class BatchWiseStockDetails {
 		
 		let content = `
 			<div class="tab-pane ${is_active ? 'active' : ''}" data-stage="${stage}">
-				<!-- Stage Summary -->
+				<!-- **UPDATED: Stage Summary with formatted numbers** -->
 				<div class="stage-summary" style="background: ${stage_color};">
 					<div class="summary-item">
 						<span class="label">Opening:</span>
-						<span class="value">${this.format_number(stage_totals.opening)}</span>
+						<span class="value">${this.format_number_with_commas(stage_totals.opening)}</span>
 					</div>
 					<div class="summary-item">
 						<span class="label">In:</span>
-						<span class="value">${this.format_number(stage_totals.in)}</span>
+						<span class="value">${this.format_number_with_commas(stage_totals.in)}</span>
 					</div>
 					<div class="summary-item">
 						<span class="label">Out:</span>
-						<span class="value">${this.format_number(stage_totals.out)}</span>
+						<span class="value">${this.format_number_with_commas(stage_totals.out)}</span>
 					</div>
 					<div class="summary-item">
 						<span class="label">Balance:</span>
-						<span class="value">${this.format_number(stage_totals.balance)}</span>
+						<span class="value">${this.format_number_with_commas(stage_totals.balance)}</span>
 					</div>
 				</div>
 				
-				<!-- Batch Table -->
+				<!-- **UPDATED: Batch Table with sortable headers** -->
 				<div class="table-wrapper">
 					<table class="batch-table">
 						<thead>
 							<tr>
-								<th>Batch No</th>
-								<th>Item Code</th>
-								<th>Warehouse</th>
-								<th class="text-right">Opening</th>
-								<th class="text-right">In</th>
-								<th class="text-right">Out</th>
-								<th class="text-right">Balance</th>
+								<th class="sortable" data-field="batch_no">
+									Batch No <i class="fa fa-sort"></i>
+								</th>
+								<th class="sortable" data-field="item_code">
+									Item Code <i class="fa fa-sort"></i>
+								</th>
+								<th class="sortable" data-field="warehouse">
+									Warehouse <i class="fa fa-sort"></i>
+								</th>
+								<th class="text-right sortable" data-field="opening_qty">
+									Opening <i class="fa fa-sort"></i>
+								</th>
+								<th class="text-right sortable" data-field="in_qty">
+									In <i class="fa fa-sort"></i>
+								</th>
+								<th class="text-right sortable" data-field="out_qty">
+									Out <i class="fa fa-sort"></i>
+								</th>
+								<th class="text-right sortable" data-field="balance_qty">
+									Balance <i class="fa fa-sort"></i>
+								</th>
 								<th class="text-center">Status</th>
 							</tr>
 						</thead>
@@ -267,6 +355,98 @@ class BatchWiseStockDetails {
 		});
 	}
 	
+	// **NEW: Bind sorting events**
+	bind_sort_events() {
+		this.$container.on('click', '.sortable', (e) => {
+			const field = $(e.currentTarget).data('field');
+			
+			// Toggle sort order if same field clicked
+			if (this.sort_by === field) {
+				this.sort_order = this.sort_order === 'asc' ? 'desc' : 'asc';
+			} else {
+				this.sort_by = field;
+				this.sort_order = 'asc';
+			}
+			
+			this.apply_search_and_sort();
+		});
+	}
+	
+	// **FIXED: Apply search and sorting - Only update table content, NOT entire page**
+	apply_search_and_sort() {
+		// Filter by search text
+		Object.keys(this.grouped_batches).forEach(stage => {
+			let batches = [...this.original_batches[stage]];
+			
+			// Apply search filter
+			if (this.search_text) {
+				batches = batches.filter(b => 
+					b.batch_no.toLowerCase().includes(this.search_text) ||
+					b.item_code.toLowerCase().includes(this.search_text) ||
+					(b.warehouse && b.warehouse.toLowerCase().includes(this.search_text))
+				);
+			}
+			
+			// Apply sorting
+			batches.sort((a, b) => {
+				let val_a = a[this.sort_by];
+				let val_b = b[this.sort_by];
+				
+				if (typeof val_a === 'string') {
+					val_a = val_a.toLowerCase();
+					val_b = val_b.toLowerCase();
+					return this.sort_order === 'asc' 
+						? val_a.localeCompare(val_b)
+						: val_b.localeCompare(val_a);
+				} else {
+					return this.sort_order === 'asc'
+						? (val_a || 0) - (val_b || 0)
+						: (val_b || 0) - (val_a || 0);
+				}
+			});
+			
+			this.grouped_batches[stage] = batches;
+		});
+		
+		 // **FIXED: Only update table content, don't re-render entire page**
+		this.update_table_content();
+	}
+	
+	// **NEW: Update only the table content without re-rendering the entire page**
+	update_table_content() {
+		// Update tab counts
+		this.$container.find('.tab-btn[data-stage="Mat"]').html(`
+			<i class="fa fa-layer-group"></i> Mat (${this.grouped_batches['Mat'].length})
+		`);
+		this.$container.find('.tab-btn[data-stage="Products"]').html(`
+			<i class="fa fa-box"></i> Products (${this.grouped_batches['Products'].length})
+		`);
+		this.$container.find('.tab-btn[data-stage="Finished Product"]').html(`
+			<i class="fa fa-check-square"></i> Finished (${this.grouped_batches['Finished Product'].length})
+		`);
+		
+		// Re-render each tab content
+		['Mat', 'Products', 'Finished Product'].forEach(stage => {
+			const $tab_pane = this.$container.find(`.tab-pane[data-stage="${stage}"]`);
+			const is_active = $tab_pane.hasClass('active');
+			
+			// Generate new content for this stage
+			const new_content = this.render_stage_content(stage);
+			
+			// Replace the tab pane content
+			const $new_pane = $(new_content);
+			$tab_pane.replaceWith($new_pane);
+			
+			// Restore active state if needed
+			if (is_active) {
+				$new_pane.addClass('active');
+			}
+		});
+		
+		// Re-bind only sort events (filter events remain bound)
+		this.bind_sort_events();
+	}
+	
 	// **NEW: Switch between tabs**
 	switch_tab(stage) {
 		this.active_tab = stage;
@@ -278,6 +458,16 @@ class BatchWiseStockDetails {
 		// Update tab panes
 		this.$container.find('.tab-pane').removeClass('active');
 		this.$container.find(`.tab-pane[data-stage="${stage}"]`).addClass('active');
+	}
+	
+	// **NEW: Format number with commas (for summary totals)**
+	format_number_with_commas(value) {
+		const n = Number(value || 0);
+		if (!isFinite(n)) return '0.00';
+		return n.toLocaleString('en-IN', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		});
 	}
 	
 	format_number(value) {
@@ -306,6 +496,89 @@ class BatchWiseStockDetails {
 		$("<style>")
 			.prop("type", "text/css")
 			.html(`
+				/* **NEW: Filter Section Styles** */
+				.batch-filters-section {
+					background: #ffffff;
+					padding: 15px 20px;
+					border-radius: 8px;
+					margin-bottom: 15px;
+					box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+				}
+				
+				.filter-row {
+					display: flex;
+					gap: 15px;
+					align-items: flex-end;
+					flex-wrap: wrap;
+				}
+				
+				.filter-group {
+					flex: 1;
+					min-width: 150px;
+					display: flex;
+					flex-direction: column;
+				}
+				
+				.filter-group label {
+					font-size: 11px;
+					font-weight: 600;
+					color: #64748b;
+					text-transform: uppercase;
+					margin-bottom: 5px;
+					letter-spacing: 0.5px;
+				}
+				
+				.filter-group .form-control {
+					height: 36px;
+					font-size: 13px;
+					border: 1px solid #e2e8f0;
+					border-radius: 6px;
+					padding: 6px 12px;
+				}
+				
+				.filter-group .form-control:focus {
+					border-color: #1e40af;
+					outline: none;
+					box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+				}
+				
+				.btn-apply-filters {
+					height: 36px;
+					padding: 0 20px;
+					background: #1e40af !important;
+					border: none !important;
+					color: white !important;
+					font-weight: 600;
+					border-radius: 6px;
+					cursor: pointer;
+					transition: background 0.2s;
+				}
+				
+				.btn-apply-filters:hover {
+					background: #1e3a8a !important;
+				}
+				
+				/* **UPDATED: Sortable Headers** */
+				.batch-table thead th.sortable {
+					cursor: pointer;
+					user-select: none;
+					transition: background 0.2s;
+				}
+				
+				.batch-table thead th.sortable:hover {
+					background: #e2e8f0;
+				}
+				
+				.batch-table thead th.sortable i {
+					margin-left: 5px;
+					opacity: 0.5;
+					font-size: 10px;
+				}
+				
+				.batch-table thead th.sortable:hover i {
+					opacity: 1;
+				}
+				
 				/* Batch-Wise Stock Details - Tabbed Design */
 				.batch-wise-report {
 					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -620,6 +893,42 @@ class BatchWiseStockDetails {
 					.batch-table { font-size: 11px; }
 					.batch-table thead th,
 					.batch-table tbody td { padding: 8px 6px; }
+					/* **NEW: Combined Header Section** */
+				.batch-filters-section .header-row {
+					margin-bottom: 15px;
+					padding-bottom: 12px;
+					border-bottom: 2px solid #e2e8f0;
+				}
+				
+				.batch-filters-section .item-code-title {
+					font-size: 18px;
+					font-weight: 700;
+					color: #1e293b;
+					margin: 0;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				
+				.batch-filters-section .item-code-title .highlight {
+					color: #1e40af;
+					font-family: 'Courier New', monospace;
+					font-size: 20px;
+				}
+				
+				.batch-filters-section .batch-count {
+					font-size: 13px;
+					font-weight: 500;
+					color: #64748b;
+					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+				}
+				
+				.filter-row {
+					display: flex;
+					gap: 15px;
+					align-items: flex-end;
+					flex-wrap: wrap;
+				}
 				}
 			`)
 			.appendTo("head");

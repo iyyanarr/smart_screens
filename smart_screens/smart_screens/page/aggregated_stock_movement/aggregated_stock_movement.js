@@ -25,7 +25,8 @@ class AggregatedStockMovement {
 		this.sort_by = 'total';
 		this.sort_order = 'desc';
 		
-		this.make_report();
+		// Show empty state with instructions
+		this.show_empty_state();
 	}
 	
 	make_form() {
@@ -100,23 +101,19 @@ class AggregatedStockMovement {
 	}
 	
 	add_filters() {
+		// Add Generate Report button as PRIMARY action
+		this.page.set_primary_action(__('Generate Report'), () => this.make_report(), 'octicon octicon-sync');
+		
 		this.page.add_inner_button(__('Refresh'), () => this.make_report());
 		this.page.add_inner_button(__('Validate Data'), () => this.validate_data());
 		this.page.add_inner_button(__('Export CSV'), () => this.export_to_csv());
 		
-		// **NEW: Add Manage Excluded Batches button**
+		 // Add Manage Excluded Batches button
 		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
 			frappe.set_route('List', 'Excluded Stock Batch');
 		});
 		
-		// Add event listeners to filters
-		this.filters.from_date.$input.on('change', () => this.make_report());
-		this.filters.to_date.$input.on('change', () => this.make_report());
-		this.filters.warehouse.$input.on('change', () => this.make_report());
-		this.filters.warehouse_type.$input.on('change', () => this.make_report());
-		this.filters.exclude_problematic_batches.$input.on('change', () => this.make_report());
-		
-		// Add debounced filter for item code
+		// Only keep the item code search filter (doesn't trigger report generation)
 		this.filters.item_code_filter.$input.on('input', 
 			frappe.utils.debounce(() => this.apply_filters(), 300)
 		);
@@ -404,13 +401,25 @@ class AggregatedStockMovement {
 			e.preventDefault();
 			const code = $(e.currentTarget).data('code');
 			this.show_common_code_details(code);
-		});
+		 });
 
-		// **NEW: Bind batch details button click**
+		// **FIXED: Bind batch details button click - Navigate to batch details page**
 		this.$report_container.on('click', '.view-batches-btn', (e) => {
 			e.preventDefault();
 			const code = $(e.currentTarget).data('code');
-			this.show_batch_details_panel(code);
+			
+			// Store filters in localStorage for persistence
+			const filters = {
+				from_date: this.filters.from_date.get_value(),
+				to_date: this.filters.to_date.get_value(),
+				warehouse: this.filters.warehouse.get_value(),
+				warehouse_type: this.filters.warehouse_type.get_value(),
+				exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
+			};
+			localStorage.setItem('batch_details_filters', JSON.stringify(filters));
+			
+			// Navigate to batch details page with common_code in URL
+			frappe.set_route('batch-wise-stock-details', code);
 		});
 	}
 
@@ -577,36 +586,30 @@ class AggregatedStockMovement {
 		return `rgba(${config.r}, ${config.g}, ${config.b}, ${opacity})`;
 	}
 
-	// Utility: numeric formatting with smart decimals and lakh separators
+	// Utility: numeric formatting with smart decimals and lakh separators - ROUNDED TO WHOLE NUMBERS
 	format_number(value) {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return '0';
 		const abs = Math.abs(n);
 		
-		// Format in Indian number system (lakhs/crores)
+		// Format in Indian number system (lakhs/crores) - ALL ROUNDED TO WHOLE NUMBERS
 		if (abs >= 10000000) { // 1 crore
-			return (n / 10000000).toFixed(2) + ' Cr';
+			return Math.round(n / 10000000) + ' Cr';
 		} else if (abs >= 100000) { // 1 lakh
-			return (n / 100000).toFixed(2) + ' L';
+			return Math.round(n / 100000) + ' L';
 		} else if (abs >= 1000) { // 1 thousand
-			return (n / 1000).toFixed(1) + 'K';
+			return Math.round(n / 1000) + 'K';
 		} else {
-			const decimals = abs === 0 || Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
-			return n.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+			// Always return whole numbers (no decimals)
+			return Math.round(n).toLocaleString('en-IN');
 		}
 	}
 
-	// Utility: round for CSV/raw values
-	round_number(value, decimals = 2) {
+	// Utility: round for CSV/raw values - NO DECIMALS
+	round_number(value, decimals = 0) {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return 0;
-		const factor = Math.pow(10, decimals);
-		return Math.round(n * factor) / factor;
-	}
-
-	// Utility: safe filenames
-	sanitize_filename(name) {
-		return String(name || '').replace(/[^a-z0-9\-_\.]+/gi, '_');
+		return Math.round(n);
 	}
 
 	// Enhance sticky column behavior (no-op placeholder with minor fix)
@@ -914,125 +917,38 @@ class AggregatedStockMovement {
 			.appendTo("head");
 	}
 	
-	show_common_code_details(common_code) {
-		if (!common_code) return;
-		
-		const filters = {
-			from_date: this.filters.from_date.get_value(),
-			to_date: this.filters.to_date.get_value(),
-			warehouse: this.filters.warehouse.get_value(),
-			warehouse_type: this.filters.warehouse_type.get_value()
-		};
-		
-		// Call backend to get details
-		frappe.call({
-			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.get_common_code_details',
-			args: {
-				common_code: common_code,
-				filters: filters
-			},
-			callback: (r) => {
-				if (r.message) {
-					this.render_common_code_dialog(common_code, r.message);
-				}
-			}
-		});
-	}
-	
-	render_common_code_dialog(common_code, data) {
-		const items = data.items || [];
-		const sle_samples = data.sle_samples || [];
-		const counts = data.counts || {items: 0, sle: 0};
-		
-		// Build items table
-		let items_html = '<table class="table table-bordered table-sm"><thead><tr><th>Item Code</th><th>Item Name</th><th>Prefix</th><th>Item Group</th><th>UOM</th></tr></thead><tbody>';
-		
-		if (items.length > 0) {
-			items.forEach(item => {
-				items_html += `<tr>
-					<td><strong>${item.item_code}</strong></td>
-					<td>${item.item_name || ''}</td>
-					<td><span class="badge badge-${item.prefix === 'P' ? 'success' : item.prefix === 'F' ? 'info' : 'warning'}">${item.prefix}</span></td>
-					<td>${item.item_group || ''}</td>
-					<td>${item.stock_uom || ''}</td>
-				</tr>`;
-			});
-		} else {
-			items_html += '<tr><td colspan="5" class="text-muted text-center">No items found</td></tr>';
-		}
-		items_html += '</tbody></table>';
-		
-		// Build SLE samples table
-		let sle_html = '<table class="table table-bordered table-sm"><thead><tr><th>Date</th><th>Item Code</th><th>Warehouse</th><th>Batch</th><th>Qty</th><th>Voucher</th></tr></thead><tbody>';
-		
-		if (sle_samples.length > 0) {
-			sle_samples.forEach(sle => {
-				const qty_class = sle.actual_qty > 0 ? 'text-success' : 'text-danger';
-				sle_html += `<tr>
-					<td>${sle.posting_date}</td>
-					<td><code>${sle.item_code}</code></td>
-					<td>${sle.warehouse}</td>
-					<td>${sle.batch_no || '-'}</td>
-					<td class="${qty_class}">${sle.actual_qty}</td>
-					<td><small>${sle.voucher_type}: ${sle.voucher_no}</small></td>
-				</tr>`;
-			});
-		} else {
-			sle_html += '<tr><td colspan="6" class="text-muted text-center">No stock ledger entries found</td></tr>';
-		}
-		sle_html += '</tbody></table>';
-		
-		// Create dialog content
-		const content = `
-			<div class="common-code-details">
-				<div class="row">
-					<div class="col-md-6">
-						<h5>Item Codes (${counts.items})</h5>
-						<div style="max-height: 300px; overflow-y: auto;">
-							${items_html}
-						</div>
-					</div>
-					<div class="col-md-6">
-						<h5>Recent Stock Ledger Entries (${Math.min(counts.sle, 100)})</h5>
-						<div style="max-height: 300px; overflow-y: auto;">
-							${sle_html}
-						</div>
-					</div>
-				</div>
+	show_empty_state() {
+		const html = `
+			<div class="empty-state-container" style="
+				text-align: center;
+				padding: 80px 20px;
+				background: #f8f9fa;
+				border-radius: 12px;
+				margin: 20px 0;
+			">
+				<i class="fa fa-chart-bar fa-4x" style="color: #cbd5e1; margin-bottom: 20px;"></i>
+				<h3 style="color: #64748b; margin-bottom: 15px;">No Report Generated Yet</h3>
+				<p style="color: #94a3b8; font-size: 16px; max-width: 500px; margin: 0 auto 30px;">
+					Select your filters above and click <strong>"Generate Report"</strong> button to load the aggregated stock movement data.
+				</p>
+				<button class="btn btn-primary btn-lg generate-report-btn" style="
+					padding: 12px 32px;
+					font-size: 16px;
+					font-weight: 600;
+					text-transform: uppercase;
+				">
+					<i class="fa fa-sync"></i> Generate Report
+				</button>
 			</div>
 		`;
 		
-		// Show dialog
-		const dialog = new frappe.ui.Dialog({
-			title: `Common Code: ${common_code}`,
-			size: 'extra-large',
-			fields: [
-				{
-					fieldtype: 'HTML',
-					fieldname: 'details_html',
-					options: content
-				}
-			]
+		this.$report_container = $('<div class="report-container">').appendTo(this.page.main);
+		this.$report_container.html(html);
+		
+		// Bind click event for the generate button
+		this.$report_container.on('click', '.generate-report-btn', () => {
+			this.make_report();
 		});
-		
-		dialog.show();
-	}
-
-	// **UPDATED: Show batch details in FULL SCREEN page with URL parameters**
-	show_batch_details_panel(common_code) {
-		const filters = {
-			from_date: this.filters.from_date.get_value(),
-			to_date: this.filters.to_date.get_value(),
-			warehouse: this.filters.warehouse.get_value(),
-			warehouse_type: this.filters.warehouse_type.get_value(),
-			exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
-		};
-		
-		// Store filters in localStorage for persistence
-		localStorage.setItem('batch_details_filters', JSON.stringify(filters));
-		
-		// Navigate to batch details page with common_code in URL
-		frappe.set_route('batch-wise-stock-details', common_code);
 	}
 
 	// Loading skeleton UI
