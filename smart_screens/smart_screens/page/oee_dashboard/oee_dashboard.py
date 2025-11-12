@@ -8,6 +8,7 @@ from frappe import _
 from frappe.utils import flt, formatdate, today, getdate
 from smart_screens.smart_screens.api.oee.oee_calculator import OEECalculator
 from smart_screens.smart_screens.api.oee.adapters.moulding_adapter import MouldingAdapter
+from smart_screens.smart_screens.api.oee.lot_linking_helper import get_linked_lot_info, aggregate_production_data, aggregate_quality_data
 
 # Process adapter registry
 PROCESS_ADAPTERS = {
@@ -68,6 +69,10 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
     
     for entry in production_data:
         try:
+            # Check if this lot is part of a linked lot group
+            linked_info = get_linked_lot_info(entry.get('lot_number'), entry.get('production_date'), entry.get('shift_type'), entry.get('press_machine'))
+            is_linked = bool(linked_info)
+            
             # Extract basic info
             planned_time = adapter.get_planned_time(entry)
             downtime = adapter.get_downtime(entry)
@@ -186,6 +191,11 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 result['lot_inspection_name'] = None
                 result['has_lot_inspection'] = False
                 result['lot_inspection_submitted'] = False
+            
+            # Add linked lot fields
+            result['is_linked_lot'] = is_linked
+            result['linked_lots'] = ', '.join(linked_info.get('linked_lots', [])) if is_linked else ''
+            result['linked_lot_count'] = len(linked_info.get('linked_lots', [])) if is_linked else 0
 
             oee_results.append(result)
             

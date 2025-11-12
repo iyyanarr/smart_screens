@@ -290,6 +290,229 @@ class MouldingAdapter(ProcessAdapter):
         
         return final_results
     
+    def get_linked_lot_data(self, lot_number, production_date, shift_type, machine_reference):
+        """
+        Check if lot is part of a linked group and return aggregated data
+        
+        Args:
+            lot_number: Lot number to check
+            production_date: Production date
+            shift_type: Shift type
+            machine_reference: Machine/press reference
+        
+        Returns:
+            dict: {
+                'is_linked': True/False,
+                'main_lot': 'LOT-XXX',
+                'all_lots': ['LOT-1', 'LOT-2', 'LOT-3'],
+                'aggregated_production': {...},
+                'aggregated_quality': {...}
+            }
+        """
+        try:
+            # Check if lot linking exists for this lot
+            linking = frappe.db.sql("""
+                SELECT 
+                    parent.name as linking_name,
+                    parent.main_lot_number,
+                    parent.production_date,
+                    parent.shift_type,
+                    parent.machine_reference,
+                    GROUP_CONCAT(child.lot_number ORDER BY child.idx SEPARATOR ',') as all_lots
+                FROM `tabOEE Lot Linking` parent
+                INNER JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
+                WHERE parent.production_date = %s
+                    AND parent.shift_type = %s
+                    AND parent.machine_reference LIKE %s
+                    AND parent.status = 'Active'
+                    AND parent.docstatus = 1
+                    AND child.lot_number = %s
+                GROUP BY parent.name, parent.main_lot_number, parent.production_date, 
+                         parent.shift_type, parent.machine_reference
+                LIMIT 1
+            """, (production_date, shift_type, f"%{machine_reference}%", lot_number), as_dict=True)
+            
+            if not linking or len(linking) == 0:
+                return {'is_linked': False}
+            
+            linked_data = linking[0]
+            linked_lots = linked_data['all_lots'].split(',')
+            main_lot = linked_data['main_lot_number']
+            
+            # Only return aggregated data if this is the MAIN lot
+            # Other linked lots will be skipped in OEE calculation
+            if lot_number != main_lot:
+                return {
+                    'is_linked': True,
+                    'is_main_lot': False,
+                    'main_lot': main_lot,
+                    'skip_this_lot': True  # Flag to skip non-main lots
+                }
+            
+            # This is the main lot - aggregate production data
+            production_agg = self._aggregate_production_data(linked_lots)
+            
+            # Aggregate quality data
+            quality_agg = self._aggregate_quality_data(linked_lots)
+            
+            return {
+                'is_linked': True,
+                'is_main_lot': True,
+                'main_lot': main_lot,
+                'all_lots': linked_lots,
+                'linked_lot_count': len(linked_lots),
+                'aggregated_production': production_agg,
+                'aggregated_quality': quality_agg,
+                'skip_this_lot': False
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                title="Get Linked Lot Data Error",
+                message=f"Error checking lot linking for {lot_number}: {str(e)}\n{frappe.get_traceback()}"
+            )
+            return {'is_linked': False}
+    
+    def _aggregate_production_data(self, linked_lots):
+        """
+        Aggregate production data across multiple linked lots
+        
+        Args:
+            linked_lots: List of lot numbers to aggregate
+        
+        Returns:
+            dict: Aggregated production metrics
+        """
+        try:
+            lot_numbers_str = "'" + "','".join(linked_lots) + "'"
+            
+            query = f"""
+                SELECT 
+                    SUM(mpe.number_of_lifts) as total_lifts,
+                    SUM(mpe.weight) as total_weight_kg,
+                    SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces,
+                    AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime,
+                    COUNT(DISTINCT mpe.name) as entry_count,
+                    GROUP_CONCAT(DISTINCT COALESCE(mpe.scan_lot_number, mpe.batch_no) 
+                                 ORDER BY mpe.creation SEPARATOR ', ') as lot_list
+                FROM `tabMoulding Production Entry` mpe
+                WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_str})
+                AND mpe.docstatus = 1
+            """
+            
+            result = frappe.db.sql(query, as_dict=True)
+            
+            if result and len(result) > 0:
+                return {
+                    'total_lifts': flt(result[0].get('total_lifts', 0)),
+                    'total_weight_kg': flt(result[0].get('total_weight_kg', 0)),
+                    'total_pieces': flt(result[0].get('total_pieces', 0)),
+                    'avg_downtime': flt(result[0].get('avg_downtime', 0)),
+                    'entry_count': int(result[0].get('entry_count', 0)),
+                    'lot_list': result[0].get('lot_list', '')
+                }
+            
+            return {
+                'total_lifts': 0,
+                'total_weight_kg': 0,
+                'total_pieces': 0,
+                'avg_downtime': 0,
+                'entry_count': 0,
+                'lot_list': ''
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                title="Aggregate Production Data Error",
+                message=f"Error aggregating production for lots {linked_lots}: {str(e)}\n{frappe.get_traceback()}"
+            )
+            return {
+                'total_lifts': 0,
+                'total_weight_kg': 0,
+                'total_pieces': 0,
+                'avg_downtime': 0,
+                'entry_count': 0,
+                'lot_list': ''
+            }
+    
+    def _aggregate_quality_data(self, linked_lots):
+        """
+        Aggregate quality/rejection data across multiple linked lots
+        
+        Formula: 
+            Total Rejected = Sum of all rejected_qty across all lot inspections
+            Total Inspected = Sum of all inspected_qty across all lot inspections
+            Rejection % = (Total Rejected / Total Inspected) × 100
+        
+        Args:
+            linked_lots: List of lot numbers to aggregate
+        
+        Returns:
+            dict: Aggregated quality metrics
+        """
+        try:
+            lot_numbers_str = "'" + "','".join(linked_lots) + "'"
+            
+            query = f"""
+                SELECT 
+                    SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as total_inspected,
+                    SUM(COALESCE(ie.total_rejected_qty, 0)) as total_rejected,
+                    COUNT(DISTINCT ie.lot_no) as inspected_lot_count,
+                    GROUP_CONCAT(DISTINCT ie.lot_no ORDER BY ie.lot_no SEPARATOR ', ') as inspected_lots
+                FROM `tabInspection Entry` ie
+                WHERE ie.lot_no IN ({lot_numbers_str})
+                AND ie.inspection_type = 'Lot Inspection'
+                AND ie.docstatus = 1
+            """
+            
+            result = frappe.db.sql(query, as_dict=True)
+            
+            if result and len(result) > 0:
+                total_inspected = flt(result[0].get('total_inspected', 0))
+                total_rejected = flt(result[0].get('total_rejected', 0))
+                
+                # Calculate aggregate rejection percentage
+                rejection_pct = 0.0
+                if total_inspected > 0:
+                    rejection_pct = (total_rejected / total_inspected) * 100.0
+                
+                good_pieces = total_inspected - total_rejected
+                
+                return {
+                    'total_inspected': int(total_inspected),
+                    'total_rejected': int(total_rejected),
+                    'good_pieces': int(good_pieces),
+                    'rejection_percentage': rejection_pct,
+                    'inspected_lot_count': int(result[0].get('inspected_lot_count', 0)),
+                    'inspected_lots': result[0].get('inspected_lots', ''),
+                    'has_inspection': total_inspected > 0 or total_rejected > 0
+                }
+            
+            return {
+                'total_inspected': 0,
+                'total_rejected': 0,
+                'good_pieces': 0,
+                'rejection_percentage': 0.0,
+                'inspected_lot_count': 0,
+                'inspected_lots': '',
+                'has_inspection': False
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                title="Aggregate Quality Data Error",
+                message=f"Error aggregating quality for lots {linked_lots}: {str(e)}\n{frappe.get_traceback()}"
+            )
+            return {
+                'total_inspected': 0,
+                'total_rejected': 0,
+                'good_pieces': 0,
+                'rejection_percentage': 0.0,
+                'inspected_lot_count': 0,
+                'inspected_lots': '',
+                'has_inspection': False
+            }
+    
     def get_blank_weight(self, mould_ref, item_code):
         """
         Get blank weight (in grams) from Mould Specification
