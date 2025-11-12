@@ -66,22 +66,66 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
     
     # Calculate OEE for each production entry
     oee_results = []
+    processed_linked_groups = set()  # Track already processed linked lot groups
     
     for entry in production_data:
         try:
-            # Check if this lot is part of a linked lot group
-            linked_info = get_linked_lot_info(entry.get('lot_number'), entry.get('production_date'), entry.get('shift_type'), entry.get('press_machine'))
-            is_linked = bool(linked_info)
+            # Check if this lot is part of a linked lot group (auto-detect)
+            linked_info = get_linked_lot_info(
+                entry.get('lot_number'), 
+                entry.get('production_date'), 
+                entry.get('shift_type'), 
+                entry.get('press_machine')
+            )
+            is_linked = linked_info.get('is_linked', False)
+            linked_lots = linked_info.get('linked_lots', [])
             
-            # Extract basic info
+            # FIX: Skip this entry if it's part of a linked group we've already processed
+            if is_linked and len(linked_lots) > 1:
+                # Create a unique key for this linked group (sorted lot numbers)
+                group_key = '|'.join(sorted(linked_lots))
+                
+                if group_key in processed_linked_groups:
+                    # Already processed this linked group, skip this entry
+                    continue
+                
+                # Mark this group as processed
+                processed_linked_groups.add(group_key)
+            
+            # If linked, use AGGREGATED data for calculations
+            if is_linked and len(linked_lots) > 1:
+                # Get aggregated production data
+                prod_agg = aggregate_production_data(linked_lots)
+                
+                # Get aggregated quality data
+                quality_agg = aggregate_quality_data(linked_lots)
+                
+                # Use aggregated values for OEE calculation
+                # FIX: Use total_lifts (number of lifts), NOT weight!
+                actual_qty = prod_agg.get('total_lifts', 0)  # Number of lifts (39 + 41 = 80)
+                target_qty = prod_agg.get('total_target_qty', 0)  # Target lifts from Work Plan
+                number_of_products = prod_agg.get('total_number_of_products', 0)  # Sum of NoP (lifts × cavities)
+                downtime = prod_agg.get('avg_downtime', 0)
+                
+                # Quality data from aggregated inspection entries
+                quality_data = {
+                    'has_inspection': quality_agg.get('has_inspection', False),
+                    'total_pieces': quality_agg.get('total_pieces', 0),
+                    'good_pieces': quality_agg.get('good_pieces', 0),
+                    'rejected_pieces': quality_agg.get('rejected_pieces', 0),
+                    'rejection_percentage': quality_agg.get('rejection_percentage', 0.0)
+                }
+            else:
+                # Single lot - use adapter methods normally
+                actual_qty = adapter.get_actual_quantity(entry)
+                target_qty = adapter.get_target_quantity(entry)
+                number_of_products = entry.get('number_of_products', 0)
+                downtime = adapter.get_downtime(entry)
+                quality_data = adapter.get_quality_data(entry)
+            
+            # Extract basic info (same for both linked and single lots)
             planned_time = adapter.get_planned_time(entry)
-            downtime = adapter.get_downtime(entry)
-            target_qty = adapter.get_target_quantity(entry)
-            actual_qty = adapter.get_actual_quantity(entry)
             cycle_time = adapter.calculate_cycle_time(entry)
-            
-            # Get quality data from adapter (already checks for Lot Inspection with docstatus=1)
-            quality_data = adapter.get_quality_data(entry)
             
             # Calculate available time
             available_time = planned_time - downtime
@@ -122,9 +166,8 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 'actual_quantity': flt(actual_qty, 2),
                 'variance_qty': flt(actual_qty - target_qty, 2),
                 
-                # FIX: Use number_of_products from adapter (Production Weight / Blank Weight)
-                # NOT actual_quantity × cavities (that's total_pieces_produced)
-                'number_of_products': entry.get('number_of_products', 0),
+                # FIX: Use aggregated number_of_products for linked lots
+                'number_of_products': number_of_products,
                 
                 # OEE Percentages
                 'oee_pct': flt(oee, 2),
@@ -614,6 +657,10 @@ def save_oee_report(report_data):
                     'machine_name': record.get('machine_name', ''),  # FIX: Add machine name from Job Card
                     'item_code': record.get('item_code'),
                     'lot_number': record.get('lot_number'),
+                    # NEW: Save linked lot fields
+                    'is_linked_lot': record.get('is_linked_lot', False),
+                    'linked_lots': record.get('linked_lots', ''),
+                    'linked_lot_count': record.get('linked_lot_count', 0),
                     'target_quantity': flt(record.get('target_quantity', 0)),
                     'actual_quantity': flt(record.get('actual_quantity', 0)),
                     'number_of_products': flt(record.get('number_of_products', 0)),  # FIX: Add NoP field
@@ -681,6 +728,10 @@ def save_oee_report(report_data):
                 'machine_name': record.get('machine_name', ''),  # FIX: Add machine name from Job Card
                 'item_code': record.get('item_code'),
                 'lot_number': record.get('lot_number'),
+                # NEW: Save linked lot fields
+                'is_linked_lot': record.get('is_linked_lot', False),
+                'linked_lots': record.get('linked_lots', ''),
+                'linked_lot_count': record.get('linked_lot_count', 0),
                 'target_quantity': flt(record.get('target_quantity', 0)),
                 'actual_quantity': flt(record.get('actual_quantity', 0)),
                 'number_of_products': flt(record.get('number_of_products', 0)),  # FIX: Add NoP field

@@ -224,121 +224,138 @@
                     </button>
                 </div>
                 <div class="modal-body p-3">
-                    <!-- Production Summary Header -->
-                    <div class="card bg-light mb-3">
-                        <div class="card-body p-2">
+                    <!-- SECTION 1: Basic Information - Vertically Stacked -->
+                    <div class="card mb-3" style="border-left: 4px solid #007bff;">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-3" style="color: #007bff; font-weight: 600;">
+                                <i class="fa fa-info-circle"></i> Production Information
+                            </h6>
                             <div class="row">
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Date</small>
-                                    <strong id="modal-date" style="font-size: 0.85rem;">-</strong>
+                                <div class="col-md-6">
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Date</small>
+                                        <strong id="modal-date" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Shift</small>
+                                        <strong id="modal-shift" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Machine</small>
+                                        <strong id="modal-machine" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Mould</small>
+                                        <strong id="modal-mold" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
                                 </div>
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Shift</small>
-                                    <strong id="modal-shift" style="font-size: 0.85rem;">-</strong>
-                                </div>
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Machine</small>
-                                    <strong id="modal-machine" style="font-size: 0.85rem;">-</strong>
-                                </div>
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Mould</small>
-                                    <strong id="modal-mold" style="font-size: 0.85rem;">-</strong>
-                                </div>
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Lot Number</small>
-                                    <strong id="modal-lot" style="font-size: 0.85rem;">-</strong>
-                                </div>
-                                <div class="col-md-2 col-6 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Item</small>
-                                    <strong id="modal-item" style="font-size: 0.85rem;">-</strong>
-                                </div>
-                                <div class="col-md-12 col-12 mb-1">
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Operator</small>
-                                    <strong id="modal-operator" style="font-size: 0.85rem;">-</strong>
+                                <div class="col-md-6">
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Lot Number</small>
+                                        <strong id="modal-lot" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Item</small>
+                                        <strong id="modal-item" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
+                                    <div class="info-item mb-2">
+                                        <small class="text-muted d-block" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Operator</small>
+                                        <strong id="modal-operator" style="font-size: 0.95rem; color: #2c3e50;">-</strong>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Concise 4-Column OEE Breakdown Table -->
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-sm mb-0" style="font-size: 0.85rem;">
-                            <thead class="thead-dark">
-                                <tr>
-                                    <th style="width: 20%;">Metric</th>
-                                    <th class="text-center" style="width: 20%; background-color: #28a745; color: white;">
-                                        <strong>Availability</strong>
-                                    </th>
-                                    <th class="text-center" style="width: 20%; background-color: #17a2b8; color: white;">
-                                        <strong>Performance</strong>
-                                    </th>
-                                    <th class="text-center" style="width: 20%; background-color: #ffc107; color: black;">
-                                        <strong>Quality</strong>
-                                    </th>
-                                    <th class="text-center" style="width: 20%; background-color: #6c757d; color: white;">
-                                        <strong>OEE</strong>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><strong>Required</strong></td>
-                                    <td class="text-center" id="modal-required-availability">450 mins</td>
-                                    <td class="text-center" id="modal-required-performance">0 lifts</td>
-                                    <td class="text-center" id="modal-required-quality">0 pcs</td>
-                                    <td class="text-center text-muted">-</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Actual</strong></td>
-                                    <td class="text-center" id="modal-actual-availability">450 mins</td>
-                                    <td class="text-center" id="modal-actual-performance">0 lifts</td>
-                                    <td class="text-center" id="modal-actual-quality">0 pcs</td>
-                                    <td class="text-center">
-                                        <strong id="modal-oee-score" class="text-primary" style="font-size: 1.2rem;">0%</strong>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><strong>%</strong></td>
-                                    <td class="text-center">
-                                        <strong id="modal-availability-pct" class="text-success">0%</</strong>
-                                    </td>
-                                    <td class="text-center">
-                                        <strong id="modal-performance-pct" class="text-info">0%</strong>
-                                    </td>
-                                    <td class="text-center">
-                                        <strong id="modal-quality-pct" class="text-warning">0%</strong>
-                                    </td>
-                                    <td class="text-center text-muted">-</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Remarks</strong></td>
-                                    <td class="text-center">
-                                        <small id="modal-availability-remark" class="text-muted">Downtime: 0 mins</small>
-                                    </td>
-                                    <td class="text-center">
-                                        <small id="modal-performance-remark" class="text-muted">Cycle Time: 0s</small>
-                                    </td>
-                                    <td class="text-center">
-                                        <small id="modal-quality-remark" class="text-muted">Lot Rej: 0%</small>
-                                    </td>
-                                    <td class="text-center">
-                                        <small id="modal-oee-formula" class="text-muted">A×P×Q</small>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Formula Legend -->
-                    <div class="card bg-light mt-3">
-                        <div class="card-body p-2">
-                            <small class="text-muted d-block mb-1"><strong>📐 Calculation Formulas:</strong></small>
-                            <small class="text-muted d-block">• <strong>Availability</strong> = (Planned Time - Downtime) / Planned Time × 100</small>
-                            <small class="text-muted d-block">• <strong>Performance</strong> = Actual Quantity / Ideal Cycle Count × 100</small>
-                            <small class="text-muted d-block">• <strong>Quality</strong> = Good Pieces / NoP Produced × 100</small>
-                            <small class="text-muted d-block">• <strong>OEE</strong> = Availability × Performance × Quality / 10000</small>
+                    <!-- SECTION 2: OEE Metrics & Linked Lot Breakdown -->
+                    <div class="card" style="border-left: 4px solid #28a745;">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-3" style="color: #28a745; font-weight: 600;">
+                                <i class="fa fa-chart-bar"></i> OEE Performance Metrics
+                            </h6>
+                            
+                            <!-- OEE Breakdown Table -->
+                            <div class="table-responsive mb-3">
+                                <table class="table table-bordered table-sm mb-0" style="font-size: 0.85rem;">
+                                    <thead class="thead-dark">
+                                        <tr>
+                                            <th style="width: 20%;">Metric</th>
+                                            <th class="text-center" style="width: 20%; background-color: #28a745; color: white;">
+                                                <strong>Availability</strong>
+                                            </th>
+                                            <th class="text-center" style="width: 20%; background-color: #17a2b8; color: white;">
+                                                <strong>Performance</strong>
+                                            </th>
+                                            <th class="text-center" style="width: 20%; background-color: #ffc107; color: black;">
+                                                <strong>Quality</strong>
+                                            </th>
+                                            <th class="text-center" style="width: 20%; background-color: #6c757d; color: white;">
+                                                <strong>OEE</strong>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Required</strong></td>
+                                            <td class="text-center" id="modal-required-availability">450 mins</td>
+                                            <td class="text-center" id="modal-required-performance">0 lifts</td>
+                                            <td class="text-center" id="modal-required-quality">0 pcs</td>
+                                            <td class="text-center text-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Actual</strong></td>
+                                            <td class="text-center" id="modal-actual-availability">450 mins</td>
+                                            <td class="text-center" id="modal-actual-performance">0 lifts</td>
+                                            <td class="text-center" id="modal-actual-quality">0 pcs</td>
+                                            <td class="text-center">
+                                                <strong id="modal-oee-score" class="text-primary" style="font-size: 1.2rem;">0%</strong>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>%</strong></td>
+                                            <td class="text-center">
+                                                <strong id="modal-availability-pct" class="text-success">0%</</strong>
+                                            </td>
+                                            <td class="text-center">
+                                                <strong id="modal-performance-pct" class="text-info">0%</</strong>
+                                            </td>
+                                            <td class="text-center">
+                                                <strong id="modal-quality-pct" class="text-warning">0%</</strong>
+                                            </td>
+                                            <td class="text-center text-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Remarks</strong></td>
+                                            <td class="text-center">
+                                                <small id="modal-availability-remark" class="text-muted">Downtime: 0 mins</small>
+                                            </td>
+                                            <td class="text-center">
+                                                <small id="modal-performance-remark" class="text-muted">Cycle Time: 0s</small>
+                                            </td>
+                                            <td class="text-center">
+                                                <small id="modal-quality-remark" class="text-muted">Lot Rej: 0%</small>
+                                            </td>
+                                            <td class="text-center">
+                                                <small id="modal-oee-formula" class="text-muted">A×P×Q</small>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Formula Legend -->
+                            <div class="alert alert-info mb-0" style="padding: 8px 12px; font-size: 0.8rem;">
+                                <strong>📐 Calculation Formulas:</strong><br>
+                                • <strong>Availability</strong> = (Planned Time - Downtime) / Planned Time × 100<br>
+                                • <strong>Performance</strong> = Actual Quantity / Ideal Cycle Count × 100<br>
+                                • <strong>Quality</strong> = Good Pieces / NoP Produced × 100<br>
+                                • <strong>OEE</strong> = Availability × Performance × Quality / 10000
+                            </div>
                         </div>
                     </div>
+                    
+                    <!-- Linked Lot Breakdown Section (Dynamically inserted by JavaScript) -->
+                    <!-- This section will be added by showLinkedLotBreakdown() function -->
                 </div>
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button>

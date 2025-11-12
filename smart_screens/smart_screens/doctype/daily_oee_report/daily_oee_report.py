@@ -277,6 +277,10 @@ def get_report_data(report_name):
                 'machine_name': getattr(row, 'machine_name', 'N/A'),  # FIX: Add machine name
                 'item_code': row.item_code or '',
                 'lot_number': row.lot_number or '',
+                # NEW: Add linked lot fields from saved report
+                'is_linked_lot': getattr(row, 'is_linked_lot', False),
+                'linked_lots': getattr(row, 'linked_lots', ''),
+                'linked_lot_count': getattr(row, 'linked_lot_count', 0),
                 'target_quantity': flt(row.target_quantity, 2),
                 'actual_quantity': flt(row.actual_quantity, 2),
                 'number_of_products': flt(getattr(row, 'number_of_products', 0), 2),  # FIX: Add NoP field

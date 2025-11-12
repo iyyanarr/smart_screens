@@ -1,6 +1,7 @@
 """
 OEE Lot Linking Helper
-Provides utility functions for detecting and aggregating linked lots in OEE calculations
+Provides utility functions for automatically detecting and aggregating linked lots in OEE calculations
+NEW: Auto-detects lots with same date + shift + press + item + operator
 """
 
 import frappe
@@ -10,7 +11,14 @@ from frappe.utils import flt
 
 def get_linked_lot_info(lot_number, production_date, shift_type, machine_reference):
     """
-    Check if a lot is part of a linked group and return linking metadata
+    AUTO-DETECT if a lot is part of a linked group based on production context
+    
+    Logic: Lots are linked if they share:
+    - Same production date
+    - Same shift type
+    - Same machine/press
+    - Same item code
+    - Same operator
     
     Args:
         lot_number: Lot number to check
@@ -21,74 +29,86 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
     Returns:
         dict: {
             'is_linked': True/False,
-            'is_main_lot': True/False,
-            'main_lot': 'LOT-XXX',
-            'all_lots': ['LOT-1', 'LOT-2', 'LOT-3'],
-            'skip_this_lot': True/False
+            'linked_lots': ['LOT-1', 'LOT-2', 'LOT-3'],
+            'linked_lot_count': 3
         }
     """
     try:
-        # Check if lot linking exists for this lot
-        linking = frappe.db.sql("""
+        # Find the production entry for this lot
+        prod_entry = frappe.db.sql("""
             SELECT 
-                parent.name as linking_name,
-                parent.main_lot_number,
-                parent.production_date,
-                parent.shift_type,
-                parent.machine_reference,
-                GROUP_CONCAT(child.lot_number ORDER BY child.idx SEPARATOR ',') as all_lots
-            FROM `tabOEE Lot Linking` parent
-            INNER JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
-            WHERE parent.production_date = %s
-                AND parent.shift_type = %s
-                AND parent.machine_reference LIKE %s
-                AND parent.status = 'Active'
-                AND parent.docstatus = 1
-                AND child.lot_number = %s
-            GROUP BY parent.name, parent.main_lot_number, parent.production_date, 
-                     parent.shift_type, parent.machine_reference
+                mpe.name,
+                COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
+                mpe.moulding_date,
+                mpe.item_to_produce as item_code,
+                mpe.employee_name as operator_name,
+                jc.shift_type,
+                jc.workstation as machine_name
+            FROM `tabMoulding Production Entry` mpe
+            INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
+            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) = %s
+            AND mpe.moulding_date = %s
+            AND jc.shift_type = %s
+            AND mpe.docstatus = 1
             LIMIT 1
-        """, (production_date, shift_type, f"%{machine_reference}%", lot_number), as_dict=True)
+        """, (lot_number, production_date, shift_type), as_dict=True)
         
-        if not linking or len(linking) == 0:
+        if not prod_entry or len(prod_entry) == 0:
             return {
                 'is_linked': False,
-                'is_main_lot': False,
-                'main_lot': None,
-                'all_lots': [],
-                'skip_this_lot': False,
+                'linked_lots': [],
                 'linked_lot_count': 0
             }
         
-        linked_data = linking[0]
-        linked_lots = linked_data['all_lots'].split(',')
-        main_lot = linked_data['main_lot_number']
+        entry = prod_entry[0]
         
-        # Only the MAIN lot should be processed; others are skipped
-        is_main_lot = (lot_number == main_lot)
-        skip_this_lot = not is_main_lot
+        # Now find ALL lots with the same context (date, shift, press, item, operator)
+        all_lots = frappe.db.sql("""
+            SELECT 
+                DISTINCT COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
+                mpe.creation
+            FROM `tabMoulding Production Entry` mpe
+            INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
+            WHERE mpe.moulding_date = %s
+            AND jc.shift_type = %s
+            AND jc.workstation = %s
+            AND mpe.item_to_produce = %s
+            AND mpe.employee_name = %s
+            AND mpe.docstatus = 1
+            ORDER BY mpe.creation ASC
+        """, (
+            entry['moulding_date'],
+            entry['shift_type'],
+            entry['machine_name'],
+            entry['item_code'],
+            entry['operator_name']
+        ), as_dict=True)
+        
+        if not all_lots or len(all_lots) <= 1:
+            # Only 1 lot found = not linked
+            return {
+                'is_linked': False,
+                'linked_lots': [],
+                'linked_lot_count': 0
+            }
+        
+        # Multiple lots found with same context = LINKED!
+        linked_lot_numbers = [lot['lot_number'] for lot in all_lots]
         
         return {
             'is_linked': True,
-            'is_main_lot': is_main_lot,
-            'main_lot': main_lot,
-            'all_lots': linked_lots,
-            'skip_this_lot': skip_this_lot,
-            'linked_lot_count': len(linked_lots),
-            'linking_document': linked_data['linking_name']
+            'linked_lots': linked_lot_numbers,
+            'linked_lot_count': len(linked_lot_numbers)
         }
         
     except Exception as e:
         frappe.log_error(
             title="Get Linked Lot Info Error",
-            message=f"Error checking lot linking for {lot_number}: {str(e)}\n{frappe.get_traceback()}"
+            message=f"Error auto-detecting lot linking for {lot_number}: {str(e)}\n{frappe.get_traceback()}"
         )
         return {
             'is_linked': False,
-            'is_main_lot': False,
-            'main_lot': None,
-            'all_lots': [],
-            'skip_this_lot': False,
+            'linked_lots': [],
             'linked_lot_count': 0
         }
 
@@ -101,14 +121,7 @@ def aggregate_production_data(linked_lots):
         linked_lots: List of lot numbers to aggregate
     
     Returns:
-        dict: Aggregated production metrics {
-            'total_lifts': float,
-            'total_weight_kg': float,
-            'total_pieces': int,
-            'avg_downtime': float,
-            'entry_count': int,
-            'lot_list': str
-        }
+        dict: Aggregated production metrics
     """
     try:
         if not linked_lots or len(linked_lots) == 0:
@@ -116,46 +129,112 @@ def aggregate_production_data(linked_lots):
                 'total_lifts': 0,
                 'total_weight_kg': 0,
                 'total_pieces': 0,
+                'total_target_qty': 0,
+                'total_number_of_products': 0,
                 'avg_downtime': 0,
-                'entry_count': 0,
-                'lot_list': ''
+                'entry_count': 0
             }
         
-        lot_numbers_str = "'" + "','".join(linked_lots) + "'"
+        placeholders = ','.join(['%s'] * len(linked_lots))
         
+        # FIX: Query actual database fields and calculate target from Work Plan Item Target
         query = f"""
             SELECT 
                 SUM(mpe.number_of_lifts) as total_lifts,
                 SUM(mpe.weight) as total_weight_kg,
                 SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces,
-                AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime,
+                AVG(CAST(COALESCE(mpe.downtime_minutes, '0') AS DECIMAL(10,2))) as avg_downtime,
                 COUNT(DISTINCT mpe.name) as entry_count,
-                GROUP_CONCAT(DISTINCT COALESCE(mpe.scan_lot_number, mpe.batch_no) 
-                             ORDER BY mpe.creation SEPARATOR ', ') as lot_list
+                mpe.item_to_produce as item_code,
+                jc.shift_type as shift_type
             FROM `tabMoulding Production Entry` mpe
-            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_str})
+            LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
+            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
             AND mpe.docstatus = 1
+            GROUP BY mpe.item_to_produce, jc.shift_type
+            LIMIT 1
         """
         
-        result = frappe.db.sql(query, as_dict=True)
+        result = frappe.db.sql(query, tuple(linked_lots), as_dict=True)
         
         if result and len(result) > 0:
+            total_lifts = int(result[0].get('total_lifts', 0))
+            total_pieces = int(result[0].get('total_pieces', 0))
+            item_code = result[0].get('item_code')
+            shift_type = result[0].get('shift_type')
+            
+            # Fetch target_qty from Work Plan Item Target
+            total_target_qty = 0
+            if item_code and shift_type:
+                # Calculate shift duration
+                shift_duration_query = """
+                    SELECT
+                        CASE
+                            WHEN st.end_time > st.start_time THEN TIMEDIFF(st.end_time, st.start_time)
+                            ELSE TIMEDIFF(ADDTIME(st.end_time, '24:00:00'), st.start_time)
+                        END as shift_duration
+                    FROM `tabShift Type` st
+                    WHERE st.name = %s
+                    LIMIT 1
+                """
+                shift_result = frappe.db.sql(shift_duration_query, (shift_type,), as_dict=True)
+                
+                if shift_result and len(shift_result) > 0:
+                    shift_duration = str(shift_result[0].get('shift_duration'))
+                    
+                    # FIX: Handle both '8:00:00' and '08:00:00' formats
+                    # Try both with and without leading zero
+                    shift_durations_to_try = [shift_duration]
+                    
+                    # If shift_duration has microseconds, strip them
+                    if '.' in shift_duration:
+                        shift_duration = shift_duration.split('.')[0]
+                        shift_durations_to_try.append(shift_duration)
+                    
+                    # If it starts with '0', also try without leading zero
+                    if shift_duration.startswith('0'):
+                        shift_durations_to_try.append(shift_duration[1:])
+                    # If it doesn't start with '0', also try with leading zero
+                    elif ':' in shift_duration:
+                        hours = shift_duration.split(':')[0]
+                        if len(hours) == 1:
+                            shift_durations_to_try.append('0' + shift_duration)
+                    
+                    # Try to fetch target with different shift duration formats
+                    for shift_dur in shift_durations_to_try:
+                        target_query = """
+                            SELECT target_qty
+                            FROM `tabWork Plan Item Target`
+                            WHERE item = %s
+                            AND shift_type = %s
+                            LIMIT 1
+                        """
+                        target_result = frappe.db.sql(target_query, (item_code, shift_dur), as_dict=True)
+                        
+                        if target_result and len(target_result) > 0:
+                            # FIX: Target is per shift, NOT per lot! Don't multiply by number of linked lots
+                            # All linked lots share the same shift target
+                            total_target_qty = flt(target_result[0].get('target_qty', 0))
+                            break  # Found target, no need to try other formats
+            
             return {
-                'total_lifts': flt(result[0].get('total_lifts', 0)),
+                'total_lifts': total_lifts,
                 'total_weight_kg': flt(result[0].get('total_weight_kg', 0)),
-                'total_pieces': int(result[0].get('total_pieces', 0)),
+                'total_pieces': total_pieces,
+                'total_target_qty': total_target_qty,
+                'total_number_of_products': total_pieces,  # NoP = lifts × cavities
                 'avg_downtime': flt(result[0].get('avg_downtime', 0)),
-                'entry_count': int(result[0].get('entry_count', 0)),
-                'lot_list': result[0].get('lot_list', '')
+                'entry_count': int(result[0].get('entry_count', 0))
             }
         
         return {
             'total_lifts': 0,
             'total_weight_kg': 0,
             'total_pieces': 0,
+            'total_target_qty': 0,
+            'total_number_of_products': 0,
             'avg_downtime': 0,
-            'entry_count': 0,
-            'lot_list': ''
+            'entry_count': 0
         }
         
     except Exception as e:
@@ -167,9 +246,10 @@ def aggregate_production_data(linked_lots):
             'total_lifts': 0,
             'total_weight_kg': 0,
             'total_pieces': 0,
+            'total_target_qty': 0,
+            'total_number_of_products': 0,
             'avg_downtime': 0,
-            'entry_count': 0,
-            'lot_list': ''
+            'entry_count': 0
         }
 
 
@@ -182,53 +262,89 @@ def aggregate_quality_data(linked_lots):
         Total Inspected = Sum of all inspected_qty across all lot inspections
         Rejection % = (Total Rejected / Total Inspected) × 100
     
+    FIX: If total_inspected = 0 but total_rejected > 0, use production pieces as inspected qty
+    
     Args:
         linked_lots: List of lot numbers to aggregate
     
     Returns:
-        dict: Aggregated quality metrics {
-            'total_inspected': int,
-            'total_rejected': int,
-            'good_pieces': int,
-            'rejection_percentage': float,
-            'has_inspection': bool,
-            'inspected_lot_count': int,
-            'inspected_lots': str
-        }
+        dict: Aggregated quality metrics
     """
     try:
         if not linked_lots or len(linked_lots) == 0:
             return {
-                'total_inspected': 0,
-                'total_rejected': 0,
+                'total_pieces': 0,
                 'good_pieces': 0,
+                'rejected_pieces': 0,
                 'rejection_percentage': 0.0,
-                'has_inspection': False,
-                'inspected_lot_count': 0,
-                'inspected_lots': ''
+                'has_inspection': False
             }
         
-        lot_numbers_str = "'" + "','".join(linked_lots) + "'"
+        placeholders = ','.join(['%s'] * len(linked_lots))
         
+        # Query inspection data
         query = f"""
             SELECT 
                 SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as total_inspected,
                 SUM(COALESCE(ie.total_rejected_qty, 0)) as total_rejected,
-                COUNT(DISTINCT ie.lot_no) as inspected_lot_count,
-                GROUP_CONCAT(DISTINCT ie.lot_no ORDER BY ie.lot_no SEPARATOR ', ') as inspected_lots
+                AVG(COALESCE(ie.total_rejected_qty_in_percentage, 0)) as avg_rejection_pct
             FROM `tabInspection Entry` ie
-            WHERE ie.lot_no IN ({lot_numbers_str})
+            WHERE ie.lot_no IN ({placeholders})
             AND ie.inspection_type = 'Lot Inspection'
             AND ie.docstatus = 1
         """
         
-        result = frappe.db.sql(query, as_dict=True)
+        result = frappe.db.sql(query, tuple(linked_lots), as_dict=True)
         
         if result and len(result) > 0:
             total_inspected = flt(result[0].get('total_inspected', 0))
             total_rejected = flt(result[0].get('total_rejected', 0))
+            avg_rejection_pct = flt(result[0].get('avg_rejection_pct', 0))
             
-            # Calculate aggregate rejection percentage
+            # FIX: CASE 1 - total_inspected = 0 but total_rejected > 0
+            # This means inspection entry has rejected quantities but didn't record inspected qty
+            # Solution: Use actual production pieces as total inspected
+            if total_inspected == 0 and total_rejected > 0:
+                # Get total production pieces from linked lots
+                prod_query = f"""
+                    SELECT SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces
+                    FROM `tabMoulding Production Entry` mpe
+                    WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
+                    AND mpe.docstatus = 1
+                """
+                
+                prod_result = frappe.db.sql(prod_query, tuple(linked_lots), as_dict=True)
+                
+                if prod_result and len(prod_result) > 0:
+                    total_pieces = int(prod_result[0].get('total_pieces', 0))
+                    good_pieces = total_pieces - int(total_rejected)
+                    
+                    # Calculate rejection percentage using production pieces
+                    rejection_pct = 0.0
+                    if total_pieces > 0:
+                        rejection_pct = (total_rejected / total_pieces) * 100.0
+                    
+                    return {
+                        'total_pieces': total_pieces,
+                        'good_pieces': good_pieces,
+                        'rejected_pieces': int(total_rejected),
+                        'rejection_percentage': rejection_pct,
+                        'has_inspection': True
+                    }
+            
+            # FIX: CASE 2 - Both total_inspected and total_rejected are 0
+            # Inspection entry exists but no data recorded
+            if total_inspected == 0 and total_rejected == 0:
+                return {
+                    'total_pieces': 0,
+                    'good_pieces': 0,
+                    'rejected_pieces': 0,
+                    'rejection_percentage': 0.0,
+                    'has_inspection': True  # Inspection exists but no data
+                }
+            
+            # FIX: CASE 3 - Both total_inspected and total_rejected have values
+            # Normal inspection with complete data
             rejection_pct = 0.0
             if total_inspected > 0:
                 rejection_pct = (total_rejected / total_inspected) * 100.0
@@ -236,23 +352,20 @@ def aggregate_quality_data(linked_lots):
             good_pieces = total_inspected - total_rejected
             
             return {
-                'total_inspected': int(total_inspected),
-                'total_rejected': int(total_rejected),
+                'total_pieces': int(total_inspected),
                 'good_pieces': int(good_pieces),
+                'rejected_pieces': int(total_rejected),
                 'rejection_percentage': rejection_pct,
-                'has_inspection': total_inspected > 0 or total_rejected > 0,
-                'inspected_lot_count': int(result[0].get('inspected_lot_count', 0)),
-                'inspected_lots': result[0].get('inspected_lots', '')
+                'has_inspection': total_inspected > 0 or total_rejected > 0
             }
         
+        # No inspection found
         return {
-            'total_inspected': 0,
-            'total_rejected': 0,
+            'total_pieces': 0,
             'good_pieces': 0,
+            'rejected_pieces': 0,
             'rejection_percentage': 0.0,
-            'has_inspection': False,
-            'inspected_lot_count': 0,
-            'inspected_lots': ''
+            'has_inspection': False
         }
         
     except Exception as e:
@@ -261,32 +374,36 @@ def aggregate_quality_data(linked_lots):
             message=f"Error aggregating quality for lots {linked_lots}: {str(e)}\n{frappe.get_traceback()}"
         )
         return {
-            'total_inspected': 0,
-            'total_rejected': 0,
+            'total_pieces': 0,
             'good_pieces': 0,
+            'rejected_pieces': 0,
             'rejection_percentage': 0.0,
-            'has_inspection': False,
-            'inspected_lot_count': 0,
-            'inspected_lots': ''
+            'has_inspection': False
         }
 
 
+@frappe.whitelist()
 def get_lot_breakdown_details(linked_lots):
     """
     Get detailed breakdown of production and quality for each linked lot
     Used for displaying in OEE Details Modal
     
     Args:
-        linked_lots: List of lot numbers
+        linked_lots: List of lot numbers (can be JSON string or Python list)
     
     Returns:
         list: List of dicts with detailed metrics per lot
     """
     try:
+        # Handle JSON string input from frontend
+        if isinstance(linked_lots, str):
+            import json
+            linked_lots = json.loads(linked_lots) if linked_lots else []
+        
         if not linked_lots or len(linked_lots) == 0:
             return []
         
-        lot_numbers_str = "'" + "','".join(linked_lots) + "'"
+        placeholders = ','.join(['%s'] * len(linked_lots))
         
         # Get production details per lot
         prod_query = f"""
@@ -296,29 +413,28 @@ def get_lot_breakdown_details(linked_lots):
                 SUM(mpe.weight) as weight_kg,
                 SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as pieces
             FROM `tabMoulding Production Entry` mpe
-            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_str})
+            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
             AND mpe.docstatus = 1
             GROUP BY COALESCE(mpe.scan_lot_number, mpe.batch_no)
-            ORDER BY mpe.creation
+            ORDER BY MIN(mpe.creation)
         """
         
-        production_details = frappe.db.sql(prod_query, as_dict=True)
+        production_details = frappe.db.sql(prod_query, tuple(linked_lots), as_dict=True)
         
         # Get quality details per lot
         quality_query = f"""
             SELECT 
                 ie.lot_no as lot_number,
-                COALESCE(ie.total_inspected_qty_nos, 0) as inspected,
-                COALESCE(ie.total_rejected_qty, 0) as rejected,
-                COALESCE(ie.total_rejected_qty_in_percentage, 0) as rejection_pct
+                SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as inspected,
+                SUM(COALESCE(ie.total_rejected_qty, 0)) as rejected
             FROM `tabInspection Entry` ie
-            WHERE ie.lot_no IN ({lot_numbers_str})
+            WHERE ie.lot_no IN ({placeholders})
             AND ie.inspection_type = 'Lot Inspection'
             AND ie.docstatus = 1
-            ORDER BY ie.lot_no
+            GROUP BY ie.lot_no
         """
         
-        quality_details = frappe.db.sql(quality_query, as_dict=True)
+        quality_details = frappe.db.sql(quality_query, tuple(linked_lots), as_dict=True)
         
         # Merge production and quality data
         quality_dict = {q['lot_number']: q for q in quality_details}
@@ -328,14 +444,18 @@ def get_lot_breakdown_details(linked_lots):
             lot = prod['lot_number']
             quality = quality_dict.get(lot, {})
             
+            inspected = int(quality.get('inspected', 0))
+            rejected = int(quality.get('rejected', 0))
+            rejection_pct = (rejected / inspected * 100.0) if inspected > 0 else 0.0
+            
             breakdown.append({
                 'lot_number': lot,
                 'lifts': flt(prod.get('lifts', 0)),
                 'weight_kg': flt(prod.get('weight_kg', 0)),
                 'pieces': int(prod.get('pieces', 0)),
-                'inspected': int(quality.get('inspected', 0)),
-                'rejected': int(quality.get('rejected', 0)),
-                'rejection_pct': flt(quality.get('rejection_pct', 0))
+                'inspected': inspected,
+                'rejected': rejected,
+                'rejection_pct': rejection_pct
             })
         
         return breakdown

@@ -798,32 +798,25 @@ function showOEEDetails(event, rowIndex) {
     
     console.log('🔍 DEBUG - showOEEDetails rowData:', rowData);
     
-    // Populate production summary header
+    // Clear any existing linked lot badge
+    const modalLotElement = document.getElementById('modal-lot').parentElement;
+    const existingBadge = modalLotElement.querySelector('.badge-warning');
+    if (existingBadge) existingBadge.remove();
+    
+    // Section 1: Populate basic info fields (will be displayed vertically)
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
-    // FIX: Show actual machine name (from Job Card workstation)
     document.getElementById('modal-machine').textContent = rowData.machine_name || 'N/A';
-    // FIX: Show mould reference (from machine_reference field)
     document.getElementById('modal-mold').textContent = rowData.machine_reference || '-';
-    document.getElementById('modal-lot').textContent = rowData.lot_number || '';
-        
-    // NEW: Show linked lot info if available
-    const modalLotElement = document.getElementById('modal-lot').parentElement;
+    
+    // Show lot number with linked lot badge if applicable
+    const lotNumberText = rowData.lot_number || '';
     if (rowData.is_linked_lot && rowData.linked_lot_count > 0) {
-        // Add linked lot badge after lot number
-        const linkedBadge = document.createElement('span');
-        linkedBadge.className = 'badge badge-warning';
-        linkedBadge.style.cssText = 'font-size: 10px; margin-left: 8px;';
-        linkedBadge.title = `Linked lots: ${rowData.linked_lots}`;
-        linkedBadge.textContent = `🔗 ${rowData.linked_lot_count} Lots`;
-        modalLotElement.appendChild(linkedBadge);
-        
-        // Show linked lot breakdown
-        showLinkedLotBreakdown(rowData);
+        document.getElementById('modal-lot').innerHTML = `${lotNumberText} <span class="badge badge-warning" style="font-size: 10px; margin-left: 5px;" title="Linked with ${rowData.linked_lots}">🔗 ${rowData.linked_lot_count} Lots</span>`;
     } else {
-        // Hide linked lot breakdown section if present
-        hideLinkedLotBreakdown();
+        document.getElementById('modal-lot').textContent = lotNumberText;
     }
+    
     document.getElementById('modal-item').textContent = rowData.item_code || '';
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
     
@@ -842,56 +835,38 @@ function showOEEDetails(event, rowIndex) {
     const oeePct = rowData.oee_pct || 0;
 
     // AVAILABILITY COLUMN
-    // Required: Planned Time
     document.getElementById('modal-required-availability').textContent = plannedTime + ' mins';
-
-    // Actual: Available Time (Planned - Downtime)
     document.getElementById('modal-actual-availability').textContent = availableTime.toFixed(1) + ' mins';
-
-    // %: Availability %
     document.getElementById('modal-availability-pct').textContent = availabilityPct.toFixed(2) + '%';
-
-    // Remarks: Downtime
     document.getElementById('modal-availability-remark').textContent = 'Downtime: ' + downtime.toFixed(1) + ' mins';
 
     // PERFORMANCE COLUMN
-    // Required: Target Quantity (from Work Plan Item Target)
     document.getElementById('modal-required-performance').textContent = targetQty + ' lifts';
-    
-    // Actual: Actual Quantity produced
     document.getElementById('modal-actual-performance').textContent = actualQty + ' lifts';
-    
-    // %: Performance %
     document.getElementById('modal-performance-pct').textContent = performancePct.toFixed(2) + '%';
-    
-    // Remarks: Cycle Time
     document.getElementById('modal-performance-remark').textContent = 'Cycle Time: ' + cycleTime.toFixed(2) + 's';
     
     // QUALITY COLUMN
-    // Calculate total pieces produced: actual_quantity × no_of_cavities
     const noOfCavities = rowData.no_of_cavities || 1;
     const totalPiecesProduced = actualQty * noOfCavities;
-    
-    // Required: Total Pieces Produced
-    document.getElementById('modal-required-quality').textContent = totalPiecesProduced + ' pcs';
-    
-    // Actual: Good Pieces = Total Pieces × (1 - Lot Rejection %)
     const goodPieces = Math.round(totalPiecesProduced * (1 - (lotRejectionPct / 100)));
+    
+    document.getElementById('modal-required-quality').textContent = totalPiecesProduced + ' pcs';
     document.getElementById('modal-actual-quality').textContent = goodPieces + ' pcs';
-    
-    // %: Quality % (100 - Lot Rejection %)
     document.getElementById('modal-quality-pct').textContent = qualityPct.toFixed(2) + '%';
-    
-    // Remarks: Lot Rejection %
     document.getElementById('modal-quality-remark').textContent = 'Lot Rej: ' + lotRejectionPct.toFixed(2) + '%';
     
     // OEE COLUMN
-    // Actual: OEE %
     document.getElementById('modal-oee-score').textContent = oeePct.toFixed(2) + '%';
-    
-    // Formula: Shows the quality calculation
     const oeeFormula = `Good Pcs = ${totalPiecesProduced} × (1 - ${lotRejectionPct.toFixed(2)}%) = ${goodPieces} pcs`;
     document.getElementById('modal-oee-formula').textContent = oeeFormula;
+    
+    // Section 2: Show linked lot breakdown if applicable
+    if (rowData.is_linked_lot && rowData.linked_lot_count > 0) {
+        showLinkedLotBreakdown(rowData);
+    } else {
+        hideLinkedLotBreakdown();
+    }
     
     // Show the modal
     $('#oeeDetailModal').modal('show');
@@ -1817,7 +1792,9 @@ function refreshData() {
         // Reload fresh data
         loadData();
     }
-    // NEW: Functions for linked lot breakdown display
+}
+
+// Functions for linked lot breakdown display (moved outside to be globally accessible)
 function showLinkedLotBreakdown(rowData) {
     const modal = document.getElementById('oeeDetailModal');
     if (!modal) return;
@@ -1846,37 +1823,34 @@ function showLinkedLotBreakdown(rowData) {
     frappe.call({
         method: 'smart_screens.smart_screens.api.oee.lot_linking_helper.get_lot_breakdown_details',
         args: {
-            linked_lots: rowData.linked_lots.split(', ')
+            // FIX: Trim spaces from lot numbers when splitting
+            linked_lots: rowData.linked_lots.split(',').map(lot => lot.trim())
         },
         callback: function(r) {
             if (r.message && r.message.length > 0) {
                 renderLinkedLotBreakdown(r.message, breakdownSection);
+            } else {
+                // Show error if no data returned
+                container.innerHTML = `
+                    <div class="alert alert-warning" style="margin: 10px 0;">
+                        <i class="fa fa-exclamation-triangle"></i> No breakdown data available for linked lots.
+                    </div>
+                `;
             }
+        },
+        error: function(err) {
+            console.error('Error fetching linked lot breakdown:', err);
+            container.innerHTML = `
+                <div class="alert alert-danger" style="margin: 10px 0;">
+                    <i class="fa fa-times"></i> Error loading linked lot breakdown.
+                </div>
+            `;
         }
     });
 }
 
 function renderLinkedLotBreakdown(breakdown, container) {
-    let html = `
-        <h6 style="margin-bottom: 10px;">
-            <i class="fa fa-link"></i> Linked Lot Breakdown
-        </h6>
-        <div style="overflow-x: auto;">
-            <table class="table table-sm table-bordered" style="margin-bottom: 0;">
-                <thead>
-                    <tr style="background-color: #f8f9fa;">
-                        <th style="font-size: 11px;">Lot Number</th>
-                        <th style="font-size: 11px; text-align: right;">Lifts</th>
-                        <th style="font-size: 11px; text-align: right;">Weight (kg)</th>
-                        <th style="font-size: 11px; text-align: right;">Pieces</th>
-                        <th style="font-size: 11px; text-align: right;">Inspected</th>
-                        <th style="font-size: 11px; text-align: right;">Rejected</th>
-                        <th style="font-size: 11px; text-align: right;">Rej %</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
+    // Calculate totals
     let totalLifts = 0;
     let totalWeight = 0;
     let totalPieces = 0;
@@ -1889,37 +1863,59 @@ function renderLinkedLotBreakdown(breakdown, container) {
         totalPieces += lot.pieces;
         totalInspected += lot.inspected;
         totalRejected += lot.rejected;
-        
+    });
+    
+    const aggregateRejectionPct = totalInspected > 0 ? (totalRejected / totalInspected * 100) : 0;
+    
+    // Simple, clean table without extra cards
+    let html = `
+        <h6 style="font-weight: 600; margin-bottom: 10px; color: #495057;">
+            <i class="fa fa-link"></i> Linked Lot Breakdown (${breakdown.length} lots)
+        </h6>
+        <div style="overflow-x: auto;">
+            <table class="table table-sm table-bordered" style="margin-bottom: 10px; font-size: 11px;">
+                <thead style="background-color: #f8f9fa;">
+                    <tr>
+                        <th>Lot Number</th>
+                        <th class="text-right">Lifts</th>
+                        <th class="text-right">Weight (kg)</th>
+                        <th class="text-right">Pieces</th>
+                        <th class="text-right">Inspected</th>
+                        <th class="text-right">Rejected</th>
+                        <th class="text-right">Rej %</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    breakdown.forEach(lot => {
         html += `
             <tr>
-                <td style="font-size: 11px;"><strong>${lot.lot_number}</strong></td>
-                <td style="font-size: 11px; text-align: right;">${lot.lifts}</td>
-                <td style="font-size: 11px; text-align: right;">${lot.weight_kg.toFixed(2)}</td>
-                <td style="font-size: 11px; text-align: right;">${lot.pieces.toLocaleString()}</td>
-                <td style="font-size: 11px; text-align: right;">${lot.inspected.toLocaleString()}</td>
-                <td style="font-size: 11px; text-align: right;">${lot.rejected}</td>
-                <td style="font-size: 11px; text-align: right;">${lot.rejection_pct.toFixed(2)}%</td>
+                <td><strong>${lot.lot_number}</strong></td>
+                <td class="text-right">${lot.lifts}</td>
+                <td class="text-right">${lot.weight_kg.toFixed(2)}</td>
+                <td class="text-right">${lot.pieces.toLocaleString()}</td>
+                <td class="text-right">${lot.inspected.toLocaleString()}</td>
+                <td class="text-right">${lot.rejected}</td>
+                <td class="text-right">${lot.rejection_pct.toFixed(2)}%</td>
             </tr>
         `;
     });
     
-    // Add totals row
-    const aggregateRejectionPct = totalInspected > 0 ? (totalRejected / totalInspected * 100) : 0;
-    
     html += `
-                    <tr style="background-color: #e9ecef; font-weight: bold;">
-                        <td style="font-size: 11px;">TOTAL (Aggregated)</td>
-                        <td style="font-size: 11px; text-align: right;">${totalLifts}</td>
-                        <td style="font-size: 11px; text-align: right;">${totalWeight.toFixed(2)}</td>
-                        <td style="font-size: 11px; text-align: right;">${totalPieces.toLocaleString()}</td>
-                        <td style="font-size: 11px; text-align: right;">${totalInspected.toLocaleString()}</td>
-                        <td style="font-size: 11px; text-align: right;">${totalRejected}</td>
-                        <td style="font-size: 11px; text-align: right;">${aggregateRejectionPct.toFixed(2)}%</td>
+                    <tr style="background-color: #e3f2fd; font-weight: bold;">
+                        <td>TOTAL (Aggregated)</td>
+                        <td class="text-right">${totalLifts}</td>
+                        <td class="text-right">${totalWeight.toFixed(2)}</td>
+                        <td class="text-right">${totalPieces.toLocaleString()}</td>
+                        <td class="text-right">${totalInspected.toLocaleString()}</td>
+                        <td class="text-right">${totalRejected}</td>
+                        <td class="text-right">${aggregateRejectionPct.toFixed(2)}%</td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        <p style="margin-top: 10px; margin-bottom: 0; font-size: 11px; color: #6c757d;">
+        <p style="margin: 0; font-size: 11px; color: #6c757d;">
             <i class="fa fa-info-circle"></i> OEE calculations use aggregated values from all linked lots.
         </p>
     `;
@@ -1932,5 +1928,4 @@ function hideLinkedLotBreakdown() {
     if (breakdownSection) {
         breakdownSection.style.display = 'none';
     }
-}
 }
