@@ -246,7 +246,224 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
             frappe.log_error(f"Error calculating OEE for entry: {str(e)}", "OEE Calculation Error")
             continue
     
+    # MOVED: Create/Update OEE Lot Linking records AFTER OEE calculation is complete
+    # This way it doesn't block the main OEE report generation
+    try:
+        create_oee_lot_linking_records(production_data, production_date, shift_filter)
+    except Exception as e:
+        # Log error but don't fail the entire process
+        frappe.log_error(
+            f"Error creating OEE Lot Linking records (non-blocking): {frappe.get_traceback()}",
+            "OEE Lot Linking Creation Error"
+        )
+    
     return oee_results
+
+
+def create_oee_lot_linking_records(production_data, production_date, shift_filter):
+    """
+    Create or update OEE Lot Linking records for all linked lot groups.
+    This is called when generating OEE report to allow users to exclude trial lots.
+    
+    Args:
+        production_data: List of production entries from adapter
+        production_date: Production date
+        shift_filter: Shift filter (for grouping)
+    """
+    try:
+        # Track processed linked groups to avoid duplicates
+        processed_groups = set()
+        created_count = 0
+        skipped_count = 0
+        
+        for entry in production_data:
+            lot_number = entry.get('lot_number')
+            if not lot_number:
+                continue
+            
+            shift_type = entry.get('shift_type')
+            
+            # FIX: Get machine from correct field (machine_name or press_machine)
+            machine = entry.get('machine_name') or entry.get('press_machine') or entry.get('workstation')
+            
+            # FIX: Get item_code from correct field
+            item_code = entry.get('item_code') or entry.get('item_to_produce')
+            
+            # FIX: Get operator name
+            operator = entry.get('operator_name') or entry.get('scan_operator')
+            
+            # Validate required fields before proceeding
+            if not machine or not item_code:
+                frappe.logger().warning(
+                    f"Skipping OEE Lot Linking for lot {lot_number} - missing machine or item_code"
+                )
+                continue
+            
+            # Use the SAME linked lot detection logic as the main OEE calculation
+            linked_info = get_linked_lot_info(
+                lot_number,
+                entry.get('production_date'),
+                shift_type,
+                machine
+            )
+            
+            is_linked = linked_info.get('is_linked', False)
+            linked_lots = linked_info.get('linked_lots', [])
+            
+            # Only process linked lot groups (multiple lots)
+            if not is_linked or len(linked_lots) <= 1:
+                continue
+            
+            # Create a unique key for this linked group (sorted lot numbers)
+            group_key = '|'.join(sorted(linked_lots))
+            
+            # Skip if we've already processed this group in this run
+            if group_key in processed_groups:
+                continue
+            
+            processed_groups.add(group_key)
+            
+            # Use the first lot as the main lot number
+            main_lot_number = linked_lots[0]
+            
+            # FIX: Check if ANY of these lots are already linked in an ACTIVE OEE Lot Linking document
+            # This respects the validate_no_circular_references() validation
+            existing_active_links = frappe.db.sql("""
+                SELECT DISTINCT parent.name, parent.main_lot_number
+                FROM `tabOEE Lot Linking` parent
+                INNER JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
+                WHERE parent.status = 'Active'
+                AND parent.docstatus < 2
+                AND (parent.main_lot_number IN %(lots)s OR child.lot_number IN %(lots)s)
+            """, {
+                'lots': linked_lots
+            }, as_dict=True)
+            
+            if existing_active_links and len(existing_active_links) > 0:
+                # OEE Lot Linking already exists for these lots - SKIP creation
+                existing_name = existing_active_links[0]['name']
+                skipped_count += 1
+                frappe.logger().info(
+                    f"Skipped OEE Lot Linking creation - already exists: {existing_name} for lots {linked_lots}"
+                )
+                continue
+            
+            # No existing active linking found - CREATE NEW
+            linking_doc = frappe.new_doc('OEE Lot Linking')
+            linking_doc.main_lot_number = main_lot_number
+            linking_doc.production_date = production_date
+            linking_doc.shift_type = shift_type
+            linking_doc.machine_reference = machine  # FIX: Now correctly populated
+            linking_doc.operator_name = operator
+            linking_doc.item_code = item_code  # FIX: Now correctly populated
+            linking_doc.status = 'Active'
+            
+            # IMPORTANT: Add child rows for ALL lots in the linked group (including main lot)
+            # This satisfies the validate_main_lot_in_linked_lots() validation
+            for linked_lot in linked_lots:
+                # Find the production entry for this lot in current production_data
+                prod_entries = [e for e in production_data if e.get('lot_number') == linked_lot]
+                
+                if prod_entries:
+                    # Use data from production_data (preferred)
+                    for prod_entry in prod_entries:
+                        prod_entry_name = prod_entry.get('name')
+                        # FIX: Use correct field names from Moulding Production Entry
+                        weight = flt(prod_entry.get('weight', 0), 3)  # Direct field name
+                        lifts = int(prod_entry.get('number_of_lifts', 0))  # Direct field name
+                        no_of_cavities = int(prod_entry.get('no_of_running_cavities', 0))
+                        pieces = lifts * no_of_cavities  # Calculate pieces
+                        
+                        linking_doc.append('linked_lots', {
+                            'production_entry': prod_entry_name,
+                            'lot_number': linked_lot,
+                            'weight': weight,
+                            'lifts': lifts,
+                            'pieces': pieces,
+                            'oee_include': 1  # Default to True (include in OEE)
+                        })
+                else:
+                    # Fallback: Query database for missing production entry
+                    prod_entry_data = frappe.db.sql("""
+                        SELECT 
+                            mpe.name as production_entry,
+                            mpe.weight,
+                            mpe.number_of_lifts,
+                            mpe.no_of_running_cavities,
+                            (mpe.number_of_lifts * mpe.no_of_running_cavities) as pieces
+                        FROM `tabMoulding Production Entry` mpe
+                        LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
+                        WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) = %(lot)s
+                        AND DATE(mpe.moulding_date) = %(date)s
+                        AND jc.shift_type = %(shift)s
+                        AND jc.workstation = %(machine)s
+                        AND mpe.docstatus = 1
+                        LIMIT 1
+                    """, {
+                        'lot': linked_lot,
+                        'date': production_date,
+                        'shift': shift_type,
+                        'machine': machine
+                    }, as_dict=True)
+                    
+                    if prod_entry_data and len(prod_entry_data) > 0:
+                        prod_entry = prod_entry_data[0]
+                        linking_doc.append('linked_lots', {
+                            'production_entry': prod_entry['production_entry'],
+                            'lot_number': linked_lot,
+                            'weight': flt(prod_entry.get('weight', 0), 3),
+                            'lifts': int(prod_entry.get('number_of_lifts', 0)),
+                            'pieces': int(prod_entry.get('pieces', 0)),
+                            'oee_include': 1  # Default to True
+                        })
+            
+            # Validate that we have child rows before saving
+            if not linking_doc.linked_lots or len(linking_doc.linked_lots) == 0:
+                frappe.log_error(
+                    f"Cannot create OEE Lot Linking - no linked lots data found for main lot {main_lot_number}",
+                    "OEE Lot Linking Creation Warning"
+                )
+                continue
+            
+            # Validate that main lot is included in child table (required by validation)
+            child_lot_numbers = [row.lot_number for row in linking_doc.linked_lots]
+            if main_lot_number not in child_lot_numbers:
+                frappe.log_error(
+                    f"Cannot create OEE Lot Linking - main lot {main_lot_number} not in child table: {child_lot_numbers}",
+                    "OEE Lot Linking Creation Warning"
+                )
+                continue
+            
+            # Save the document
+            try:
+                linking_doc.insert(ignore_permissions=True)
+                created_count += 1
+                frappe.logger().info(
+                    f"Created OEE Lot Linking: {linking_doc.name} for linked lots {linked_lots}"
+                )
+                frappe.db.commit()
+            except frappe.exceptions.ValidationError as ve:
+                # Log validation errors but don't fail the entire process
+                # FIX: Shorten the error title to avoid "Character Length Exceeded" error
+                short_title = f"OEE Linking Validation Error"
+                frappe.log_error(
+                    title=short_title,
+                    message=f"Validation error creating OEE Lot Linking for lots {linked_lots}:\n\n{str(ve)}\n\n{frappe.get_traceback()}"
+                )
+                continue
+        
+        # Log summary
+        if created_count > 0 or skipped_count > 0:
+            frappe.logger().info(
+                f"OEE Lot Linking creation summary: Created={created_count}, Skipped={skipped_count}"
+            )
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error creating OEE Lot Linking records: {frappe.get_traceback()}",
+            "OEE Lot Linking Creation Error"
+        )
+        pass
 
 
 @frappe.whitelist()
@@ -1047,7 +1264,7 @@ def create_car_from_oee_dashboard(production_entry, parent_daily_oee_report=None
                 
                 # Find the production record row in the child table
                 for row in report_doc.production_records:
-                    if row.production_entry == production_entry:
+                    if (row.production_entry == production_entry):
                         # Document is draft, safe to update normally
                         row.resolution_status = car_doc.resolution_status
                         row.resolved_record = car_doc.name  # FIXED: Use resolved_record instead of car_reference

@@ -117,6 +117,9 @@ def aggregate_production_data(linked_lots):
     """
     Aggregate production data across multiple linked lots
     
+    NEW: Respects oee_include checkbox from OEE Lot Linking records
+    Only includes production entries where oee_include = 1
+    
     Args:
         linked_lots: List of lot numbers to aggregate
     
@@ -135,7 +138,71 @@ def aggregate_production_data(linked_lots):
                 'entry_count': 0
             }
         
+        # NEW: Get OEE Lot Linking record to check oee_include checkbox
+        # FIX: Search by ANY of the linked lots in the child table, not just main_lot_number
         placeholders = ','.join(['%s'] * len(linked_lots))
+        
+        linking_records = frappe.db.sql(f"""
+            SELECT DISTINCT parent.name, parent.main_lot_number, parent.production_date, parent.shift_type
+            FROM `tabOEE Lot Linking` parent
+            INNER JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
+            WHERE parent.status = 'Active'
+            AND parent.docstatus < 2
+            AND child.lot_number IN ({placeholders})
+            ORDER BY parent.creation DESC
+            LIMIT 1
+        """, tuple(linked_lots), as_dict=True)
+        
+        # Get included production entries from OEE Lot Linking
+        included_entries = []
+        if linking_records and len(linking_records) > 0:
+            linking_name = linking_records[0]['name']
+            
+            # Get child table rows where oee_include = 1
+            included_rows = frappe.db.sql("""
+                SELECT production_entry, lot_number
+                FROM `tabOEE Linked Lot Item`
+                WHERE parent = %s
+                AND oee_include = 1
+            """, (linking_name,), as_dict=True)
+            
+            included_entries = [row['production_entry'] for row in included_rows]
+            
+            # Log for debugging
+            frappe.logger().info(
+                f"OEE Lot Linking found: {linking_name}, Included entries: {len(included_entries)} out of total linked lots"
+            )
+        
+        # If no OEE Lot Linking record exists, include all entries (default behavior)
+        if not included_entries:
+            # Fallback: Use all production entries for the linked lots
+            fallback_placeholders = ','.join(['%s'] * len(linked_lots))
+            fallback_query = f"""
+                SELECT name
+                FROM `tabMoulding Production Entry`
+                WHERE COALESCE(scan_lot_number, batch_no) IN ({fallback_placeholders})
+                AND docstatus = 1
+            """
+            fallback_result = frappe.db.sql(fallback_query, tuple(linked_lots), as_dict=True)
+            included_entries = [row['name'] for row in fallback_result]
+            
+            frappe.logger().info(
+                f"No OEE Lot Linking found for lots {linked_lots}, using all {len(included_entries)} entries"
+            )
+        
+        # Now aggregate data from ONLY included entries
+        if not included_entries:
+            return {
+                'total_lifts': 0,
+                'total_weight_kg': 0,
+                'total_pieces': 0,
+                'total_target_qty': 0,
+                'total_number_of_products': 0,
+                'avg_downtime': 0,
+                'entry_count': 0
+            }
+        
+        entry_placeholders = ','.join(['%s'] * len(included_entries))
         
         # FIX: Query actual database fields and calculate target from Work Plan Item Target
         query = f"""
@@ -149,13 +216,13 @@ def aggregate_production_data(linked_lots):
                 jc.shift_type as shift_type
             FROM `tabMoulding Production Entry` mpe
             LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
-            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
+            WHERE mpe.name IN ({entry_placeholders})
             AND mpe.docstatus = 1
             GROUP BY mpe.item_to_produce, jc.shift_type
             LIMIT 1
         """
         
-        result = frappe.db.sql(query, tuple(linked_lots), as_dict=True)
+        result = frappe.db.sql(query, tuple(included_entries), as_dict=True)
         
         if result and len(result) > 0:
             total_lifts = int(result[0].get('total_lifts', 0))

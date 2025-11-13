@@ -570,3 +570,189 @@ def generate_daily_oee_report(filters):
     frappe.msgprint(f"Created Daily OEE Report {report_doc.name} with {len(production_records)} production record(s)")
     
     return report_doc.name
+
+
+@frappe.whitelist()
+def refresh_report_with_fresh_data(report_name):
+    """
+    Refresh an existing Daily OEE Report with fresh data from production entries.
+    This re-fetches data from production entries and respects:
+    - Updated OEE Lot Linking oee_include checkboxes
+    - Updated lot inspection statuses
+    - New CAR documents created
+    
+    Args:
+        report_name: Name of Daily OEE Report to refresh
+    
+    Returns:
+        {
+            'success': True,
+            'data': {...updated production records...},
+            'summary': {...updated summary...},
+            'message': 'Report refreshed with fresh data'
+        }
+    """
+    if not report_name:
+        return {'success': False, 'error': 'Report Name is required'}
+    
+    # Check if report exists and is draft
+    if not frappe.db.exists("Daily OEE Report", report_name):
+        return {'success': False, 'error': f'Daily OEE Report {report_name} not found'}
+    
+    try:
+        # Get report document
+        report_doc = frappe.get_doc("Daily OEE Report", report_name)
+        
+        # Can only refresh draft reports
+        if report_doc.docstatus != 0:
+            return {'success': False, 'error': 'Cannot refresh a submitted or cancelled report'}
+        
+        # Get the filters from the report
+        production_date = report_doc.production_date
+        shift_filter = report_doc.shift_filter or 'all'
+        machine_filter = report_doc.machine_filter or ''
+        
+        # Call get_oee_data to fetch FRESH data from production entries
+        from smart_screens.smart_screens.page.oee_dashboard.oee_dashboard import get_oee_data
+        
+        fresh_data = get_oee_data(
+            production_date=str(production_date),
+            process_type='Moulding',
+            shift_filter=shift_filter,
+            machine_filter=machine_filter,
+            lot_filter=None,
+            item_filter=None
+        )
+        
+        if not fresh_data:
+            return {'success': False, 'error': 'No production data found for this date/filter combination'}
+        
+        # Create lookup of existing records to preserve resolution status
+        existing_records = {row.production_entry: row for row in report_doc.production_records}
+        
+        # Clear and rebuild child table with fresh data
+        report_doc.production_records = []
+        
+        for record in fresh_data:
+            production_entry_name = record.get('name')
+            
+            # Check if this record already has resolution data
+            existing_row = existing_records.get(production_entry_name)
+            
+            # NEW: Add linked lot fields from fresh data
+            is_linked_lot = record.get('is_linked_lot', False)
+            linked_lots = record.get('linked_lots', '')
+            linked_lot_count = record.get('linked_lot_count', 0)
+            
+            report_doc.append("production_records", {
+                "production_entry": production_entry_name,
+                "production_date": record.get('production_date'),
+                "shift_type": record.get('shift_type', ''),
+                "operator_name": record.get('operator_name', ''),
+                "machine_reference": record.get('machine_reference', ''),
+                "machine_name": record.get('machine_name', ''),
+                "item_code": record.get('item_code', ''),
+                "lot_number": record.get('lot_number', ''),
+                # NEW: Store linked lot information in report
+                "is_linked_lot": is_linked_lot,
+                "linked_lots": linked_lots,
+                "linked_lot_count": linked_lot_count,
+                # Fresh OEE metrics (respecting updated OEE Lot Linking)
+                "target_quantity": flt(record.get('target_quantity', 0)),
+                "actual_quantity": flt(record.get('actual_quantity', 0)),
+                "number_of_products": int(record.get('number_of_products', 0)),
+                "variance_qty": flt(record.get('variance_qty', 0)),
+                "oee_pct": flt(record.get('oee_pct', 0)),
+                "production_efficiency_pct": flt(record.get('production_efficiency_pct', 0)),
+                "rejection_percentage": flt(record.get('rejection_percentage', 0)),
+                "availability_pct": flt(record.get('availability_pct', 0)),
+                "performance_pct": flt(record.get('performance_pct', 0)),
+                "quality_pct": flt(record.get('quality_pct', 0)),
+                # OEE breakdown fields for modal
+                "planned_time_minutes": flt(record.get('planned_time_minutes', 450)),
+                "downtime_minutes": flt(record.get('downtime_minutes', 0)),
+                "available_time_minutes": flt(record.get('available_time_minutes', 450)),
+                "cycle_time_seconds": flt(record.get('cycle_time_seconds', 0)),
+                "no_of_cavities": int(record.get('no_of_cavities', 0)),
+                "total_inspected": int(record.get('total_inspected', 0)),
+                "good_pieces": int(record.get('good_pieces', 0)),
+                "rejected_pieces": int(record.get('rejected_pieces', 0)),
+                # Preserve existing resolution data if available
+                "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
+                "resolved_record": existing_row.resolved_record if existing_row else ''
+            })
+        
+        # Recalculate summary
+        report_doc.calculate_summary()
+        
+        # Save report
+        report_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+        
+        # Format data for frontend (same format as get_report_data)
+        production_records = []
+        for row in report_doc.production_records:
+            prod_date_formatted = frappe.utils.formatdate(row.production_date, 'dd-MM-yyyy') if row.production_date else ''
+            lot_inspection_status = get_lot_inspection_status(row.production_entry)
+            
+            production_records.append({
+                'name': row.production_entry,
+                'production_date': str(row.production_date) if row.production_date else '',
+                'production_date_formatted': prod_date_formatted,
+                'shift_type': row.shift_type or '',
+                'operator_name': row.operator_name or '',
+                'machine_reference': row.machine_reference or '',
+                'machine_name': getattr(row, 'machine_name', 'N/A'),
+                'item_code': row.item_code or '',
+                'lot_number': row.lot_number or '',
+                'is_linked_lot': getattr(row, 'is_linked_lot', False),
+                'linked_lots': getattr(row, 'linked_lots', ''),
+                'linked_lot_count': getattr(row, 'linked_lot_count', 0),
+                'target_quantity': flt(row.target_quantity, 2),
+                'actual_quantity': flt(row.actual_quantity, 2),
+                'number_of_products': flt(getattr(row, 'number_of_products', 0), 2),
+                'variance_qty': flt(row.variance_qty, 2),
+                'oee_pct': flt(row.oee_pct, 2),
+                'production_equipment_efficiency': flt(row.production_efficiency_pct, 2),
+                'rejection_percentage': flt(row.rejection_percentage, 2),
+                'availability_pct': flt(row.availability_pct, 2),
+                'performance_pct': flt(row.performance_pct, 2),
+                'quality_pct': flt(row.quality_pct, 2),
+                'planned_time_minutes': flt(getattr(row, 'planned_time_minutes', 450), 2),
+                'downtime_minutes': flt(getattr(row, 'downtime_minutes', 0), 2),
+                'available_time_minutes': flt(getattr(row, 'available_time_minutes', 450), 2),
+                'cycle_time_seconds': flt(getattr(row, 'cycle_time_seconds', 0), 2),
+                'no_of_cavities': int(getattr(row, 'no_of_cavities', 0)),
+                'total_inspected': int(getattr(row, 'total_inspected', 0)),
+                'good_pieces': int(getattr(row, 'good_pieces', 0)),
+                'rejected_pieces': int(getattr(row, 'rejected_pieces', 0)),
+                'resolution_status': getattr(row, 'resolution_status', 'Pending'),
+                'resolved_record': getattr(row, 'resolved_record', ''),
+                'lot_inspection_status': lot_inspection_status
+            })
+        
+        summary = {
+            'avg_availability': flt(report_doc.avg_availability, 2),
+            'avg_performance': flt(report_doc.avg_performance, 2),
+            'avg_quality': flt(report_doc.avg_quality, 2),
+            'avg_oee': flt(report_doc.avg_oee, 2)
+        }
+        
+        return {
+            'success': True,
+            'data': {
+                'production_records': production_records,
+                'summary': summary
+            },
+            'message': f'Report refreshed with {len(production_records)} fresh record(s)'
+        }
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error refreshing report with fresh data: {frappe.get_traceback()}",
+            "Refresh Report Error"
+        )
+        return {
+            'success': False,
+            'error': str(e)
+        }

@@ -695,10 +695,15 @@ function updateTable(data) {
         return;
     }
     
-    // DEBUG: Log first record to see lot_inspection_status
+    // DEBUG: Log first record to see linked lot fields
     if (data.length > 0) {
-        console.log('🔍 DEBUG - First record lot_inspection_status:', data[0].lot_inspection_status);
-        console.log('🔍 DEBUG - First record full data:', data[0]);
+        console.log('🔍 DEBUG - updateTable first record:', {
+            lot_number: data[0].lot_number,
+            is_linked_lot: data[0].is_linked_lot,
+            linked_lots: data[0].linked_lots,
+            linked_lot_count: data[0].linked_lot_count,
+            lot_inspection_status: data[0].lot_inspection_status
+        });
     }
     
     data.forEach((row, index) => {
@@ -743,18 +748,26 @@ function updateTable(data) {
             }
         }
         
+        // FIX: Build linked lot badge with CURRENT row data
+        const isLinkedLot = row.is_linked_lot || false;
+        const linkedLotCount = row.linked_lot_count || 0;
+        const linkedLots = row.linked_lots || '';
+        const linkedLotBadge = isLinkedLot && linkedLotCount > 0 
+            ? `<br><span class="badge badge-warning" style="font-size: 9px; margin-top: 2px;" title="Linked with ${linkedLots}">🔗 Linked (${linkedLotCount})</span>` 
+            : '';
+        
         tr.innerHTML = `
             <td>${row.production_date_formatted || ''}</td>
             <td>${row.shift_type || ''}</td>
             <td><small>${row.operator_name || '-'}</small></td>
             <td><small><strong>${row.machine_reference || ''}</strong></small></td>
             <td><small><strong>${row.machine_name || 'N/A'}</strong></small></td>
-                    <td><small><strong>${row.item_code || ''}</strong></small></td>
-        <td><small>
-            <span class="badge badge-info">${row.lot_number || ''}</span>
-            ${row.is_linked_lot ? `<br><span class="badge badge-warning" style="font-size: 9px; margin-top: 2px;" title="Linked with ${row.linked_lots}">🔗 Linked (${row.linked_lot_count})</span>` : ''}
-        </small></td>   
-         <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>
+            <td><small><strong>${row.item_code || ''}</strong></small></td>
+            <td><small>
+                <span class="badge badge-info">${row.lot_number || ''}</span>
+                ${linkedLotBadge}
+            </small></td>   
+            <td class="text-right"><small><strong>${row.actual_quantity || 0}</strong></small></td>
             <td class="text-right"><small><strong>${row.number_of_products || 0}</strong></small></td>
             <td class="text-right"><small>${row.availability_pct || 0}%</small></td>
             <td class="text-right"><small>${row.performance_pct || 0}%</small></td>
@@ -767,6 +780,8 @@ function updateTable(data) {
                 </div>
             </td>
         `;
+        
+        // FIX: Store CURRENT row data (with updated linked lot fields)
         tr.dataset.rowData = JSON.stringify(row);
         tr.dataset.rowIndex = index;
         
@@ -1731,57 +1746,63 @@ function applyFilters() {
 function refreshData() {
     // Check if we're in resume mode (i.e., working with a saved/resumed report)
     if (savedReportName) {
-        console.log('🔄 Refreshing resumed report:', savedReportName);
+        console.log('🔄 In resume mode - show refresh options');
         
-        // Reload the saved report data to get latest resolution statuses
-        showLoading();
-        
-        frappe.call({
-            method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
-            args: {
-                report_name: savedReportName
-            },
-            callback: function(r) {
-                hideLoading();
-                
-                if (r.message && r.message.success) {
-                    // Reload the saved report data
-                    const savedData = r.message.data;
-                    
-                    // Update current data from saved report
-                    currentData = savedData.production_records || [];
-                    sortedData = [...currentData];
-                    
-                    // Update table with refreshed data
-                    updateTable(sortedData);
-                    
-                    // Update summary from saved report
-                    if (savedData.summary) {
-                        updateSummaryCards(savedData.summary);
-                    }
-                    
-                    // Update report data (preserve existing reportData structure)
-                    if (reportData) {
-                        reportData.data = currentData;
-                        reportData.summary = savedData.summary;
-                    }
-                    
-                    frappe.show_alert({
-                        message: `Report refreshed: ${currentData.length} records loaded`,
-                        indicator: 'blue'
-                    });
-                    
-                    console.log('✅ Report refreshed successfully in resume mode');
-                } else {
-                    frappe.msgprint('Error refreshing report data: ' + (r.message.error || 'Unknown error'));
+        // Show a dialog with two refresh options
+        const dialog = new frappe.ui.Dialog({
+            title: 'Refresh Report Data',
+            fields: [
+                {
+                    label: 'Choose Refresh Mode',
+                    fieldtype: 'Section Break',
+                },
+                {
+                    label: 'Refresh Option',
+                    fieldname: 'refresh_option',
+                    fieldtype: 'Select',
+                    options: [
+                        'Reload Saved Snapshots',
+                        'Refresh with Fresh Data'
+                    ],
+                    default: 'Reload Saved Snapshots',
+                    description: 'Choose how to refresh the report data'
+                },
+                {
+                    label: '',
+                    fieldtype: 'HTML',
+                    options: `
+                        <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                            <p style="margin: 0; font-size: 13px;">
+                                <strong>🔄 Reload Saved Snapshots:</strong><br>
+                                <small>Fast reload from saved data. Shows updated CAR statuses.</small>
+                            </p>
+                            <hr style="margin: 10px 0;">
+                            <p style="margin: 0; font-size: 13px;">
+                                <strong>🆕 Refresh with Fresh Data:</strong><br>
+                                <small>
+                                    Re-fetch from production entries. Updates:<br>
+                                    • Lot Inspection status (enables CAR buttons)<br>
+                                    • OEE Lot Linking oee_include changes<br>
+                                    • Recalculated OEE values
+                                </small>
+                            </p>
+                        </div>
+                    `
                 }
-            },
-            error: function(err) {
-                hideLoading();
-                console.error('Error refreshing report:', err);
-                frappe.msgprint('Error refreshing report. Please try again.');
+            ],
+            primary_action_label: 'Refresh',
+            primary_action(values) {
+                dialog.hide();
+                
+                if (values.refresh_option === 'Refresh with Fresh Data') {
+                    refreshWithFreshData();
+                } else {
+                    refreshWithSavedSnapshots();
+                }
             }
         });
+        
+        dialog.show();
     } else {
         // Not in resume mode - reset report state and reload fresh data
         console.log('🔄 Refreshing with fresh data (not in resume mode)');
@@ -1792,6 +1813,144 @@ function refreshData() {
         // Reload fresh data
         loadData();
     }
+}
+
+function refreshWithSavedSnapshots() {
+    /**
+     * Reload data from saved report snapshots
+     * Fast, but doesn't update lot inspection status or OEE Lot Linking changes
+     */
+    console.log('🔄 Refreshing with saved snapshots:', savedReportName);
+    showLoading();
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
+        args: {
+            report_name: savedReportName
+        },
+        callback: function(r) {
+            hideLoading();
+            
+            if (r.message && r.message.success) {
+                // Reload the saved report data
+                const savedData = r.message.data;
+                
+                // Update current data from saved report
+                currentData = savedData.production_records || [];
+                sortedData = [...currentData];
+                
+                // Update table with refreshed data
+                updateTable(sortedData);
+                
+                // Update summary from saved report
+                if (savedData.summary) {
+                    updateSummaryCards(savedData.summary);
+                }
+                
+                // Update report data (preserve existing reportData structure)
+                if (reportData) {
+                    reportData.data = currentData;
+                    reportData.summary = savedData.summary;
+                }
+                
+                frappe.show_alert({
+                    message: `Report refreshed: ${currentData.length} records loaded`,
+                    indicator: 'blue'
+                });
+                
+                console.log('✅ Report refreshed successfully (snapshots mode)');
+            } else {
+                frappe.msgprint('Error refreshing report data: ' + (r.message.error || 'Unknown error'));
+            }
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error refreshing report:', err);
+            frappe.msgprint('Error refreshing report. Please try again.');
+        }
+    });
+}
+
+function refreshWithFreshData() {
+    /**
+     * Refresh report with FRESH data from production entries
+     * Slower, but updates:
+     * - Lot Inspection status (enables CAR buttons)
+     * - Respects updated OEE Lot Linking oee_include checkboxes
+     * - Recalculates OEE values
+     */
+    console.log('🆕 Refreshing with FRESH data:', savedReportName);
+    showLoading();
+    
+    frappe.call({
+        method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.refresh_report_with_fresh_data',
+        args: {
+            report_name: savedReportName
+        },
+        callback: function(r) {
+            hideLoading();
+            
+            if (r.message && r.message.success) {
+                const freshData = r.message.data;
+                
+                // Update current data with fresh records
+                currentData = freshData.production_records || [];
+                sortedData = [...currentData];
+                
+                // Update table with fresh data
+                updateTable(sortedData);
+                
+                // Update summary
+                if (freshData.summary) {
+                    updateSummaryCards(freshData.summary);
+                }
+                
+                // Update report data
+                if (reportData) {
+                    reportData.data = currentData;
+                    reportData.summary = freshData.summary;
+                }
+                
+                frappe.show_alert({
+                    message: r.message.message || `Report refreshed with fresh data: ${currentData.length} records`,
+                    indicator: 'green'
+                });
+                
+                console.log('✅ Report refreshed successfully with fresh data');
+                
+                // Show additional info if significant changes detected
+                frappe.msgprint({
+                    title: 'Report Refreshed with Fresh Data',
+                    message: `
+                        <p>✅ Successfully refreshed report with fresh production data.</p>
+                        <p><strong>Updates Applied:</strong></p>
+                        <ul style="margin-left: 20px; font-size: 13px;">
+                            <li>✅ Lot Inspection statuses updated</li>
+                            <li>✅ OEE Lot Linking oee_include filters applied</li>
+                            <li>✅ OEE values recalculated</li>
+                            <li>✅ CAR eligibility re-evaluated</li>
+                        </ul>
+                        <p style="margin-top: 10px;">
+                            <small>Total Records: ${currentData.length}</small>
+                        </p>
+                    `,
+                    indicator: 'green'
+                });
+            } else {
+                const errorMsg = r.message.error || 'Unknown error occurred';
+                frappe.msgprint({
+                    title: 'Refresh Failed',
+                    message: `Error refreshing report with fresh data: ${errorMsg}`,
+                    indicator: 'red'
+                });
+            }
+        },
+        error: function(err) {
+            hideLoading();
+            console.error('Error refreshing with fresh data:', err);
+            frappe.msgprint('Error refreshing report with fresh data. Please try again.');
+        }
+    });
 }
 
 // Functions for linked lot breakdown display (moved outside to be globally accessible)

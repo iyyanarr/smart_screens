@@ -247,7 +247,7 @@ class MouldingAdapter(ProcessAdapter):
                         'no_of_running_cavities': flt(wp.get('no_of_cavities', 0)),
                         'downtime_minutes': flt(prod.get('avg_downtime_minutes', 0)),
                         'operator_name': prod.get('operator_name', ''),
-                        'weight': 0,
+                        'weight': total_production_weight_kg,  # FIX: Use actual weight instead of 0
                         'target_lifts': flt(wp.get('target_lifts', 0)),
                         'total_pieces_produced': flt(prod['total_pieces_produced']),
                         'work_plan_no': wp.get('work_plan_no', ''),
