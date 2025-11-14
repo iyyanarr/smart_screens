@@ -329,7 +329,8 @@ def aggregate_quality_data(linked_lots):
         Total Inspected = Sum of all inspected_qty across all lot inspections
         Rejection % = (Total Rejected / Total Inspected) × 100
     
-    FIX: If total_inspected = 0 but total_rejected > 0, use production pieces as inspected qty
+    FIX: Use 'inspected_qty_nos' field instead of 'total_inspected_qty_nos'
+         because total_inspected_qty_nos is always 0 (not populated by the form)
     
     Args:
         linked_lots: List of lot numbers to aggregate
@@ -349,10 +350,11 @@ def aggregate_quality_data(linked_lots):
         
         placeholders = ','.join(['%s'] * len(linked_lots))
         
-        # Query inspection data
+        # FIX: Query the CORRECT field - 'inspected_qty_nos' not 'total_inspected_qty_nos'
+        # The form saves data to 'inspected_qty_nos' but 'total_inspected_qty_nos' is always 0
         query = f"""
             SELECT 
-                SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as total_inspected,
+                SUM(COALESCE(ie.inspected_qty_nos, 0)) as total_inspected,
                 SUM(COALESCE(ie.total_rejected_qty, 0)) as total_rejected,
                 AVG(COALESCE(ie.total_rejected_qty_in_percentage, 0)) as avg_rejection_pct
             FROM `tabInspection Entry` ie
@@ -489,10 +491,11 @@ def get_lot_breakdown_details(linked_lots):
         production_details = frappe.db.sql(prod_query, tuple(linked_lots), as_dict=True)
         
         # Get quality details per lot
+        # FIX: Use 'inspected_qty_nos' instead of 'total_inspected_qty_nos'
         quality_query = f"""
             SELECT 
                 ie.lot_no as lot_number,
-                SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as inspected,
+                SUM(COALESCE(ie.inspected_qty_nos, 0)) as inspected,
                 SUM(COALESCE(ie.total_rejected_qty, 0)) as rejected
             FROM `tabInspection Entry` ie
             WHERE ie.lot_no IN ({placeholders})

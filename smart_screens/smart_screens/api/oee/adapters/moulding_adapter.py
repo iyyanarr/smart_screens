@@ -444,6 +444,9 @@ class MouldingAdapter(ProcessAdapter):
             Total Inspected = Sum of all inspected_qty across all lot inspections
             Rejection % = (Total Rejected / Total Inspected) × 100
         
+        FIX: Use 'inspected_qty_nos' instead of 'total_inspected_qty_nos'
+             because total_inspected_qty_nos is always 0 (not populated by the form)
+        
         Args:
             linked_lots: List of lot numbers to aggregate
         
@@ -453,9 +456,10 @@ class MouldingAdapter(ProcessAdapter):
         try:
             lot_numbers_str = "'" + "','".join(linked_lots) + "'"
             
+            # FIX: Query the CORRECT field - 'inspected_qty_nos' not 'total_inspected_qty_nos'
             query = f"""
                 SELECT 
-                    SUM(COALESCE(ie.total_inspected_qty_nos, 0)) as total_inspected,
+                    SUM(COALESCE(ie.inspected_qty_nos, 0)) as total_inspected,
                     SUM(COALESCE(ie.total_rejected_qty, 0)) as total_rejected,
                     COUNT(DISTINCT ie.lot_no) as inspected_lot_count,
                     GROUP_CONCAT(DISTINCT ie.lot_no ORDER BY ie.lot_no SEPARATOR ', ') as inspected_lots
