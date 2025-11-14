@@ -100,38 +100,75 @@ _("All linked lots must have the same production date, shift, press, and item co
 		# Get all lot numbers from this linking
 		current_lots = [row.lot_number for row in self.linked_lots]
 		
+		if not current_lots:
+			return
+		
+		# Build the WHERE clause to exclude current document
+		# For new documents (self.name is None), we still need to check for conflicts
+		exclude_condition = ""
+		query_params = {"current_lots": current_lots}
+		
+		if self.name:
+			# Existing document being updated - exclude self from check
+			exclude_condition = "AND parent.name != %(current_name)s"
+			query_params["current_name"] = self.name
+		
 		# Check if any of these lots are already main lots in other active linkings
-		existing_linkings = frappe.db.sql("""
-SELECT 
-parent.name,
-parent.main_lot_number,
-GROUP_CONCAT(child.lot_number) as linked_lots
-FROM `tabOEE Lot Linking` parent
-INNER JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
-WHERE parent.name != %(current_name)s
-AND parent.status = 'Active'
-AND parent.docstatus < 2
-AND (
-parent.main_lot_number IN %(current_lots)s
-OR child.lot_number IN %(current_lots)s
-)
-""", {
-"current_name": self.name or "new",
-"current_lots": current_lots
-}, as_dict=True)
+		# FIX: Added production_date and shift_type to GROUP BY and SELECT to avoid NULL values
+		existing_linkings = frappe.db.sql(f"""
+			SELECT 
+				parent.name,
+				parent.main_lot_number,
+				parent.status,
+				parent.docstatus,
+				parent.production_date,
+				parent.shift_type,
+				GROUP_CONCAT(DISTINCT child.lot_number ORDER BY child.lot_number SEPARATOR ', ') as linked_lots,
+				COUNT(DISTINCT child.lot_number) as lot_count
+			FROM `tabOEE Lot Linking` parent
+			LEFT JOIN `tabOEE Linked Lot Item` child ON child.parent = parent.name
+			WHERE parent.status = 'Active'
+			AND parent.docstatus < 2
+			{exclude_condition}
+			AND (
+				parent.main_lot_number IN %(current_lots)s
+				OR child.lot_number IN %(current_lots)s
+			)
+			GROUP BY parent.name, parent.main_lot_number, parent.status, parent.docstatus, parent.production_date, parent.shift_type
+		""", query_params, as_dict=True)
 		
 		if existing_linkings:
+			# FIX: Better error message with NULL handling and debugging info
 			conflicts = []
 			for link in existing_linkings:
+				doc_name = link.name or 'Unknown'
+				main_lot = link.main_lot_number or 'None'
+				linked = link.linked_lots or 'None'
+				status = link.status or 'Unknown'
+				docstatus = link.docstatus if link.docstatus is not None else -1
+				lot_count = link.lot_count or 0
+				prod_date = frappe.utils.formatdate(link.production_date, 'dd-MM-yyyy') if link.production_date else 'Unknown'
+				shift = link.shift_type or 'Unknown'
+				
 				conflicts.append(
-f"<b>{link.name}</b>: Main Lot: {link.main_lot_number}, Linked: {link.linked_lots}"
-)
+					f"<b>{doc_name}</b>: Main Lot: {main_lot}, Date: {prod_date}, Shift: {shift}, Status: {status}, Linked Lots ({lot_count}): {linked}"
+				)
+			
+			# Log detailed info for debugging
+			frappe.logger().error(
+				f"OEE Lot Linking validation failed - Circular reference detected:\n"
+				f"Current document: {self.name or 'NEW'}\n"
+				f"Current lots being linked: {current_lots}\n"
+				f"Conflicting documents found: {len(existing_linkings)}"
+			)
 			
 			frappe.throw(
-_("One or more lot numbers are already linked in other active OEE Lot Linking documents:<br><br>{0}<br><br>Please deactivate or cancel the conflicting linkings first.").format(
-"<br>".join(conflicts)
-)
-)
+				_("One or more lot numbers are already linked in other active OEE Lot Linking documents:<br><br>{0}<br><br>Please deactivate or cancel the conflicting linkings first.<br><br><small style='color: #666;'>Attempting to link: {1}</small>").format(
+					"<br>".join(conflicts),
+					", ".join(current_lots)
+				),
+				title=_("Duplicate Lot Linking Detected")
+			)
 	
 	def on_submit(self):
 		"""Actions to perform on submit"""
@@ -177,7 +214,7 @@ def find_linkable_lots(production_date, shift_type, machine_reference, item_code
 		
 		# Machine filter - use LIKE to match partial workstation names
 		# Convert machine_reference to actual workstation name pattern
-		conditions.append("jc.workstation LIKE %s")
+		conditions.append("jc.workstation = %s")
 		values.append(f"%{machine_reference}%")
 		
 		conditions.append("mpe.docstatus = 1")
