@@ -62,35 +62,73 @@ class BatchWiseStockDetails {
 	
 	// **NEW: Create filter fields**
 	make_filters() {
-		const filter_html = `
-			<div class="batch-filters-section">
-				<div class="filter-row">
-					<div class="filter-group">
-						<label>From Date</label>
-						<input type="date" class="form-control filter-from-date" value="${this.filters.from_date || ''}" />
-					</div>
-					<div class="filter-group">
-						<label>To Date</label>
-						<input type="date" class="form-control filter-to-date" value="${this.filters.to_date || ''}" />
-					</div>
-					<div class="filter-group">
-						<label>Warehouse</label>
-						<input type="text" class="form-control filter-warehouse" placeholder="All Warehouses" value="${this.filters.warehouse || ''}" />
-					</div>
-					<div class="filter-group">
-						<label>Search Batch</label>
-						<input type="text" class="form-control filter-search" placeholder="Search batch number..." />
-					</div>
-					<div class="filter-group">
-						<button class="btn btn-primary btn-apply-filters">
-							<i class="fa fa-filter"></i> Apply Filters
-						</button>
-					</div>
-				</div>
+		// **IMPROVED: Use Frappe FieldGroup for proper Link fields**
+		this.filter_group = new frappe.ui.FieldGroup({
+			fields: [
+				{
+					label: 'From Date',
+					fieldtype: 'Date',
+					fieldname: 'from_date',
+					default: this.filters.from_date
+				},
+				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'To Date',
+					fieldtype: 'Date',
+					fieldname: 'to_date',
+					default: this.filters.to_date
+				},
+				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Warehouse',
+					fieldtype: 'Link',
+					fieldname: 'warehouse',
+					options: 'Warehouse',
+					default: this.filters.warehouse,
+					get_query: function() {
+						return {
+							filters: {
+								'is_group': 0,
+								'disabled': 0
+							}
+						};
+					}
+				},
+				{
+					fieldtype: 'Column Break'
+				},
+				{
+					label: 'Search Batch',
+					fieldtype: 'Data',
+					fieldname: 'search_batch',
+					placeholder: 'Search batch number...'
+				},
+				{
+					fieldtype: 'Section Break'
+				}
+			],
+			body: this.$container
+		});
+		
+		this.filter_group.make();
+		
+		// Add Apply Filters button
+		const button_html = `
+			<div style="margin: 15px 0;">
+				<button class="btn btn-primary btn-apply-filters">
+					<i class="fa fa-filter"></i> Apply Filters
+				</button>
+				<button class="btn btn-default btn-reset-filters">
+					<i class="fa fa-undo"></i> Reset
+				</button>
 			</div>
 		`;
+		this.$container.append(button_html);
 		
-		this.$container.html(filter_html);
 		this.bind_filter_events();
 	}
 	
@@ -98,12 +136,13 @@ class BatchWiseStockDetails {
 	bind_filter_events() {
 		// **FIXED: Unbind previous events to prevent duplicates**
 		this.$container.off('click', '.btn-apply-filters');
-		this.$container.off('input', '.filter-search');
+		this.$container.off('click', '.btn-reset-filters');
 		
 		this.$container.on('click', '.btn-apply-filters', () => {
-			this.filters.from_date = this.$container.find('.filter-from-date').val();
-			this.filters.to_date = this.$container.find('.filter-to-date').val();
-			this.filters.warehouse = this.$container.find('.filter-warehouse').val();
+			this.filters.from_date = this.filter_group.get_value('from_date');
+			this.filters.to_date = this.filter_group.get_value('to_date');
+			this.filters.warehouse = this.filter_group.get_value('warehouse');
+			this.search_text = this.filter_group.get_value('search_batch') || '';
 			
 			// Save to localStorage
 			localStorage.setItem('batch_details_filters', JSON.stringify(this.filters));
@@ -111,14 +150,25 @@ class BatchWiseStockDetails {
 			this.load_batch_details();
 		});
 		
-		// **FIXED: Properly debounce the search input**
-		const debouncedSearch = frappe.utils.debounce((search_val) => {
-			this.search_text = search_val.toLowerCase();
-			this.apply_search_and_sort();
-		}, 300);
-		
-		this.$container.on('input', '.filter-search', (e) => {
-			debouncedSearch($(e.currentTarget).val());
+		this.$container.on('click', '.btn-reset-filters', () => {
+			this.filters = {
+				from_date: frappe.datetime.add_months(frappe.datetime.get_today(), -1),
+				to_date: frappe.datetime.get_today(),
+				warehouse: null,
+				warehouse_type: null,
+				exclude_problematic_batches: true
+			};
+			this.search_text = '';
+			
+			// Reset field values
+			this.filter_group.set_value('from_date', this.filters.from_date);
+			this.filter_group.set_value('to_date', this.filters.to_date);
+			this.filter_group.set_value('warehouse', '');
+			this.filter_group.set_value('search_batch', '');
+			
+			localStorage.setItem('batch_details_filters', JSON.stringify(this.filters));
+			
+			this.load_batch_details();
 		});
 	}
 	
@@ -148,6 +198,15 @@ class BatchWiseStockDetails {
 		const excluded_count = data.excluded_count || 0;
 		const active_count = data.active_count || 0;
 		
+		 // **NEW: Debug logging to console**
+		console.log('=== BATCH DETAILS DEBUG ===');
+		console.log('Total batches received:', batches.length);
+		console.log('First 5 batch item_groups:', batches.slice(0, 5).map(b => ({
+			item_code: b.item_code,
+			item_group: b.item_group,
+			warehouse: b.warehouse
+		})));
+		
 		// Group batches by stage
 		this.grouped_batches = {
 			'Mat': [],
@@ -155,64 +214,100 @@ class BatchWiseStockDetails {
 			'Finished Product': []
 		};
 		
+		// **FIXED: Normalize item_group for proper matching**
+		let ungrouped_count = 0;
+		const ungrouped_batches = [];
+		
 		batches.forEach(batch => {
-			const stage = batch.item_group || 'Other';
+			let stage = batch.item_group;
+			
+			// **FIXED: Handle null/undefined and normalize the string**
+			if (!stage) {
+				stage = 'Other';
+			} else {
+				stage = stage.trim(); // Remove whitespace
+				
+				// Normalize common variations to standard names
+				const normalized = stage.toLowerCase();
+				if (normalized === 'mat') {
+					stage = 'Mat';
+				} else if (normalized === 'products') {
+					stage = 'Products';
+				} else if (normalized === 'finished product' || normalized === 'finished products') {
+					stage = 'Finished Product';
+				}
+			}
+			
+			// Add to appropriate group
 			if (this.grouped_batches[stage]) {
 				this.grouped_batches[stage].push(batch);
+			} else {
+				ungrouped_count++;
+				ungrouped_batches.push({
+					batch_no: batch.batch_no,
+					item_code: batch.item_code,
+					item_group: batch.item_group,
+					normalized_stage: stage
+				});
 			}
 		});
+		
+		console.log('Grouped counts:', {
+			Mat: this.grouped_batches['Mat'].length,
+			Products: this.grouped_batches['Products'].length,
+			'Finished Product': this.grouped_batches['Finished Product'].length,
+			ungrouped: ungrouped_count
+		});
+		
+		if (ungrouped_count > 0) {
+			console.warn('Ungrouped batches (first 10):', ungrouped_batches.slice(0, 10));
+		}
+		console.log('=== END DEBUG ===');
 		
 		// Store original batches for search/sort
 		this.original_batches = JSON.parse(JSON.stringify(this.grouped_batches));
 		
+		// **NEW: Build filter info display**
+		const warehouse_info = this.filters.warehouse || 'All Warehouses';
+		const date_info = `${this.filters.from_date} to ${this.filters.to_date}`;
+		
 		let html = `
 			<div class="batch-wise-report">
-				<!-- **UPDATED: Combined Filter and Header Section** -->
-				<div class="batch-filters-section">
-					<div class="header-row">
-						<h2 class="item-code-title">
-							Item Code: <span class="highlight">${this.common_code}</span>
-							<span class="batch-count">
-								(${active_count} Active${excluded_count > 0 ? `, ${excluded_count} Excluded` : ''}, ${batches.length} Total)
-							</span>
-						</h2>
+				<!-- **NEW: Applied Filters Info Bar** -->
+				<div class="applied-filters-info">
+					<div class="info-badge">
+						<i class="fa fa-warehouse"></i>
+						<strong>Warehouse:</strong> ${warehouse_info}
 					</div>
-					<div class="filter-row">
-						<div class="filter-group">
-							<label>From Date</label>
-							<input type="date" class="form-control filter-from-date" value="${this.filters.from_date || ''}" />
-						</div>
-						<div class="filter-group">
-							<label>To Date</label>
-							<input type="date" class="form-control filter-to-date" value="${this.filters.to_date || ''}" />
-						</div>
-						<div class="filter-group">
-							<label>Warehouse</label>
-							<input type="text" class="form-control filter-warehouse" placeholder="All Warehouses" value="${this.filters.warehouse || ''}" />
-						</div>
-						<div class="filter-group">
-							<label>Search Batch</label>
-							<input type="text" class="form-control filter-search" placeholder="Search batch number..." />
-						</div>
-						<div class="filter-group">
-							<button class="btn btn-primary btn-apply-filters">
-								<i class="fa fa-filter"></i> Apply
-							</button>
-						</div>
+					<div class="info-badge">
+						<i class="fa fa-calendar"></i>
+						<strong>Date Range:</strong> ${date_info}
 					</div>
+					<div class="info-badge">
+						<i class="fa fa-cube"></i>
+						<strong>Item Code:</strong> ${this.common_code}
+					</div>
+					<div class="info-badge ${batches.length === 0 ? 'warning' : ''}">
+						<i class="fa fa-database"></i>
+						<strong>Records Found:</strong> ${batches.length}
+					</div>
+					${ungrouped_count > 0 ? `<div class="info-badge warning">
+						<i class="fa fa-exclamation-triangle"></i>
+						<strong>Ungrouped:</strong> ${ungrouped_count}
+					</div>` : ''}
 				</div>
 				
-					<!-- **NEW: Tabs for Stages** -->
+				<!-- **NEW: Tabs for Stages** -->
 				<div class="stage-tabs">
 					<div class="tabs-nav">
 						<button class="tab-btn ${this.active_tab === 'Mat' ? 'active' : ''}" data-stage="Mat">
-							<i class="fa fa-layer-group"></i> Mat (${this.grouped_batches['Mat'].length})
+							<i class="fa fa-layer-group"></i> MAT (${this.grouped_batches['Mat'].length})
 						</button>
 						<button class="tab-btn ${this.active_tab === 'Products' ? 'active' : ''}" data-stage="Products">
-							<i class="fa fa-box"></i> Products (${this.grouped_batches['Products'].length})
+							<i class="fa fa-box"></i> PRODUCTS (${this.grouped_batches['Products'].length})
 						</button>
 						<button class="tab-btn ${this.active_tab === 'Finished Product' ? 'active' : ''}" data-stage="Finished Product">
-							<i class="fa fa-check-square"></i> Finished (${this.grouped_batches['Finished Product'].length})
+							<i class="fa fa-check-square"></i> FINISHED (${this.grouped_batches['Finished Product'].length})
 						</button>
 					</div>
 					
@@ -505,6 +600,79 @@ class BatchWiseStockDetails {
 					box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 				}
 				
+				/* **NEW: Applied Filters Info Bar** */
+				.applied-filters-info {
+					display: flex;
+					gap: 15px;
+					padding: 12px 20px;
+					background: #f1f5f9;
+					border-radius: 8px;
+					margin-bottom: 15px;
+					flex-wrap: wrap;
+					border-left: 4px solid #1e40af;
+				}
+				
+				.info-badge {
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					padding: 6px 12px;
+					background: white;
+					border-radius: 6px;
+					font-size: 13px;
+					color: #475569;
+					box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+				}
+				
+				.info-badge.warning {
+					background: #fef3c7;
+					border: 1px solid #fbbf24;
+				}
+				
+				.info-badge i {
+					color: #1e40af;
+					font-size: 14px;
+				}
+				
+				.info-badge.warning i {
+					color: #f59e0b;
+				}
+				
+				.info-badge strong {
+					color: #1e293b;
+					font-weight: 600;
+				}
+				
+				/* **NEW: Combined Header Section** */
+				.batch-filters-section .header-row {
+					margin-bottom: 15px;
+					padding-bottom: 12px;
+					border-bottom: 2px solid #e2e8f0;
+				}
+				
+				.batch-filters-section .item-code-title {
+					font-size: 18px;
+					font-weight: 700;
+					color: #1e293b;
+					margin: 0;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				
+				.batch-filters-section .item-code-title .highlight {
+					color: #1e40af;
+					font-family: 'Courier New', monospace;
+					font-size: 20px;
+				}
+				
+				.batch-filters-section .batch-count {
+					font-size: 13px;
+					font-weight: 500;
+					color: #64748b;
+					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+				}
+				
 				.filter-row {
 					display: flex;
 					gap: 15px;
@@ -659,7 +827,7 @@ class BatchWiseStockDetails {
 					font-size: 13px;
 					color: #475569;
 					box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-				}
+					}
 				
 				.filter-info i {
 					margin-right: 6px;
@@ -756,79 +924,6 @@ class BatchWiseStockDetails {
 					flex-wrap: wrap;
 				}
 				
-				.summary-item {
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-				}
-				
-				.summary-item .label {
-					font-size: 11px;
-					font-weight: 600;
-					opacity: 0.9;
-					text-transform: uppercase;
-					letter-spacing: 0.5px;
-					margin-bottom: 6px;
-				}
-				
-				.summary-item .value {
-					font-size: 22px;
-					font-weight: 700;
-				}
-				
-				/* Table Wrapper */
-				.table-wrapper {
-					padding: 20px;
-					overflow-x: auto;
-				}
-				
-				/* Batch Table */
-				.batch-table {
-					width: 100%;
-					border-collapse: collapse;
-					font-size: 13px;
-				}
-				
-				.batch-table thead th {
-					background: #f8f9fa;
-					color: #1e293b;
-					font-weight: 700;
-					text-align: left;
-					padding: 12px 10px;
-					border-bottom: 2px solid #e2e8f0;
-					text-transform: uppercase;
-					font-size: 11px;
-					letter-spacing: 0.5px;
-					white-space: nowrap;
-				}
-				
-				.batch-table tbody td {
-					padding: 10px;
-					border-bottom: 1px solid #f1f5f9;
-					color: #475569;
-				}
-				
-				.batch-table tbody tr:hover {
-					background: #f8fafc;
-				}
-				
-				.batch-table .excluded-row {
-					background: #fef2f2 !important;
-				}
-				
-				.batch-table .excluded-row:hover {
-					background: #fee2e2 !important;
-				}
-				
-				.batch-col { 
-					font-family: 'Courier New', monospace;
-					font-weight: 600;
-					color: #1e293b;
-					font-size: 13px;
-				}
-				
-				.item-col code {
-					background: #f1f5f9;
 					padding: 3px 6px;
 					border-radius: 3px;
 					color: #334155;

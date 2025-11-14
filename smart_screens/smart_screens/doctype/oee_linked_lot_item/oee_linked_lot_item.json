@@ -6,21 +6,72 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "lot_number"
+  "production_entry",
+  "lot_number",
+  "column_break_1",
+  "weight",
+  "lifts",
+  "pieces",
+  "column_break_2",
+  "oee_include"
  ],
  "fields": [
+  {
+   "fieldname": "production_entry",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Production Entry",
+   "options": "Moulding Production Entry",
+   "reqd": 1
+  },
   {
    "fieldname": "lot_number",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Lot Number",
-   "reqd": 1
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight (kg)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lifts",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Number of Lifts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pieces",
+   "fieldtype": "Int",
+   "label": "Number of Pieces",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "oee_include",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Include in OEE"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-11-12 10:00:00.000000",
+ "modified": "2025-11-13 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Smart Screens",
  "name": "OEE Linked Lot Item",

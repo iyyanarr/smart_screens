@@ -113,6 +113,11 @@ class AggregatedStockMovement {
 			frappe.set_route('List', 'Excluded Stock Batch');
 		});
 		
+		 // Add Performance Optimization buttons
+		this.page.add_inner_button(__('Optimize Database'), () => this.optimize_database());
+		this.page.add_inner_button(__('Analyze Performance'), () => this.analyze_performance());
+		this.page.add_inner_button(__('Benchmark Queries'), () => this.benchmark_queries());
+		
 		// Only keep the item code search filter (doesn't trigger report generation)
 		this.filters.item_code_filter.$input.on('input', 
 			frappe.utils.debounce(() => this.apply_filters(), 300)
@@ -1004,6 +1009,88 @@ class AggregatedStockMovement {
 
 	hide_loading() {
 		// No-op; next render will replace content. Kept for symmetry and future enhancements.
+	}
+
+	// Optimize database indexes
+	optimize_database() {
+		frappe.confirm(
+			'This will create database indexes to improve query performance. Continue?',
+			() => {
+				frappe.show_alert({message: __('Creating indexes...'), indicator: 'blue'});
+				frappe.call({
+					method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.optimize_stock_ledger_indexes',
+					callback: (r) => {
+						if (r.message && r.message.success) {
+							frappe.msgprint({
+								title: __('Database Optimization Complete'),
+								message: r.message.message,
+								indicator: 'green'
+							});
+						} else {
+							frappe.msgprint({
+								title: __('Optimization Failed'),
+								message: r.message.message || 'An error occurred',
+								indicator: 'red'
+							});
+						}
+					}
+				});
+			}
+		);
+	}
+	
+	// Analyze query performance
+	analyze_performance() {
+		frappe.show_alert({message: __('Analyzing performance...'), indicator: 'blue'});
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.analyze_query_performance',
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					frappe.msgprint({
+						title: __('Performance Analysis'),
+						message: r.message.message,
+						indicator: 'blue'
+					});
+				} else {
+					frappe.msgprint({
+						title: __('Analysis Failed'),
+						message: r.message.message || 'An error occurred',
+						indicator: 'red'
+					});
+				}
+			}
+		});
+	}
+	
+	// Benchmark query performance
+	benchmark_queries() {
+		frappe.show_alert({message: __('Benchmarking queries...'), indicator: 'blue'});
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.benchmark_query_performance',
+			args: {
+				filters: {
+					from_date: this.filters.from_date.get_value(),
+					to_date: this.filters.to_date.get_value(),
+					warehouse: this.filters.warehouse.get_value()
+				}
+			},
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					frappe.msgprint({
+						title: __('Query Performance Benchmark'),
+						message: r.message.message,
+						indicator: 'green',
+						size: 'large'
+					});
+				} else {
+					frappe.msgprint({
+						title: __('Benchmarking Failed'),
+						message: r.message.message || 'An error occurred',
+						indicator: 'red'
+					});
+				}
+			}
+		});
 	}
 }
 
