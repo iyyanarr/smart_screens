@@ -248,14 +248,16 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
     
     # MOVED: Create/Update OEE Lot Linking records AFTER OEE calculation is complete
     # This way it doesn't block the main OEE report generation
-    try:
-        create_oee_lot_linking_records(production_data, production_date, shift_filter)
-    except Exception as e:
-        # Log error but don't fail the entire process
-        frappe.log_error(
-            f"Error creating OEE Lot Linking records (non-blocking): {frappe.get_traceback()}",
-            "OEE Lot Linking Creation Error"
-        )
+    # DISABLED: Automatic OEE Lot Linking creation
+    # Uncomment the lines below to re-enable automatic creation
+    # try:
+    #     create_oee_lot_linking_records(production_data, production_date, shift_filter)
+    # except Exception as e:
+    #     # Log error but don't fail the entire process
+    #     frappe.log_error(
+    #         f"Error creating OEE Lot Linking records (non-blocking): {frappe.get_traceback()}",
+    #         "OEE Lot Linking Creation Error"
+    #     )
     
     return oee_results
 
