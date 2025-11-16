@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 import json
 import pandas as pd
+import time  # NEW: Add time module for profiling
 
 @frappe.whitelist()
 def get_spp_batch_balance_data(filters=None):
@@ -9,6 +10,10 @@ def get_spp_batch_balance_data(filters=None):
 	Get data from SPP Batch Balance Report API endpoint
 	This is the main data source for the SPP Aggregated Report
 	"""
+	# START PROFILING
+	start_time = time.time()
+	performance_log = {}
+	
 	if isinstance(filters, str):
 		filters = json.loads(filters)
 	
@@ -16,6 +21,13 @@ def get_spp_batch_balance_data(filters=None):
 		filters = {}
 	
 	try:
+		 # STEP 1: Fetching data from SPP Batch Balance Report
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 1, 'total': 4, 'message': 'Fetching batch data from server...', 'percent': 10},
+			user=frappe.session.user
+		)
+		
 		# Prepare filters for SPP Batch Balance Report
 		report_filters = {
 			"company": filters.get("company") or frappe.defaults.get_user_default("Company"),
@@ -28,6 +40,7 @@ def get_spp_batch_balance_data(filters=None):
 		# Call the SPP Batch Balance Report using the CORRECT method
 		report = frappe.get_doc("Report", "SPP Batch Balance Report")
 		
+		t1 = time.time()
 		columns, data = report.get_data(
 			limit=0,  # No limit, get all data
 			user=frappe.session.user,
@@ -36,41 +49,111 @@ def get_spp_batch_balance_data(filters=None):
 			ignore_prepared_report=True,
 			are_default_filters=False,
 		)
+		t2 = time.time()
+		performance_log['spp_report_fetch'] = round(t2 - t1, 2)
+		
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 1, 'total': 4, 'message': f'Fetched {len(data) if data else 0} batch records', 'percent': 30},
+			user=frappe.session.user
+		)
 		
 		frappe.log_error(
-			f"Step 1 - Raw data from report: {len(data)} records",
-			"SPP Aggregated Debug - Step 1"
+			f"⏱️ PERFORMANCE PROFILING:\n"
+			f"Step 1 - SPP Report Fetch: {performance_log['spp_report_fetch']}s\n"
+			f"Raw data records: {len(data) if data else 0}",
+			"SPP Aggregated - Performance Profile"
 		)
 		
 		if not data:
 			return {
 				"success": False,
 				"error": "No data returned from SPP Batch Balance Report",
-				"data": []
+				"data": [],
+				"performance": performance_log
 			}
 		
+		# STEP 2: Excluding batches
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 2, 'total': 4, 'message': 'Processing batch exclusions...', 'percent': 50},
+			user=frappe.session.user
+		)
+		
 		# EXCLUDE BATCHES - Get excluded batch list from Excluded Stock Batch doctype
+		t3 = time.time()
 		data, excluded_count = exclude_batches(data)
+		t4 = time.time()
+		performance_log['batch_exclusion'] = round(t4 - t3, 2)
+		
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 2, 'total': 4, 'message': f'Excluded {excluded_count} batches', 'percent': 60},
+			user=frappe.session.user
+		)
 		
 		frappe.log_error(
-			f"Step 1.5 - After excluding batches: {len(data)} records (excluded: {excluded_count})",
-			"SPP Aggregated Debug - Step 1.5"
+			f"Step 2 - Batch Exclusion: {performance_log['batch_exclusion']}s\n"
+			f"Records after exclusion: {len(data)} (excluded: {excluded_count})",
+			"SPP Aggregated - Performance Profile"
+		)
+		
+		# STEP 3: Filtering by item groups
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 3, 'total': 4, 'message': 'Filtering by item groups (Mat, Products, Finished)...', 'percent': 70},
+			user=frappe.session.user
 		)
 		
 		# FILTER DATA using pandas
+		t5 = time.time()
 		filtered_data = filter_by_item_groups_pandas(data)
+		t6 = time.time()
+		performance_log['item_group_filtering'] = round(t6 - t5, 2)
+		
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 3, 'total': 4, 'message': f'Filtered to {len(filtered_data)} records', 'percent': 80},
+			user=frappe.session.user
+		)
 		
 		frappe.log_error(
-			f"Step 2 - After filtering by item groups: {len(filtered_data)} records",
-			"SPP Aggregated Debug - Step 2"
+			f"Step 3 - Item Group Filtering: {performance_log['item_group_filtering']}s\n"
+			f"Records after filtering: {len(filtered_data)}",
+			"SPP Aggregated - Performance Profile"
+		)
+		
+		# STEP 4: Aggregating data
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 4, 'total': 4, 'message': 'Aggregating data by common code...', 'percent': 90},
+			user=frappe.session.user
 		)
 		
 		# AGGREGATE DATA by common code and stage
+		t7 = time.time()
 		aggregated_data = aggregate_by_common_code(filtered_data)
+		t8 = time.time()
+		performance_log['aggregation'] = round(t8 - t7, 2)
+		
+		total_time = round(t8 - start_time, 2)
+		performance_log['total_time'] = total_time
+		
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 4, 'total': 4, 'message': f'Completed! Generated {len(aggregated_data["data"])} aggregated items', 'percent': 100},
+			user=frappe.session.user
+		)
 		
 		frappe.log_error(
-			f"Step 3 - After aggregation: {len(aggregated_data['data'])} records\nGrand Total: {aggregated_data['grand_total']}",
-			"SPP Aggregated Debug - Step 3"
+			f"Step 4 - Aggregation: {performance_log['aggregation']}s\n"
+			f"Aggregated records: {len(aggregated_data['data'])}\n\n"
+			f"📊 TOTAL TIME: {total_time}s\n"
+			f"   - SPP Report Fetch: {performance_log['spp_report_fetch']}s ({round(performance_log['spp_report_fetch']/total_time*100, 1)}%)\n"
+			f"   - Batch Exclusion: {performance_log['batch_exclusion']}s ({round(performance_log['batch_exclusion']/total_time*100, 1)}%)\n"
+			f"   - Item Filtering: {performance_log['item_group_filtering']}s ({round(performance_log['item_group_filtering']/total_time*100, 1)}%)\n"
+			f"   - Aggregation: {performance_log['aggregation']}s ({round(performance_log['aggregation']/total_time*100, 1)}%)",
+			"SPP Aggregated - Performance Profile"
 		)
 		
 		return {
@@ -81,7 +164,8 @@ def get_spp_batch_balance_data(filters=None):
 			"total_records": len(data),
 			"filtered_records": len(filtered_data),
 			"aggregated_records": len(aggregated_data["data"]),
-			"excluded_batches_count": excluded_count
+			"excluded_batches_count": excluded_count,
+			"performance": performance_log  # NEW: Return performance metrics
 		}
 		
 	except Exception as e:

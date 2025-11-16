@@ -107,14 +107,27 @@ class SPPAggregatedReport {
 			return;
 		}
 		
-		this.show_loading();
+		this.show_loading_with_progress();
+		
+		// Subscribe to real-time progress updates
+		frappe.realtime.on('spp_aggregated_progress', (data) => {
+			this.update_progress(data);
+		});
 		
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_spp_batch_balance_data',
 			args: { filters: filter_values },
 			callback: (r) => {
+				// Unsubscribe from progress updates
+				frappe.realtime.off('spp_aggregated_progress');
+				
 				if (r.message && r.message.success) {
 					this.render_report(r.message);
+					
+					// Show performance summary if available
+					if (r.message.performance) {
+						this.show_performance_summary(r.message.performance);
+					}
 				} else {
 					const error = r.message?.error || 'Failed to load report data';
 					frappe.msgprint({
@@ -126,6 +139,9 @@ class SPPAggregatedReport {
 				}
 			},
 			error: (err) => {
+				// Unsubscribe from progress updates
+				frappe.realtime.off('spp_aggregated_progress');
+				
 				frappe.msgprint({
 					title: __('Error'),
 					indicator: 'red',
@@ -388,6 +404,21 @@ class SPPAggregatedReport {
 			return `<div class="text-muted text-center p-4">No batches found for ${item_group}</div>`;
 		}
 		
+			// Calculate totals for this item group
+		let totals = {
+			opening_qty: 0,
+			in_qty: 0,
+			out_qty: 0,
+			balance_qty: 0
+		};
+		
+		batches.forEach(batch => {
+			totals.opening_qty += parseFloat(batch.opening_qty || 0);
+			totals.in_qty += parseFloat(batch.in_qty || 0);
+			totals.out_qty += parseFloat(batch.out_qty || 0);
+			totals.balance_qty += parseFloat(batch.balance_qty || 0);
+		});
+		
 		// Store batches for this item group for filtering/sorting
 		const tableId = `batch-table-${item_group.toLowerCase().replace(/\s+/g, '-')}`;
 		
@@ -441,6 +472,17 @@ class SPPAggregatedReport {
 					<td>${batch.uom || '-'}</td>
 				</tr>`;
 		});
+		
+		// Add total row
+		html += `
+				<tr class="batch-total-row">
+					<td colspan="4" class="text-right"><strong>Total for ${item_group}:</strong></td>
+					<td class="text-right"><strong>${this.format_number(totals.opening_qty)}</strong></td>
+					<td class="text-right text-success"><strong>${this.format_number(totals.in_qty)}</strong></td>
+					<td class="text-right text-danger"><strong>${this.format_number(totals.out_qty)}</strong></td>
+					<td class="text-right"><strong>${this.format_number(totals.balance_qty)}</strong></td>
+					<td></td>
+				</tr>`;
 		
 		html += `
 					</tbody>
@@ -560,6 +602,109 @@ class SPPAggregatedReport {
 				</p>
 			</div>
 		`);
+	}
+	
+	show_loading_with_progress() {
+		this.page.main.find('.report-container').remove();
+		this.$container = $('<div class="report-container progress-container">').appendTo(this.page.main);
+		this.$container.html(`
+			<div class="progress-wrapper">
+				<div class="progress-header">
+					<i class="fa fa-cog fa-spin fa-3x text-primary mb-3"></i>
+					<h3 class="text-muted">Generating SPP Aggregated Report</h3>
+					<p class="text-muted">Please wait while we process your data...</p>
+				</div>
+				
+				<div class="progress-bar-container">
+					<div class="progress" style="height: 30px;">
+						<div class="progress-bar progress-bar-striped progress-bar-animated" 
+							role="progressbar" 
+							style="width: 0%;" 
+							id="spp-progress-bar">
+							<span class="progress-text">0%</span>
+						</div>
+					</div>
+				</div>
+				
+				<div class="progress-steps mt-4">
+					<div class="step-item" data-step="1">
+						<div class="step-icon">
+							<i class="fa fa-database"></i>
+						</div>
+						<div class="step-content">
+							<div class="step-title">Fetching Data</div>
+							<div class="step-message">Preparing...</div>
+						</div>
+					</div>
+					<div class="step-item" data-step="2">
+						<div class="step-icon">
+							<i class="fa fa-filter"></i>
+						</div>
+						<div class="step-content">
+							<div class="step-title">Batch Exclusion</div>
+							<div class="step-message">Waiting...</div>
+						</div>
+					</div>
+					<div class="step-item" data-step="3">
+						<div class="step-icon">
+							<i class="fa fa-tags"></i>
+						</div>
+						<div class="step-content">
+							<div class="step-title">Item Filtering</div>
+							<div class="step-message">Waiting...</div>
+						</div>
+					</div>
+					<div class="step-item" data-step="4">
+						<div class="step-icon">
+							<i class="fa fa-chart-bar"></i>
+						</div>
+						<div class="step-content">
+							<div class="step-title">Data Aggregation</div>
+							<div class="step-message">Waiting...</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		`);
+	}
+	
+	update_progress(data) {
+		const { step, total, message, percent } = data;
+		
+		// Update progress bar
+		const $progressBar = $('#spp-progress-bar');
+		$progressBar.css('width', percent + '%');
+		$progressBar.find('.progress-text').text(percent + '%');
+		
+		// Update current step
+		const $currentStep = $(`.step-item[data-step="${step}"]`);
+		$currentStep.addClass('active');
+		$currentStep.find('.step-message').text(message);
+		
+		// Mark previous steps as completed
+		for (let i = 1; i < step; i++) {
+			$(`.step-item[data-step="${i}"]`).addClass('completed').removeClass('active');
+		}
+		
+		// Add animation to progress bar color based on progress
+		if (percent >= 100) {
+			$progressBar.removeClass('progress-bar-animated').addClass('bg-success');
+		} else if (percent >= 50) {
+			$progressBar.addClass('bg-info');
+		}
+	}
+	
+	show_performance_summary(performance) {
+		const total = performance.total_time || 0;
+		
+		// Show subtle toast notification with performance summary
+		frappe.show_alert({
+			message: `Report generated in ${total}s (Fetch: ${performance.spp_report_fetch}s, Process: ${(total - performance.spp_report_fetch).toFixed(2)}s)`,
+			indicator: 'green'
+		}, 5);
+		
+		// Log detailed performance to console for developers
+		console.log('📊 SPP Aggregated Report Performance:', performance);
 	}
 	
 	apply_styles() {
@@ -755,6 +900,20 @@ class SPPAggregatedReport {
 					background: #f8fafc;
 					cursor: pointer;
 				}
+					.batch-total-row {
+					background: #f1f5f9 !important;
+					border-top: 2px solid #1e293b !important;
+					font-weight: 700;
+				}
+				.batch-total-row td {
+					background: #f1f5f9 !important;
+					color: #0f172a !important;
+					font-weight: 700 !important;
+					padding: 12px 8px !important;
+				}
+				.batch-total-row:hover {
+					background: #e2e8f0 !important;
+				}
 				.batch-table-controls {
 					margin-bottom: 15px;
 				}
@@ -798,6 +957,133 @@ class SPPAggregatedReport {
 				.sortable.sort-asc i,
 				.sortable.sort-desc i {
 					color: #1e40af;
+					}
+				
+				/* Progress Loading Styles */
+				.progress-container {
+					padding: 40px 20px;
+				}
+				.progress-wrapper {
+					max-width: 800px;
+					margin: 0 auto;
+					text-align: center;
+				}
+				.progress-header {
+					margin-bottom: 30px;
+				}
+				.progress-header h3 {
+					color: #1e293b;
+					font-size: 24px;
+					margin-bottom: 10px;
+				}
+				.progress-header p {
+					color: #64748b;
+					font-size: 16px;
+				}
+				.progress-bar-container {
+					margin-bottom: 40px;
+				}
+				.progress {
+					background-color: #e2e8f0;
+					border-radius: 8px;
+					overflow: hidden;
+					box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+				}
+				.progress-bar {
+					background: linear-gradient(90deg, #3b82f6 0%, #1e40af 100%);
+					transition: width 0.3s ease;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					font-weight: 600;
+					font-size: 14px;
+				}
+				.progress-text {
+					color: white;
+					text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+				}
+				.progress-steps {
+					display: grid;
+					grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+					gap: 20px;
+					margin-top: 30px;
+				}
+				.step-item {
+					background: #f8f9fa;
+					border-radius: 8px;
+					padding: 20px;
+					border: 2px solid #e2e8f0;
+					transition: all 0.3s ease;
+					text-align: left;
+				}
+				.step-item.active {
+					border-color: #3b82f6;
+					background: #eff6ff;
+					box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+					transform: translateY(-2px);
+				}
+				.step-item.completed {
+					border-color: #10b981;
+					background: #f0fdf4;
+				}
+				.step-item.active .step-icon i {
+					color: #3b82f6;
+					animation: pulse 1.5s infinite;
+				}
+				.step-item.completed .step-icon i {
+					color: #10b981;
+				}
+				.step-icon {
+					font-size: 24px;
+					margin-bottom: 10px;
+					color: #94a3b8;
+				}
+				.step-icon i {
+					transition: color 0.3s ease;
+				}
+				.step-title {
+					font-weight: 600;
+					font-size: 14px;
+					color: #1e293b;
+					margin-bottom: 5px;
+				}
+				.step-message {
+					font-size: 12px;
+					color: #64748b;
+					font-style: italic;
+				}
+				.step-item.active .step-message {
+					color: #3b82f6;
+					font-weight: 500;
+				}
+				.step-item.completed .step-message {
+					color: #10b981;
+				}
+				.step-item.completed .step-icon::after {
+					content: "✓";
+					position: absolute;
+					margin-left: -10px;
+					margin-top: -5px;
+					background: #10b981;
+					color: white;
+					border-radius: 50%;
+					width: 20px;
+					height: 20px;
+					display: inline-flex;
+					align-items: center;
+					justify-content: center;
+					font-size: 12px;
+					font-weight: bold;
+				}
+				@keyframes pulse {
+					0%, 100% {
+						transform: scale(1);
+						opacity: 1;
+					}
+					50% {
+						transform: scale(1.1);
+						opacity: 0.8;
+					}
 				}
 			`)
 			.appendTo("head");
