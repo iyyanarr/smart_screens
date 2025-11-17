@@ -162,7 +162,13 @@ class SPPAggregatedReport {
 			return;
 		}
 		
-			// Store filters for batch details
+		// Store original data for filtering and sorting
+		this.report_data = data;
+		this.grand_total = grand_total;
+		this.filtered_data = [...data]; // Copy for filtering
+		this.current_sort = { column: 'common_code', order: 'asc' }; // Default sort
+		
+		// Store filters for batch details
 		this.current_filters = {
 			company: this.filters.get_value('company'),
 			from_date: this.filters.get_value('from_date'),
@@ -175,45 +181,109 @@ class SPPAggregatedReport {
 		let html = `
 			<div class="spp-aggregated-container">
 				<div class="report-info">
-					<span><strong>Total Items:</strong> ${response.aggregated_records || 0}</span>
-					<span class="ml-3"><strong>Filtered Records:</strong> ${response.filtered_records || 0}</span>
-					<span class="ml-3"><strong>Source Records:</strong> ${response.total_records || 0}</span>
+					<div class="report-stats">
+						<span><strong>Total Items:</strong> <span id="total-items">${response.aggregated_records || 0}</span></span>
+						<span class="ml-3"><strong>Filtered Records:</strong> ${response.filtered_records || 0}</span>
+						<span class="ml-3"><strong>Source Records:</strong> ${response.total_records || 0}</span>
+					</div>
+					<div class="report-search">
+						<div class="search-box">
+							<i class="fa fa-search search-icon"></i>
+							<input type="text" 
+								class="form-control common-code-search" 
+								placeholder="Search by Common Code..." 
+								id="common-code-filter">
+							<button class="btn btn-xs btn-secondary clear-search" style="display: none;">
+								<i class="fa fa-times"></i>
+							</button>
+						</div>
+						<span class="search-results" id="search-results">Showing: ${data.length} items</span>
+					</div>
 				</div>
 				<div class="table-responsive">
-					<table class="table table-bordered aggregated-table">
+					<table class="table table-bordered aggregated-table" id="aggregated-data-table">
 						<thead>
 							<tr>
-								<th rowspan="2" class="item-header">Item Code</th>
+								<th rowspan="2" class="item-header sortable-header" data-column="common_code" data-type="string">
+									Item Code <i class="fa fa-sort sort-icon"></i>
+								</th>
 								<th colspan="4" class="mat-header">Mat (Nos)</th>
 								<th colspan="4" class="products-header">Products</th>
 								<th colspan="4" class="finished-header">Finished Product</th>
-								<th rowspan="2" class="total-header">Total</th>
+								<th rowspan="2" class="total-header sortable-header" data-column="Total.balance_qty" data-type="number">
+									Total <i class="fa fa-sort sort-icon"></i>
+								</th>
 								<th rowspan="2" class="action-header">Actions</th>
 							</tr>
 							<tr>
 								<!-- Mat columns -->
-								<th class="mat-subheader">Opening</th>
-								<th class="mat-subheader">In</th>
-								<th class="mat-subheader">Out</th>
-								<th class="mat-subheader">Balance</th>
+								<th class="mat-subheader sortable-header" data-column="Mat.opening_qty" data-type="number">
+									Opening <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="mat-subheader sortable-header" data-column="Mat.in_qty" data-type="number">
+									In <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="mat-subheader sortable-header" data-column="Mat.out_qty" data-type="number">
+									Out <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="mat-subheader sortable-header" data-column="Mat.balance_qty" data-type="number">
+									Balance <i class="fa fa-sort sort-icon"></i>
+								</th>
 								<!-- Products columns -->
-								<th class="products-subheader">Opening</th>
-								<th class="products-subheader">In</th>
-								<th class="products-subheader">Out</th>
-								<th class="products-subheader">Balance</th>
+								<th class="products-subheader sortable-header" data-column="Products.opening_qty" data-type="number">
+									Opening <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="products-subheader sortable-header" data-column="Products.in_qty" data-type="number">
+									In <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="products-subheader sortable-header" data-column="Products.out_qty" data-type="number">
+									Out <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="products-subheader sortable-header" data-column="Products.balance_qty" data-type="number">
+									Balance <i class="fa fa-sort sort-icon"></i>
+								</th>
 								<!-- Finished Product columns -->
-								<th class="finished-subheader">Opening</th>
-								<th class="finished-subheader">In</th>
-								<th class="finished-subheader">Out</th>
-								<th class="finished-subheader">Balance</th>
+								<th class="finished-subheader sortable-header" data-column="Finished Product.opening_qty" data-type="number">
+									Opening <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="finished-subheader sortable-header" data-column="Finished Product.in_qty" data-type="number">
+									In <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="finished-subheader sortable-header" data-column="Finished Product.out_qty" data-type="number">
+									Out <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th class="finished-subheader sortable-header" data-column="Finished Product.balance_qty" data-type="number">
+									Balance <i class="fa fa-sort sort-icon"></i>
+								</th>
 							</tr>
 						</thead>
-						<tbody>`;
+						<tbody id="table-body">
+						</tbody>
+					</table>
+				</div>
+				<div class="mt-2">
+					<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos). Large numbers formatted in Indian system (L = Lakh, Cr = Crore).</div>
+				</div>
+			</div>
+		`;
+		
+		this.page.main.find('.report-container').remove();
+		this.$container = $('<div class="report-container">').appendTo(this.page.main);
+		this.$container.html(html);
+		
+		this.apply_styles();
+		this.render_table_rows(this.filtered_data);
+		this.bind_search_and_sort();
+	}
+	
+	render_table_rows(data) {
+		const $tbody = $('#table-body');
+		$tbody.empty();
 		
 		// Add data rows
 		data.forEach(row => {
-			html += `
-				<tr>
+			const rowHtml = `
+				<tr data-common-code="${row.common_code}">
 					<td class="item-code"><strong>${row.common_code}</strong></td>
 					<!-- Mat -->
 					<td class="qty-cell">${this.format_number(row.Mat.opening_qty)}</td>
@@ -239,46 +309,134 @@ class SPPAggregatedReport {
 						</button>
 					</td>
 				</tr>`;
+			$tbody.append(rowHtml);
 		});
 		
 		// Add grand total row
-		html += `
-				<tr class="grand-total-row">
-					<td class="item-code"><strong>Grand Total</strong></td>
-					<!-- Mat -->
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Mat.opening_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Mat.in_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Mat.out_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Mat.balance_qty)}</strong></td>
-					<!-- Products -->
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Products.opening_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Products.in_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Products.out_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total.Products.balance_qty)}</strong></td>
-					<!-- Finished Product -->
-					<td class="qty-cell"><strong>${this.format_number(grand_total['Finished Product'].opening_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total['Finished Product'].in_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total['Finished Product'].out_qty)}</strong></td>
-					<td class="qty-cell"><strong>${this.format_number(grand_total['Finished Product'].balance_qty)}</strong></td>
-					<!-- Total -->
-					<td class="qty-cell total-cell"><strong>${this.format_number(grand_total.Total.balance_qty)}</strong></td>
-					<td class="action-cell"></td>
-				</tr>
-			</tbody>
-		</table>
-		</div>
-		<div class="mt-2">
-			<div class="text-muted small">Note: Mat quantities are displayed in Numbers (Nos). Large numbers formatted in Indian system (L = Lakh, Cr = Crore).</div>
-		</div>
-	</div>
-		`;
+		const grandTotalHtml = `
+			<tr class="grand-total-row">
+				<td class="item-code"><strong>Grand Total</strong></td>
+				<!-- Mat -->
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.opening_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.in_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.out_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.balance_qty)}</strong></td>
+				<!-- Products -->
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.opening_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.in_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.out_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.balance_qty)}</strong></td>
+				<!-- Finished Product -->
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].opening_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].in_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].out_qty)}</strong></td>
+				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].balance_qty)}</strong></td>
+				<!-- Total -->
+				<td class="qty-cell total-cell"><strong>${this.format_number(this.grand_total.Total.balance_qty)}</strong></td>
+				<td class="action-cell"></td>
+			</tr>`;
+		$tbody.append(grandTotalHtml);
 		
-		this.page.main.find('.report-container').remove();
-		this.$container = $('<div class="report-container">').appendTo(this.page.main);
-		this.$container.html(html);
-		
-		this.apply_styles();
+		// Bind batch buttons after rendering
 		this.bind_batch_buttons();
+		
+		// Update search results count
+		$('#search-results').text(`Showing: ${data.length} items`);
+		$('#total-items').text(data.length);
+	}
+	
+	bind_search_and_sort() {
+		const me = this;
+		
+		// Search functionality
+		$('#common-code-filter').on('input', function() {
+			const searchText = $(this).val().toLowerCase().trim();
+			
+			if (searchText === '') {
+				// Show all data
+				me.filtered_data = [...me.report_data];
+				$('.clear-search').hide();
+			} else {
+				// Filter by common code
+				me.filtered_data = me.report_data.filter(row => 
+					row.common_code.toLowerCase().includes(searchText)
+				);
+				$('.clear-search').show();
+			}
+			
+			// Re-apply current sort
+			me.sort_data(me.current_sort.column, me.current_sort.order, false);
+			me.render_table_rows(me.filtered_data);
+		});
+		
+		// Clear search button
+		$('.clear-search').on('click', function() {
+			$('#common-code-filter').val('').trigger('input');
+		});
+		
+		// Sortable column headers
+		$('.sortable-header').on('click', function() {
+			const column = $(this).data('column');
+			const dataType = $(this).data('type');
+			
+			// Toggle sort order
+			let order = 'asc';
+			if (me.current_sort.column === column && me.current_sort.order === 'asc') {
+				order = 'desc';
+			}
+			
+			me.sort_data(column, order, true);
+		});
+	}
+	
+	sort_data(column, order, updateUI = true) {
+		const me = this;
+		me.current_sort = { column, order };
+		
+		// Helper function to get nested property value
+		const getNestedValue = (obj, path) => {
+			return path.split('.').reduce((current, prop) => current?.[prop], obj);
+		};
+		
+		// Sort the filtered data
+		me.filtered_data.sort((a, b) => {
+			let aVal = getNestedValue(a, column);
+			let bVal = getNestedValue(b, column);
+			
+			// Handle null/undefined values
+			if (aVal === null || aVal === undefined) aVal = 0;
+			if (bVal === null || bVal === undefined) bVal = 0;
+			
+			// String comparison for common_code
+			if (column === 'common_code') {
+				aVal = String(aVal).toLowerCase();
+				bVal = String(bVal).toLowerCase();
+				return order === 'asc' 
+					? aVal.localeCompare(bVal) 
+					: bVal.localeCompare(aVal);
+			}
+			
+			// Numeric comparison for quantities
+			aVal = parseFloat(aVal) || 0;
+			bVal = parseFloat(bVal) || 0;
+			
+			return order === 'asc' ? aVal - bVal : bVal - aVal;
+		});
+		
+		if (updateUI) {
+			// Update sort icons
+			$('.sortable-header .sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
+			$('.sortable-header').removeClass('sorted-asc sorted-desc');
+			
+			const $header = $(`.sortable-header[data-column="${column}"]`);
+			$header.addClass(order === 'asc' ? 'sorted-asc' : 'sorted-desc');
+			$header.find('.sort-icon')
+				.removeClass('fa-sort')
+				.addClass(order === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+			
+			// Re-render table
+			me.render_table_rows(me.filtered_data);
+		}
 	}
 	
 	bind_batch_buttons() {
@@ -729,6 +887,44 @@ class SPPAggregatedReport {
 					color: #1e293b;
 					font-weight: 500;
 				}
+				.report-stats {
+					flex: 1;
+				}
+				.report-search {
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				.search-box {
+					position: relative;
+					display: flex;
+					align-items: center;
+				}
+				.search-icon {
+					position: absolute;
+					left: 10px;
+					color: #94a3b8;
+				}
+				.common-code-search {
+					padding-left: 30px;
+					padding-right: 30px;
+					border-radius: 4px;
+					border: 1px solid #cbd5e1;
+					font-size: 14px;
+					height: 30px;
+				}
+				.clear-search {
+					position: absolute;
+					right: 10px;
+					background: transparent;
+					border: none;
+					color: #94a3b8;
+					cursor: pointer;
+				}
+				.search-results {
+					color: #64748b;
+					font-size: 14px;
+				}
 				.table-responsive {
 					overflow-x: auto;
 					margin-top: 15px;
@@ -843,6 +1039,23 @@ class SPPAggregatedReport {
 				}
 				.aggregated-table tbody tr:hover td {
 					color: #0f172a !important;
+				}
+				.sortable-header {
+					cursor: pointer;
+					user-select: none;
+					transition: background-color 0.2s;
+				}
+				.sortable-header:hover {
+					background: #e2e8f0 !important;
+				}
+				.sort-icon {
+					margin-left: 5px;
+					font-size: 11px;
+					color: #94a3b8;
+				}
+				.sorted-asc .sort-icon,
+				.sorted-desc .sort-icon {
+					color: #1e40af;
 				}
 				
 				/* Batch Modal Styles */
