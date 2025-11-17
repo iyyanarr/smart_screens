@@ -55,16 +55,6 @@ class SPPAggregatedReport {
 					fieldtype: 'Column Break'
 				},
 				{
-					label: 'Warehouse',
-					fieldtype: 'Link',
-					fieldname: 'warehouse',
-					options: 'Warehouse',
-					reqd: 1
-				},
-				{
-					fieldtype: 'Column Break'
-				},
-				{
 					label: 'Item Group',
 					fieldtype: 'Link',
 					fieldname: 'item_group',
@@ -94,18 +84,8 @@ class SPPAggregatedReport {
 			company: this.filters.get_value('company'),
 			from_date: this.filters.get_value('from_date'),
 			to_date: this.filters.get_value('to_date'),
-			warehouse: this.filters.get_value('warehouse'),
 			item_group: this.filters.get_value('item_group')
 		};
-		
-		if (!filter_values.warehouse) {
-			frappe.msgprint({
-				title: __('Required Field Missing'),
-				indicator: 'red',
-				message: __('Please select a Warehouse')
-			});
-			return;
-		}
 		
 		this.show_loading_with_progress();
 		
@@ -173,7 +153,6 @@ class SPPAggregatedReport {
 			company: this.filters.get_value('company'),
 			from_date: this.filters.get_value('from_date'),
 			to_date: this.filters.get_value('to_date'),
-			warehouse: this.filters.get_value('warehouse'),
 			item_group: this.filters.get_value('item_group')
 		};
 		
@@ -562,7 +541,7 @@ class SPPAggregatedReport {
 			return `<div class="text-muted text-center p-4">No batches found for ${item_group}</div>`;
 		}
 		
-			// Calculate totals for this item group
+		// Calculate totals for this item group
 		let totals = {
 			opening_qty: 0,
 			in_qty: 0,
@@ -611,10 +590,26 @@ class SPPAggregatedReport {
 					<tbody>`;
 		
 		batches.forEach(batch => {
+			// Escape HTML in data attributes to handle special characters
+			const escapeHtml = (str) => {
+				if (!str) return '';
+				return String(str).replace(/[&<>"']/g, (match) => {
+					const escapeMap = {
+						'&': '&amp;',
+						'<': '&lt;',
+						'>': '&gt;',
+						'"': '&quot;',
+						"'": '&#39;'
+					};
+					return escapeMap[match];
+				});
+			};
+			
 			html += `
-				<tr data-item="${batch.item || ''}" 
-				    data-batch="${batch.batch || ''}" 
-				    data-warehouse="${batch.warehouse || ''}"
+				<tr data-item="${escapeHtml(batch.item)}" 
+				    data-batch="${escapeHtml(batch.batch)}" 
+				    data-warehouse="${escapeHtml(batch.warehouse)}"
+				    data-item-name="${escapeHtml(batch.item_name)}"
 				    data-opening="${batch.opening_qty || 0}"
 				    data-in="${batch.in_qty || 0}"
 				    data-out="${batch.out_qty || 0}"
@@ -622,7 +617,7 @@ class SPPAggregatedReport {
 					<td>${batch.item || '-'}</td>
 					<td>${batch.item_name || '-'}</td>
 					<td>${batch.batch || '-'}</td>
-					<td>${batch.warehouse || '-'}</td>
+						<td class="warehouse-cell">${batch.warehouse || '-'}</td>
 					<td class="text-right">${this.format_number(batch.opening_qty)}</td>
 					<td class="text-right text-success">${this.format_number(batch.in_qty)}</td>
 					<td class="text-right text-danger">${this.format_number(batch.out_qty)}</td>
