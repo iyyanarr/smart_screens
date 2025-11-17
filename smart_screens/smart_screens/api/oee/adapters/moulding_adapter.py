@@ -578,6 +578,7 @@ class MouldingAdapter(ProcessAdapter):
         - Subtract lunch break duration (default 30 minutes)
         - Return planned production time in minutes
         
+        FIX: Case-insensitive shift type lookup to handle "8 hours - 3" vs "8 Hours - 3"
         Falls back to 450 minutes if shift not found (8 hours - 30 min lunch)
         """
         shift_type = production_entry.get('shift_type')
@@ -586,19 +587,20 @@ class MouldingAdapter(ProcessAdapter):
             return self.default_planned_time  # Fallback to 450 minutes
         
         try:
-            # Get Shift Type document to calculate duration
-            shift_doc = frappe.db.get_value(
-                'Shift Type',
-                shift_type,
-                ['start_time', 'end_time'],
-                as_dict=True
-            )
+            # FIX: Case-insensitive lookup for Shift Type
+            # This handles inconsistent naming like "8 hours - 3" vs "8 Hours - 1"
+            shift_doc = frappe.db.sql("""
+                SELECT start_time, end_time
+                FROM `tabShift Type`
+                WHERE LOWER(name) = LOWER(%s)
+                LIMIT 1
+            """, (shift_type,), as_dict=True)
             
-            if not shift_doc:
+            if not shift_doc or len(shift_doc) == 0:
                 return self.default_planned_time
             
-            start_time = shift_doc.get('start_time')
-            end_time = shift_doc.get('end_time')
+            start_time = shift_doc[0].get('start_time')
+            end_time = shift_doc[0].get('end_time')
             
             if not start_time or not end_time:
                 return self.default_planned_time
@@ -606,9 +608,16 @@ class MouldingAdapter(ProcessAdapter):
             # Calculate shift duration in minutes
             from datetime import datetime, timedelta
             
-            # Parse time strings
-            start = datetime.strptime(str(start_time), '%H:%M:%S')
-            end = datetime.strptime(str(end_time), '%H:%M:%S')
+            # Parse time strings (handle both time and datetime objects)
+            if isinstance(start_time, str):
+                start = datetime.strptime(str(start_time).split('.')[0], '%H:%M:%S')
+            else:
+                start = datetime.combine(datetime.today(), start_time)
+            
+            if isinstance(end_time, str):
+                end = datetime.strptime(str(end_time).split('.')[0], '%H:%M:%S')
+            else:
+                end = datetime.combine(datetime.today(), end_time)
             
             # Handle overnight shifts (end_time < start_time)
             if end < start:
@@ -625,7 +634,7 @@ class MouldingAdapter(ProcessAdapter):
             
         except Exception as e:
             frappe.log_error(
-                f"Error calculating planned time for shift {shift_type}: {str(e)}",
+                f"Error calculating planned time for shift {shift_type}: {str(e)}\n{frappe.get_traceback()}",
                 "Moulding Adapter - Planned Time Calculation"
             )
             return self.default_planned_time
