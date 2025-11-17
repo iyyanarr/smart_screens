@@ -62,10 +62,14 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
         
         entry = prod_entry[0]
         
-        # Now find ALL lots with the same context (date, shift, press, item, operator)
+        # Find ALL lots with the same context IN THE SAME SHIFT
+        # Link lots that share: date + shift + machine + item + operator
+        # FIX: Count production ENTRIES, not just distinct lot numbers
+        # This handles cases where the SAME lot number has multiple production entries
         all_lots = frappe.db.sql("""
             SELECT 
-                DISTINCT COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
+                COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
+                mpe.name as production_entry,
                 mpe.creation
             FROM `tabMoulding Production Entry` mpe
             INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
@@ -84,21 +88,26 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             entry['operator_name']
         ), as_dict=True)
         
+        # FIX: Check if we have multiple ENTRIES (not just multiple lot numbers)
+        # Case 1: Multiple different lot numbers (e.g., LOT-1, LOT-2, LOT-3) → LINKED
+        # Case 2: Same lot number appearing multiple times (e.g., LOT-1, LOT-1) → LINKED
         if not all_lots or len(all_lots) <= 1:
-            # Only 1 lot found = not linked
+            # Only 1 production entry found = not linked
             return {
                 'is_linked': False,
                 'linked_lots': [],
                 'linked_lot_count': 0
             }
         
-        # Multiple lots found with same context = LINKED!
-        linked_lot_numbers = [lot['lot_number'] for lot in all_lots]
+        # Multiple production entries found = LINKED!
+        # Get unique lot numbers (may be the same lot or different lots)
+        linked_lot_numbers = list(set([lot['lot_number'] for lot in all_lots]))
         
         return {
             'is_linked': True,
             'linked_lots': linked_lot_numbers,
-            'linked_lot_count': len(linked_lot_numbers)
+            'linked_lot_count': len(linked_lot_numbers),
+            'total_entries': len(all_lots)  # Total production entries (including duplicates)
         }
         
     except Exception as e:
