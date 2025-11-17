@@ -570,9 +570,65 @@ class MouldingAdapter(ProcessAdapter):
             return 0.0
     
     def get_planned_time(self, production_entry):
-        """Get planned production time in minutes"""
-        # Default: 450 minutes (8 hours - 30 min lunch)
-        return self.default_planned_time
+        """
+        Get planned production time in minutes from Shift Type
+        
+        Formula:
+        - Fetch shift duration from Shift Type master (start_time to end_time)
+        - Subtract lunch break duration (default 30 minutes)
+        - Return planned production time in minutes
+        
+        Falls back to 450 minutes if shift not found (8 hours - 30 min lunch)
+        """
+        shift_type = production_entry.get('shift_type')
+        
+        if not shift_type or shift_type == 'Unknown':
+            return self.default_planned_time  # Fallback to 450 minutes
+        
+        try:
+            # Get Shift Type document to calculate duration
+            shift_doc = frappe.db.get_value(
+                'Shift Type',
+                shift_type,
+                ['start_time', 'end_time'],
+                as_dict=True
+            )
+            
+            if not shift_doc:
+                return self.default_planned_time
+            
+            start_time = shift_doc.get('start_time')
+            end_time = shift_doc.get('end_time')
+            
+            if not start_time or not end_time:
+                return self.default_planned_time
+            
+            # Calculate shift duration in minutes
+            from datetime import datetime, timedelta
+            
+            # Parse time strings
+            start = datetime.strptime(str(start_time), '%H:%M:%S')
+            end = datetime.strptime(str(end_time), '%H:%M:%S')
+            
+            # Handle overnight shifts (end_time < start_time)
+            if end < start:
+                end += timedelta(days=1)
+            
+            # Calculate duration in minutes
+            duration = (end - start).total_seconds() / 60.0
+            
+            # Subtract lunch break (30 minutes standard)
+            lunch_break_minutes = 30
+            planned_time = duration - lunch_break_minutes
+            
+            return planned_time if planned_time > 0 else self.default_planned_time
+            
+        except Exception as e:
+            frappe.log_error(
+                f"Error calculating planned time for shift {shift_type}: {str(e)}",
+                "Moulding Adapter - Planned Time Calculation"
+            )
+            return self.default_planned_time
     
     def get_downtime(self, production_entry):
         """Get downtime from custom field"""

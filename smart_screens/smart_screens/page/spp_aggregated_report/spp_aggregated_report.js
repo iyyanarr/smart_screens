@@ -661,6 +661,11 @@ class SPPAggregatedReport {
 			
 			let visibleCount = 0;
 			$table.find('tbody tr').each(function() {
+				// Skip the total row - it should always be visible
+				if ($(this).hasClass('batch-total-row')) {
+					return; // Continue to next iteration
+				}
+				
 				const item = $(this).data('item').toString().toLowerCase();
 				const batch = $(this).data('batch').toString().toLowerCase();
 				const warehouse = $(this).data('warehouse').toString().toLowerCase();
@@ -673,7 +678,7 @@ class SPPAggregatedReport {
 				}
 			});
 			
-			// Update count badge
+			// Update count badge (excluding the total row from count)
 			$(this).closest('.batch-tab-pane').find('.batch-count').text(visibleCount);
 		});
 		
@@ -682,7 +687,10 @@ class SPPAggregatedReport {
 			const column = $(this).data('column');
 			const $table = $(this).closest('table');
 			const $tbody = $table.find('tbody');
-			const $rows = $tbody.find('tr').toArray();
+			
+			// Get all rows except the total row
+			const $dataRows = $tbody.find('tr:not(.batch-total-row)').toArray();
+			const $totalRow = $tbody.find('tr.batch-total-row');
 			
 			// Determine sort order
 			const isAscending = $(this).hasClass('sort-asc');
@@ -695,8 +703,8 @@ class SPPAggregatedReport {
 			$(this).addClass(`sort-${newOrder}`);
 			$(this).find('i').removeClass('fa-sort').addClass(newOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
 			
-			// Sort rows
-			$rows.sort((a, b) => {
+			// Sort data rows only
+			$dataRows.sort((a, b) => {
 				let aVal, bVal;
 				
 				if (['opening_qty', 'in_qty', 'out_qty', 'balance_qty'].includes(column)) {
@@ -716,8 +724,8 @@ class SPPAggregatedReport {
 				}
 			});
 			
-			// Re-append sorted rows
-			$tbody.empty().append($rows);
+			// Re-append sorted data rows, then append total row at the end
+			$tbody.empty().append($dataRows).append($totalRow);
 		});
 	}
 	
