@@ -35,6 +35,7 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
     """
     try:
         # Find the production entry for this lot
+        # FIX: Use case-insensitive shift_type matching to handle "8 hours - 3" vs "8 Hours - 1"
         prod_entry = frappe.db.sql("""
             SELECT 
                 mpe.name,
@@ -48,7 +49,7 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) = %s
             AND mpe.moulding_date = %s
-            AND jc.shift_type = %s
+            AND LOWER(jc.shift_type) = LOWER(%s)
             AND mpe.docstatus = 1
             LIMIT 1
         """, (lot_number, production_date, shift_type), as_dict=True)
@@ -65,6 +66,7 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
         # Find ALL lots with the same context IN THE SAME SHIFT
         # Link lots that share: date + shift + machine + item + operator
         # FIX: Count production ENTRIES, not just distinct lot numbers
+        # FIX: Use case-insensitive shift_type matching
         # This handles cases where the SAME lot number has multiple production entries
         all_lots = frappe.db.sql("""
             SELECT 
@@ -74,7 +76,7 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             FROM `tabMoulding Production Entry` mpe
             INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE mpe.moulding_date = %s
-            AND jc.shift_type = %s
+            AND LOWER(jc.shift_type) = LOWER(%s)
             AND jc.workstation = %s
             AND mpe.item_to_produce = %s
             AND mpe.employee_name = %s

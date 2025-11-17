@@ -75,7 +75,7 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 entry.get('lot_number'), 
                 entry.get('production_date'), 
                 entry.get('shift_type'), 
-                entry.get('press_machine')
+                entry.get('machine_name')
             )
             is_linked = linked_info.get('is_linked', False)
             linked_lots = linked_info.get('linked_lots', [])
@@ -286,7 +286,7 @@ def create_oee_lot_linking_records(production_data, production_date, shift_filte
             shift_type = entry.get('shift_type')
             
             # FIX: Get machine from correct field (machine_name or press_machine)
-            machine = entry.get('machine_name') or entry.get('press_machine') or entry.get('workstation')
+            machine = entry.get('machine_name') or entry.get('machine_name') or entry.get('workstation')
             
             # FIX: Get item_code from correct field
             item_code = entry.get('item_code') or entry.get('item_to_produce')
