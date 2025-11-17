@@ -151,12 +151,14 @@ class MouldingAdapter(ProcessAdapter):
             machine_condition = f"AND jc.workstation LIKE '%{filters.get('machine')}%'"
         
         # STEP 4: Get Moulding Production Entry data for these lot numbers
+        # FIX: Include actual moulding_date from production entry for linked lot detection
         # NOTE: We DON'T filter by moulding_date anymore - we filter by lot number from work plans
         production_query = f"""
             SELECT 
                 COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
                 mpe.mould_reference as mould_ref,
                 mpe.item_to_produce as item_code,
+                DATE(mpe.moulding_date) as actual_moulding_date,
                 SUM(mpe.number_of_lifts) as total_production_lifts,
                 SUM(mpe.number_of_lifts * mpe.no_of_running_cavities) as total_pieces_produced,
                 AVG(COALESCE(mpe.downtime_minutes, 0)) as avg_downtime_minutes,
@@ -173,7 +175,8 @@ class MouldingAdapter(ProcessAdapter):
                      mpe.mould_reference, 
                      mpe.item_to_produce, 
                      mpe.employee_name, 
-                     jc.workstation
+                     jc.workstation,
+                     DATE(mpe.moulding_date)
         """
         
         production_data = frappe.db.sql(production_query, as_dict=True)
@@ -234,7 +237,8 @@ class MouldingAdapter(ProcessAdapter):
                     
                     result = {
                         'name': first_production_entry,
-                        'production_date': wp['planned_date'],  # Use PLANNED date from Work Planning
+                        'production_date': wp['planned_date'],  # Use PLANNED date from Work Planning (for display)
+                        'actual_moulding_date': prod.get('actual_moulding_date'),  # FIX: Add actual production date for linked lot detection
                         'shift_type': wp['shift_type'],
                         'mould_reference': mould_ref,
                         'machine_name': machine_name,
