@@ -13,16 +13,22 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
     """
     AUTO-DETECT if a lot is part of a linked group based on production context
     
-    Logic: Lots are linked if they share:
-    - Same production date
-    - Same shift type
-    - Same machine/press
-    - Same item code
-    - Same operator
+    CRITICAL FIX: Only link lots that are part of Work Planning or Add-on Work Planning
+    This prevents linking manual production entries, trial lots, or rework lots
+    
+    FIX 2: Normalize whitespace in shift types to handle "8 hours - 3" vs "8 Hours  - 2" (extra spaces)
+    
+    FIX 3: Don't filter by production_date in STEP 2, since actual moulding_date can be different
+           from Work Planning date. Use actual_moulding_date from production entry instead.
+    
+    Logic: Lots are linked if they:
+    1. Exist in Work Planning or Add-on Work Planning for the given date
+    2. Have actual production entries (regardless of when they were produced)
+    3. Share the same production context (actual date, shift, machine, item, operator)
     
     Args:
         lot_number: Lot number to check
-        production_date: Production date
+        production_date: Production date (from Work Planning)
         shift_type: Shift type
         machine_reference: Machine/press reference
     
@@ -34,13 +40,55 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
         }
     """
     try:
-        # Find the production entry for this lot
-        # FIX: Use case-insensitive shift_type matching to handle "8 hours - 3" vs "8 Hours - 1"
+        # STEP 1: Check if this lot exists in Work Planning or Add-on Work Planning
+        # This ensures we only link PLANNED production, not manual entries
+        work_plan_check = frappe.db.sql("""
+            SELECT 
+                wp.date as planned_date,
+                wp.shift_type,
+                wpi.item as item_code,
+                wpi.mould as mould_ref
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            WHERE wpi.lot_number = %s
+            AND DATE(wp.date) = %s
+            AND wp.docstatus = 1
+            
+            UNION
+            
+            SELECT 
+                awp.date as planned_date,
+                awp.shift_type,
+                awpi.item as item_code,
+                awpi.mould as mould_ref
+            FROM `tabAdd On Work Planning` awp
+            INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
+            WHERE awpi.lot_number = %s
+            AND DATE(awp.date) = %s
+            AND awp.docstatus = 1
+            
+            LIMIT 1
+        """, (lot_number, production_date, lot_number, production_date), as_dict=True)
+        
+        if not work_plan_check or len(work_plan_check) == 0:
+            # This lot is NOT in Work Planning - don't link it
+            # It's either manual production, trial lot, or rework
+            return {
+                'is_linked': False,
+                'linked_lots': [],
+                'linked_lot_count': 0
+            }
+        
+        work_plan_data = work_plan_check[0]
+        
+        # STEP 2: Find the production entry for this lot to get operator and machine details
+        # FIX: Don't filter by production_date! Production can happen on a different day than planned
+        # We'll use the ACTUAL moulding_date from the production entry for linking
         prod_entry = frappe.db.sql("""
             SELECT 
                 mpe.name,
                 COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
-                mpe.moulding_date,
+                DATE(mpe.moulding_date) as actual_moulding_date,
                 mpe.item_to_produce as item_code,
                 mpe.employee_name as operator_name,
                 jc.shift_type,
@@ -48,13 +96,13 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             FROM `tabMoulding Production Entry` mpe
             INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
             WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) = %s
-            AND mpe.moulding_date = %s
-            AND LOWER(jc.shift_type) = LOWER(%s)
+            AND REPLACE(LOWER(jc.shift_type), ' ', '') = REPLACE(LOWER(%s), ' ', '')
             AND mpe.docstatus = 1
             LIMIT 1
-        """, (lot_number, production_date, shift_type), as_dict=True)
+        """, (lot_number, shift_type), as_dict=True)
         
         if not prod_entry or len(prod_entry) == 0:
+            # Production entry exists in work plan but not yet produced
             return {
                 'is_linked': False,
                 'linked_lots': [],
@@ -62,37 +110,82 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             }
         
         entry = prod_entry[0]
+        actual_date = entry['actual_moulding_date']  # Use ACTUAL production date for linking
         
-        # Find ALL lots with the same context IN THE SAME SHIFT
-        # Link lots that share: date + shift + machine + item + operator
-        # FIX: Count production ENTRIES, not just distinct lot numbers
-        # FIX: Use case-insensitive shift_type matching
-        # This handles cases where the SAME lot number has multiple production entries
-        all_lots = frappe.db.sql("""
-            SELECT 
-                COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
-                mpe.name as production_entry,
-                mpe.creation
-            FROM `tabMoulding Production Entry` mpe
-            INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
-            WHERE mpe.moulding_date = %s
-            AND LOWER(jc.shift_type) = LOWER(%s)
-            AND jc.workstation = %s
-            AND mpe.item_to_produce = %s
-            AND mpe.employee_name = %s
-            AND mpe.docstatus = 1
-            ORDER BY mpe.creation ASC
+        # STEP 3: Find ALL lots from Work Planning/Add-on Work Planning with the same context
+        # Use the PLANNED date to find work plans, not the actual production date
+        # FIX: Use REPLACE to normalize whitespace when comparing shift types
+        # This handles "8 hours - 3" vs "8 Hours  - 2" (extra spaces, different casing)
+        all_planned_lots = frappe.db.sql("""
+            SELECT DISTINCT
+                wpi.lot_number
+            FROM `tabWork Planning` wp
+            INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
+            WHERE DATE(wp.date) = %s
+            AND REPLACE(LOWER(wp.shift_type), ' ', '') = REPLACE(LOWER(%s), ' ', '')
+            AND wpi.item = %s
+            AND wp.docstatus = 1
+            
+            UNION
+            
+            SELECT DISTINCT
+                awpi.lot_number
+            FROM `tabAdd On Work Planning` awp
+            INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
+            WHERE DATE(awp.date) = %s
+            AND REPLACE(LOWER(awp.shift_type), ' ', '') = REPLACE(LOWER(%s), ' ', '')
+            AND awpi.item = %s
+            AND awp.docstatus = 1
         """, (
-            entry['moulding_date'],
-            entry['shift_type'],
-            entry['machine_name'],
-            entry['item_code'],
-            entry['operator_name']
+            production_date,
+            work_plan_data['shift_type'],
+            work_plan_data['item_code'],
+            production_date,
+            work_plan_data['shift_type'],
+            work_plan_data['item_code']
         ), as_dict=True)
         
-        # FIX: Check if we have multiple ENTRIES (not just multiple lot numbers)
-        # Case 1: Multiple different lot numbers (e.g., LOT-1, LOT-2, LOT-3) → LINKED
-        # Case 2: Same lot number appearing multiple times (e.g., LOT-1, LOT-1) → LINKED
+        if not all_planned_lots:
+            return {
+                'is_linked': False,
+                'linked_lots': [],
+                'linked_lot_count': 0
+            }
+        
+        planned_lot_numbers = [lot['lot_number'] for lot in all_planned_lots]
+        
+        # STEP 4: Now filter these planned lots by matching production context
+        # FIX: Use ACTUAL moulding_date here, since production can span multiple days
+        # (same machine, same operator, actually produced on the same day)
+        if len(planned_lot_numbers) > 0:
+            placeholders = ','.join(['%s'] * len(planned_lot_numbers))
+            
+            all_lots = frappe.db.sql(f"""
+                SELECT 
+                    COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
+                    mpe.name as production_entry,
+                    mpe.creation
+                FROM `tabMoulding Production Entry` mpe
+                INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
+                WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
+                AND DATE(mpe.moulding_date) = %s
+                AND REPLACE(LOWER(jc.shift_type), ' ', '') = REPLACE(LOWER(%s), ' ', '')
+                AND jc.workstation = %s
+                AND mpe.item_to_produce = %s
+                AND mpe.employee_name = %s
+                AND mpe.docstatus = 1
+                ORDER BY mpe.creation ASC
+            """, tuple(planned_lot_numbers) + (
+                actual_date,  # Use actual moulding date, not planned date
+                entry['shift_type'],
+                entry['machine_name'],
+                entry['item_code'],
+                entry['operator_name']
+            ), as_dict=True)
+        else:
+            all_lots = []
+        
+        # STEP 5: Check if we have multiple entries
         if not all_lots or len(all_lots) <= 1:
             # Only 1 production entry found = not linked
             return {
@@ -101,15 +194,14 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
                 'linked_lot_count': 0
             }
         
-        # Multiple production entries found = LINKED!
-        # Get unique lot numbers (may be the same lot or different lots)
+        # Multiple production entries found from Work Planning = LINKED!
         linked_lot_numbers = list(set([lot['lot_number'] for lot in all_lots]))
         
         return {
             'is_linked': True,
             'linked_lots': linked_lot_numbers,
             'linked_lot_count': len(linked_lot_numbers),
-            'total_entries': len(all_lots)  # Total production entries (including duplicates)
+            'total_entries': len(all_lots)
         }
         
     except Exception as e:

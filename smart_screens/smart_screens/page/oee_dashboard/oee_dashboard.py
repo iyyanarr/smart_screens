@@ -75,7 +75,7 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
             # This fixes the issue where Work Planning date != actual production date
             linked_info = get_linked_lot_info(
                 entry.get('lot_number'), 
-                entry.get('actual_moulding_date') or entry.get('production_date'),  # FIX: Use actual date from production entry
+                entry.get('production_date'),  # FIX: Use Work Planning date for linked lot detection
                 entry.get('shift_type'), 
                 entry.get('machine_name')
             )
