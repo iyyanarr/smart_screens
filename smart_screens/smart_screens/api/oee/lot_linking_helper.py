@@ -18,13 +18,15 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
     
     FIX 2: Normalize whitespace in shift types to handle "8 hours - 3" vs "8 Hours  - 2" (extra spaces)
     
-    FIX 3: Don't filter by production_date in STEP 2, since actual moulding_date can be different
-           from Work Planning date. Use actual_moulding_date from production entry instead.
+    FIX 3: Don't filter by production_date in STEP 2 and STEP 4.
+           Production can happen on different dates than Work Planning date.
+           Link ALL lots from the same Work Planning regardless of actual production date.
     
     Logic: Lots are linked if they:
     1. Exist in Work Planning or Add-on Work Planning for the given date
     2. Have actual production entries (regardless of when they were produced)
-    3. Share the same production context (actual date, shift, machine, item, operator)
+    3. Share the same production context (shift, machine, item, operator)
+       NOTE: Date is NOT checked - allows multi-day production runs
     
     Args:
         lot_number: Lot number to check
@@ -110,7 +112,6 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
             }
         
         entry = prod_entry[0]
-        actual_date = entry['actual_moulding_date']  # Use ACTUAL production date for linking
         
         # STEP 3: Find ALL lots from Work Planning/Add-on Work Planning with the same context
         # Use the PLANNED date to find work plans, not the actual production date
@@ -155,8 +156,8 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
         planned_lot_numbers = [lot['lot_number'] for lot in all_planned_lots]
         
         # STEP 4: Now filter these planned lots by matching production context
-        # FIX: Use ACTUAL moulding_date here, since production can span multiple days
-        # (same machine, same operator, actually produced on the same day)
+        # FIX: REMOVED date filter - lots from same Work Planning are linked regardless of actual production date
+        # This allows production that spans multiple days to be properly linked
         if len(planned_lot_numbers) > 0:
             placeholders = ','.join(['%s'] * len(planned_lot_numbers))
             
@@ -168,7 +169,6 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
                 FROM `tabMoulding Production Entry` mpe
                 INNER JOIN `tabJob Card` jc ON mpe.job_card = jc.name
                 WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({placeholders})
-                AND DATE(mpe.moulding_date) = %s
                 AND REPLACE(LOWER(jc.shift_type), ' ', '') = REPLACE(LOWER(%s), ' ', '')
                 AND jc.workstation = %s
                 AND mpe.item_to_produce = %s
@@ -176,7 +176,6 @@ def get_linked_lot_info(lot_number, production_date, shift_type, machine_referen
                 AND mpe.docstatus = 1
                 ORDER BY mpe.creation ASC
             """, tuple(planned_lot_numbers) + (
-                actual_date,  # Use actual moulding date, not planned date
                 entry['shift_type'],
                 entry['machine_name'],
                 entry['item_code'],
