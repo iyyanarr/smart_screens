@@ -3,6 +3,7 @@ from frappe import _
 import json
 import pandas as pd
 import time  # NEW: Add time module for profiling
+from io import BytesIO
 
 def get_spp_warehouses():
 	"""
@@ -41,52 +42,110 @@ def get_spp_warehouses():
 	
 	return existing_warehouses
 
-def get_batch_wise_balance_history_data(company, from_date, to_date, warehouses, item_group=None):
+def expand_parent_warehouses(warehouse_list):
+	"""
+	Expand parent/group warehouses to include all their child warehouses.
+	This fixes the issue where selecting "Deflashing Vendors - SPP INDIA" 
+	(a parent warehouse) would not include any child vendor warehouses.
+	
+	Args:
+		warehouse_list: List of warehouse names (may include parent warehouses)
+	
+	Returns:
+		list: Expanded list including all child warehouses
+	"""
+	expanded_warehouses = []
+	
+	for warehouse in warehouse_list:
+		# Always add the warehouse itself
+		expanded_warehouses.append(warehouse)
+		
+		# Check if this warehouse has children
+		child_warehouses = frappe.get_all(
+			"Warehouse",
+			filters={"parent_warehouse": warehouse},
+			pluck="name"
+		)
+		
+		if child_warehouses:
+			frappe.logger().info(
+				f"Warehouse '{warehouse}' is a parent with {len(child_warehouses)} children: {child_warehouses}"
+			)
+			# Add all child warehouses
+			expanded_warehouses.extend(child_warehouses)
+			
+			# Recursively check if any children have their own children
+			for child in child_warehouses:
+				grandchildren = frappe.get_all(
+					"Warehouse",
+					filters={"parent_warehouse": child},
+					pluck="name"
+				)
+				if grandchildren:
+					expanded_warehouses.extend(grandchildren)
+	
+	# Remove duplicates while preserving order
+	seen = set()
+	result = []
+	for wh in expanded_warehouses:
+		if wh not in seen:
+			seen.add(wh)
+			result.append(wh)
+	
+	frappe.logger().info(
+		f"Warehouse expansion: {len(warehouse_list)} → {len(result)} warehouses"
+	)
+	
+	return result
+
+def fetch_batch_balance_data(company, warehouses, item_code=None, item_group=None, start_date=None, end_date=None):
 	"""
 	Fetch data using SPP Batch Balance Report (Custom Report)
-	This is the working report that returns the correct column structure
-	Returns accurate Opening, In, Out, and Balance quantities
-	"""
-	if not warehouses:
-		return []
 	
+	OPTIMIZATION: Pass all warehouses at once instead of calling the report
+	separately for each warehouse to avoid N+1 query problem
+	"""
 	try:
-		frappe.logger().info(f"Fetching SPP Batch Balance Report for {len(warehouses)} warehouses...")
-		
-		# Call SPP Batch Balance Report for each warehouse and combine results
-		# Note: Custom Reports may not support multiple warehouses in one call
-		all_data = []
-		
+		# Expand child warehouses
+		expanded_warehouses = []
 		for warehouse in warehouses:
-			# Prepare filters for SPP Batch Balance Report
-			report_filters = {
-				"company": company,
-				"from_date": from_date,
-				"to_date": to_date,
-				"warehouse": warehouse,  # Pass one warehouse at a time
-				"item_group": item_group or ""
-			}
-			
-			# Get the SPP Batch Balance Report (Custom Report)
-			report = frappe.get_doc("Report", "SPP Batch Balance Report")
-			
-			# Execute the report
-			columns, data = report.get_data(
-				limit=0,  # No limit, get all data
-				user=frappe.session.user,
-				filters=report_filters,
-				as_dict=True,
-				ignore_prepared_report=True,
-				are_default_filters=False,
-			)
-			
-			if data:
-				all_data.extend(data)
-				frappe.logger().info(f"✅ Got {len(data)} records from warehouse: {warehouse}")
+			expanded_warehouses.extend(expand_parent_warehouses([warehouse]))
 		
-		frappe.logger().info(f"✅ Total SPP Batch Balance records: {len(all_data)}")
+		frappe.logger().info(f"Fetching SPP Batch Balance Report for {len(expanded_warehouses)} warehouses (expanded from {len(warehouses)})...")
 		
-		return all_data
+		# OPTIMIZATION: Prepare filters with ALL warehouses at once
+		filters = {
+			"company": company,
+			"warehouse": expanded_warehouses,  # Pass list of all warehouses
+		}
+		
+		if item_code:
+			filters["item_code"] = item_code
+		if item_group:
+			filters["item_group"] = item_group
+		if start_date:
+			filters["from_date"] = start_date
+		if end_date:
+			filters["to_date"] = end_date
+		
+		# Get the SPP Batch Balance Report (Custom Report)
+		report = frappe.get_doc("Report", "SPP Batch Balance Report")
+		
+		# OPTIMIZATION: Execute report ONCE for all warehouses
+		frappe.logger().info(f"Executing SPP Batch Balance Report with {len(expanded_warehouses)} warehouses in a single call...")
+		start_time = frappe.utils.now()
+		
+		columns, data = report.get_data(
+			filters=filters,
+			as_dict=False,
+			ignore_prepared_report=True,
+			are_default_filters=False
+		)
+		
+		execution_time = frappe.utils.time_diff_in_seconds(frappe.utils.now(), start_time)
+		frappe.logger().info(f"SPP Batch Balance Report executed in {execution_time:.2f} seconds, returned {len(data) if data else 0} rows")
+		
+		return data
 		
 	except Exception as e:
 		frappe.log_error(
@@ -138,12 +197,12 @@ def get_spp_batch_balance_data(filters=None):
 		
 		# Fetch data using SPP Batch Balance Report
 		t1 = time.time()
-		all_data = get_batch_wise_balance_history_data(
+		all_data = fetch_batch_balance_data(
 			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
-			from_date=filters.get("from_date"),
-			to_date=filters.get("to_date"),
 			warehouses=spp_warehouses,
-			item_group=filters.get("item_group")
+			item_group=filters.get("item_group"),
+			start_date=filters.get("from_date"),
+			end_date=filters.get("to_date")
 		)
 		t2 = time.time()
 		performance_log['spp_report_fetch'] = round(t2 - t1, 2)
@@ -265,12 +324,12 @@ def get_batch_details_by_common_code(common_code, filters=None, warehouse=''):
 			}
 		
 		# Fetch data using Batch-Wise Balance History report
-		all_batches_data = get_batch_wise_balance_history_data(
+		all_batches_data = fetch_batch_balance_data(
 			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
-			from_date=filters.get("from_date"),
-			to_date=filters.get("to_date"),
 			warehouses=spp_warehouses,
-			item_group=filters.get("item_group")
+			item_group=filters.get("item_group"),
+			start_date=filters.get("from_date"),
+			end_date=filters.get("to_date")
 		)
 		
 		if not all_batches_data:
@@ -339,6 +398,439 @@ def get_batch_details_by_common_code(common_code, filters=None, warehouse=''):
 			"success": False,
 			"error": str(e),
 			"batches": {"Mat": [], "Products": [], "Finished Product": []}
+		 }
+
+@frappe.whitelist()
+def export_to_excel(filters=None, warehouse=''):
+	"""
+	Export aggregated SPP report data to Excel with formatting
+	
+	Args:
+		filters: Report filters (from_date, to_date, company, item_group)
+		warehouse: Selected warehouse filter (optional, defaults to all warehouses)
+	
+	Returns:
+		dict: {success: bool, file_url: str or error: str}
+	"""
+	import openpyxl
+	from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+	from openpyxl.utils import get_column_letter
+
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+	
+	if not filters:
+		filters = {}
+	
+	try:
+		# Fetch the data using the same logic as the main report
+		spp_warehouses = get_spp_warehouses()
+		
+		if not spp_warehouses:
+			return {
+				"success": False,
+				"error": "No SPP warehouses found in the system"
+			}
+		
+		# Fetch raw data
+		all_data = fetch_batch_balance_data(
+			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
+			warehouses=spp_warehouses,
+			item_group=filters.get("item_group"),
+			start_date=filters.get("from_date"),
+			end_date=filters.get("to_date")
+		)
+		
+		if not all_data:
+			return {
+				"success": False,
+				"error": "No data available for export"
+			}
+		
+		# Exclude batches
+		all_data, excluded_count = exclude_batches(all_data)
+		
+		# Filter by item groups
+		filtered_data = filter_by_item_groups_pandas(all_data)
+		
+		# If warehouse filter is specified, filter the raw data by warehouse
+		if warehouse and warehouse != '':
+			filtered_data = [row for row in filtered_data if row.get('warehouse') == warehouse]
+		
+		# Aggregate the data
+		aggregated_result = aggregate_by_common_code(filtered_data)
+		data = aggregated_result.get("data", [])
+		grand_total = aggregated_result.get("grand_total", {})
+		
+		if not data:
+			return {
+				"success": False,
+				"error": "No data available after aggregation"
+			}
+		
+		# Create Excel workbook
+		wb = openpyxl.Workbook()
+		ws = wb.active
+		ws.title = "SPP Aggregated Report"
+		
+		# Styling
+		header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+		header_font = Font(bold=True, color="FFFFFF", size=11)
+		subheader_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+		subheader_font = Font(bold=True, size=10)
+		total_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+		total_font = Font(bold=True, size=10)
+		border = Border(
+			left=Side(style='thin'),
+			right=Side(style='thin'),
+			top=Side(style='thin'),
+			bottom=Side(style='thin')
+		)
+		center_align = Alignment(horizontal='center', vertical='center')
+		right_align = Alignment(horizontal='right', vertical='center')
+		
+		# Report Title and Filters
+		current_row = 1
+		ws.merge_cells(f'A{current_row}:Q{current_row}')
+		title_cell = ws[f'A{current_row}']
+		title_cell.value = "SPP Aggregated Report - Common Code Summary"
+		title_cell.font = Font(bold=True, size=14, color="366092")
+		title_cell.alignment = center_align
+		current_row += 1
+		
+		# Filter information
+		ws.merge_cells(f'A{current_row}:Q{current_row}')
+		filter_info = ws[f'A{current_row}']
+		filter_text = f"Period: {filters.get('from_date', '')} to {filters.get('to_date', '')}"
+		if warehouse and warehouse != '':
+			filter_text += f" | Warehouse: {warehouse}"
+		else:
+			filter_text += " | All SPP Warehouses"
+		filter_info.value = filter_text
+		filter_info.font = Font(italic=True, size=10)
+		filter_info.alignment = center_align
+		current_row += 2
+		
+		# Headers
+		headers = [
+			"Common Code",
+			"Mat Opening", "Mat In", "Mat Out", "Mat Balance",
+			"Products Opening", "Products In", "Products Out", "Products Balance",
+			"Finished Opening", "Finished In", "Finished Out", "Finished Balance",
+			"Total Opening", "Total In", "Total Out", "Total Balance"
+		]
+		
+		for col_num, header in enumerate(headers, 1):
+			cell = ws.cell(row=current_row, column=col_num)
+			cell.value = header
+			cell.fill = header_fill
+			cell.font = header_font
+			cell.alignment = center_align
+			cell.border = border
+		
+		current_row += 1
+		
+		# Data rows
+		for row_data in data:
+			col_num = 1
+			
+			# Common Code
+			cell = ws.cell(row=current_row, column=col_num)
+			cell.value = row_data.get('common_code', '')
+			cell.alignment = center_align
+			cell.border = border
+			col_num += 1
+			
+			# Mat columns
+			mat = row_data.get('Mat', {})
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = mat.get(key, 0)
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				col_num += 1
+			
+			# Products columns
+			products = row_data.get('Products', {})
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = products.get(key, 0)
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				col_num += 1
+			
+			# Finished Product columns
+			finished = row_data.get('Finished Product', {})
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = finished.get(key, 0)
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				col_num += 1
+			
+			# Total columns
+			total = row_data.get('Total', {})
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = total.get(key, 0)
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				cell.font = Font(bold=True)
+				col_num += 1
+			
+			current_row += 1
+		
+		# Grand Total Row
+		col_num = 1
+		cell = ws.cell(row=current_row, column=col_num)
+		cell.value = "GRAND TOTAL"
+		cell.fill = total_fill
+		cell.font = total_font
+		cell.alignment = center_align
+		cell.border = border
+		col_num += 1
+		
+		# Add grand total values
+		for stage in ['Mat', 'Products', 'Finished Product', 'Total']:
+			stage_data = grand_total.get(stage, {})
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = stage_data.get(key, 0)
+				cell.fill = total_fill
+				cell.font = total_font
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				col_num += 1
+		
+		# Adjust column widths
+		ws.column_dimensions['A'].width = 15  # Common Code
+		for col in range(2, 18):
+			ws.column_dimensions[get_column_letter(col)].width = 12
+		
+		# Freeze panes (freeze header row)
+		ws.freeze_panes = ws['A5']
+		
+		# Save to BytesIO
+		file_data = BytesIO()
+		wb.save(file_data)
+		file_data.seek(0)
+		
+		# Generate filename
+		from datetime import datetime
+		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+		warehouse_suffix = warehouse.replace(" ", "_").replace("-", "_") if warehouse else "All_Warehouses"
+		filename = f"SPP_Aggregated_Report_{warehouse_suffix}_{timestamp}.xlsx"
+		
+		# Save file to Frappe File Manager
+		file_doc = frappe.get_doc({
+			"doctype": "File",
+			"file_name": filename,
+			"is_private": 0,
+			"content": file_data.getvalue()
+		})
+		file_doc.save(ignore_permissions=True)
+		
+		return {
+			"success": True,
+			"file_url": file_doc.file_url,
+			"file_name": filename,
+			"message": f"Excel file generated successfully with {len(data)} records"
+		}
+		
+	except Exception as e:
+		frappe.log_error(
+			f"Error exporting to Excel: {str(e)}\n{frappe.get_traceback()}",
+			"SPP Aggregated Report - Export Error"
+		)
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+@frappe.whitelist()
+def export_batch_details_to_excel(common_code, batches, filters=None, warehouse_filter=''):
+	"""
+	Export batch details for a specific common code to Excel
+	
+	Args:
+		common_code: The common code to export
+		batches: Batch data grouped by item group
+		filters: Report filters
+		warehouse_filter: Selected warehouse filter
+	"""
+	import openpyxl
+	from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+	from openpyxl.utils import get_column_letter
+
+	if isinstance(batches, str):
+		batches = json.loads(batches)
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+	
+	try:
+		# Create Excel workbook
+		wb = openpyxl.Workbook()
+		ws = wb.active
+		ws.title = f"Code {common_code}"
+		
+		# Styling
+		header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+		header_font = Font(bold=True, color="FFFFFF", size=11)
+		border = Border(
+			left=Side(style='thin'),
+			right=Side(style='thin'),
+			top=Side(style='thin'),
+			bottom=Side(style='thin')
+		)
+		center_align = Alignment(horizontal='center', vertical='center')
+		right_align = Alignment(horizontal='right', vertical='center')
+		
+		# Title
+		current_row = 1
+		ws.merge_cells(f'A{current_row}:J{current_row}')
+		title_cell = ws[f'A{current_row}']
+		title_cell.value = f"Batch Details for Common Code: {common_code}"
+		title_cell.font = Font(bold=True, size=14, color="366092")
+		title_cell.alignment = center_align
+		current_row += 2
+		
+		# Headers
+		headers = [
+			"Item Code", "Item Group", "Batch No", "Warehouse",
+			"Opening Qty", "In Qty", "Out Qty", "Balance Qty",
+			"UOM", "Value"
+		]
+		
+		for col_num, header in enumerate(headers, 1):
+			cell = ws.cell(row=current_row, column=col_num)
+			cell.value = header
+			cell.fill = header_fill
+			cell.font = header_font
+			cell.alignment = center_align
+			cell.border = border
+		
+		current_row += 1
+		
+		# Add data for each item group
+		for item_group in ['Mat', 'Products', 'Finished Product']:
+			batch_list = batches.get(item_group, [])
+			
+			if not batch_list:
+				continue
+			
+			# Group header
+			ws.merge_cells(f'A{current_row}:J{current_row}')
+			group_cell = ws[f'A{current_row}']
+			group_cell.value = f"{item_group} ({len(batch_list)} batches)"
+			group_cell.font = Font(bold=True, size=11)
+			group_cell.fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
+			current_row += 1
+			
+			# Batch rows
+			for batch in batch_list:
+				col_num = 1
+				
+				# Item Code
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('item', '')
+				cell.border = border
+				col_num += 1
+				
+				# Item Group
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('item_group', '')
+				cell.border = border
+				col_num += 1
+				
+				# Batch No
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('batch', '')
+				cell.border = border
+				col_num += 1
+				
+				# Warehouse
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('warehouse', '')
+				cell.border = border
+				col_num += 1
+				
+				# Quantities
+				for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+					cell = ws.cell(row=current_row, column=col_num)
+					cell.value = batch.get(key, 0)
+					cell.alignment = right_align
+					cell.border = border
+					cell.number_format = '#,##0.00'
+					col_num += 1
+				
+				# UOM
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('uom', 'Nos')
+				cell.alignment = center_align
+				cell.border = border
+				col_num += 1
+				
+				# Value
+				cell = ws.cell(row=current_row, column=col_num)
+				cell.value = batch.get('balance_value', 0)
+				cell.alignment = right_align
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				col_num += 1
+				
+				current_row += 1
+			
+			current_row += 1  # Add spacing between groups
+		
+		# Adjust column widths
+		ws.column_dimensions['A'].width = 18  # Item Code
+		ws.column_dimensions['B'].width = 18  # Item Group
+		ws.column_dimensions['C'].width = 15  # Batch No
+		ws.column_dimensions['D'].width = 25  # Warehouse
+		for col in range(5, 11):
+			ws.column_dimensions[get_column_letter(col)].width = 12
+		
+		# Freeze panes
+		ws.freeze_panes = ws['A4']
+		
+		# Save to BytesIO
+		file_data = BytesIO()
+		wb.save(file_data)
+		file_data.seek(0)
+		
+		# Generate filename
+		from datetime import datetime
+		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+		filename = f"SPP_Batch_Details_{common_code}_{timestamp}.xlsx"
+		
+		# Save file
+		file_doc = frappe.get_doc({
+			"doctype": "File",
+			"file_name": filename,
+			"is_private": 0,
+			"content": file_data.getvalue()
+		})
+		file_doc.save(ignore_permissions=True)
+		
+		return {
+			"success": True,
+			"file_url": file_doc.file_url,
+			"file_name": filename
+		}
+		
+	except Exception as e:
+		frappe.log_error(
+			f"Error exporting batch details: {str(e)}\n{frappe.get_traceback()}",
+			"SPP Aggregated Report - Batch Export Error"
+		)
+		return {
+			"success": False,
+			"error": str(e)
 		}
 
 def filter_by_item_groups_pandas(data):
@@ -605,3 +1097,36 @@ def exclude_batches(data):
 		)
 		# Return original data if exclusion fails
 		return data, 0
+
+@frappe.whitelist()
+def get_child_warehouses(warehouse):
+	"""
+	Get all child warehouses for a parent warehouse, including the warehouse itself.
+	This is used for warehouse filtering - when a parent warehouse is selected,
+	we need to include all child warehouses in the filter.
+	
+	Args:
+		warehouse: Warehouse name (can be parent or child warehouse)
+	
+	Returns:
+		list: List of warehouse names including the parent and all children
+	"""
+	if not warehouse:
+		return []
+	
+	try:
+		# Use the existing expand_parent_warehouses function
+		warehouses = expand_parent_warehouses([warehouse])
+		
+		frappe.logger().info(
+			f"Warehouse '{warehouse}' expanded to {len(warehouses)} warehouses: {warehouses}"
+		)
+		
+		return warehouses
+		
+	except Exception as e:
+		frappe.log_error(
+			f"Error getting child warehouses for '{warehouse}': {str(e)}\n{frappe.get_traceback()}",
+			"SPP Aggregated Report - Get Child Warehouses Error"
+		)
+		return [warehouse]  # Return at least the original warehouse

@@ -73,6 +73,9 @@ class SPPAggregatedReport {
 	add_buttons() {
 		this.page.set_primary_action(__('Generate Report'), () => this.load_report(), 'octicon octicon-sync');
 		
+		// Add Export to Excel button
+		this.page.add_inner_button(__('Export to Excel'), () => this.export_to_excel(), __('Export'));
+		
 		// Add button to manage excluded batches
 		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
 			frappe.set_route('List', 'Excluded Stock Batch');
@@ -444,49 +447,187 @@ class SPPAggregatedReport {
 	bind_search_and_sort() {
 		const me = this;
 		
-		// Warehouse filter functionality - RE-AGGREGATES data
+		// Warehouse filter functionality - RE-AGGREGATES data with child warehouse expansion
 		$('#warehouse-filter').on('change', function() {
 			const selectedWarehouse = $(this).val();
-			me.current_warehouse = selectedWarehouse;
 			
-			// Re-aggregate data based on warehouse selection
-			const aggregated_result = me.aggregate_by_warehouse(selectedWarehouse);
-			
-			me.filtered_data = aggregated_result.data;
-			me.grand_total = aggregated_result.grand_total;
-			
-			// Clear search box when warehouse changes
-			$('#common-code-filter').val('');
-			$('.clear-search').hide();
-			
-			// Re-apply current sort
-			me.sort_data(me.current_sort.column, me.current_sort.order, false);
-			me.render_table_rows(me.filtered_data);
-		});
-		
-		// Search functionality
-		$('#common-code-filter').on('input', function() {
-			const searchText = $(this).val().toLowerCase().trim();
-			const selectedWarehouse = $('#warehouse-filter').val();
-			
-			// Start with warehouse-filtered data or all data
-			let baseData = me.report_data;
-			if (selectedWarehouse !== '') {
-				baseData = me.report_data.filter(row => {
-					const warehouses = row.warehouses || [];
-					return warehouses.includes(selectedWarehouse);
-				});
+			if (!selectedWarehouse) {
+				// No warehouse selected - show all data
+				me.current_warehouse = '';
+				me.filtered_data = me.report_data;
+				me.grand_total = me.grand_total_original || me.grand_total;
+				
+				// Clear search box when warehouse changes
+				$('#common-code-filter').val('');
+				$('.clear-search').hide();
+				
+				// Re-apply current sort
+				me.sort_data(me.current_sort.column, me.current_sort.order, false);
+				me.render_table_rows(me.filtered_data);
+				return;
 			}
 			
+			// Show loading indicator
+			frappe.show_alert({
+				message: __('Filtering by warehouse...'),
+				indicator: 'blue'
+			}, 2);
+			
+			// Call server to expand parent warehouse to child warehouses
+			frappe.call({
+				method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_child_warehouses',
+				args: { warehouse: selectedWarehouse },
+				callback: (r) => {
+					if (r.message && r.message.length > 0) {
+						const warehouses = r.message;
+						
+						console.log(`Warehouse '${selectedWarehouse}' expanded to:`, warehouses);
+						
+						// Store expanded warehouses
+						me.current_warehouse_list = warehouses;
+						me.current_warehouse = selectedWarehouse;
+						
+						// Filter raw data by expanded warehouse list and re-aggregate
+						const warehouse_data = me.raw_filtered_data.filter(row => {
+							return warehouses.includes(row.warehouse);
+						});
+						
+						if (warehouse_data.length === 0) {
+							me.filtered_data = [];
+							me.grand_total = {
+								"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+							};
+						} else {
+							// Re-aggregate the filtered data
+							const aggregated = {};
+							const grand_total = {
+								"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+							};
+							
+							warehouse_data.forEach(row => {
+								const item = row.item || '';
+								
+								// Extract common_code
+								let common_code;
+								if (item.startsWith('t.')) {
+									common_code = item.slice(-4);
+								} else {
+									common_code = item.substring(1, 5);
+								}
+								
+								if (!common_code) return;
+								
+								// Initialize aggregated row
+								if (!aggregated[common_code]) {
+									aggregated[common_code] = {
+										common_code: common_code,
+										warehouses: warehouses,
+										"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+										"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+										"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+										"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+									};
+								}
+								
+								// Normalize item_group
+								let item_group = row.item_group || '';
+								if (item_group === 'Finished Products') {
+									item_group = 'Finished Product';
+								}
+								
+								if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
+									return;
+								}
+								
+								// Add quantities
+								const opening = parseFloat(row.opening_qty) || 0;
+								const in_qty = parseFloat(row.in_qty) || 0;
+								const out_qty = parseFloat(row.out_qty) || 0;
+								const balance = parseFloat(row.balance_qty) || 0;
+								
+								aggregated[common_code][item_group].opening_qty += opening;
+								aggregated[common_code][item_group].in_qty += in_qty;
+								aggregated[common_code][item_group].out_qty += out_qty;
+								aggregated[common_code][item_group].balance_qty += balance;
+								
+								aggregated[common_code].Total.opening_qty += opening;
+								aggregated[common_code].Total.in_qty += in_qty;
+								aggregated[common_code].Total.out_qty += out_qty;
+								aggregated[common_code].Total.balance_qty += balance;
+								
+								// Update grand totals
+								grand_total[item_group].opening_qty += opening;
+								grand_total[item_group].in_qty += in_qty;
+								grand_total[item_group].out_qty += out_qty;
+								grand_total[item_group].balance_qty += balance;
+								
+								grand_total.Total.opening_qty += opening;
+								grand_total.Total.in_qty += in_qty;
+								grand_total.Total.out_qty += out_qty;
+								grand_total.Total.balance_qty += balance;
+							});
+							
+							// Convert to array and sort
+							me.filtered_data = Object.values(aggregated).sort((a, b) => 
+								a.common_code.localeCompare(b.common_code)
+							);
+							me.grand_total = grand_total;
+						}
+						
+						// Clear search box when warehouse changes
+						$('#common-code-filter').val('');
+						$('.clear-search').hide();
+						
+						// Re-apply current sort
+						me.sort_data(me.current_sort.column, me.current_sort.order, false);
+						me.render_table_rows(me.filtered_data);
+						
+						frappe.show_alert({
+							message: __('Filtered by {0} ({1} child warehouses)', [selectedWarehouse, warehouses.length]),
+							indicator: 'green'
+						}, 3);
+					} else {
+						frappe.msgprint(__('No warehouses found for {0}', [selectedWarehouse]));
+					}
+				},
+				error: (err) => {
+					frappe.msgprint({
+						title: __('Error'),
+						indicator: 'red',
+						message: __('Failed to expand warehouse')
+					});
+					console.error('Warehouse expansion error:', err);
+				}
+			});
+		});
+		
+		// Search functionality - FIXED: Now correctly filters from current warehouse-filtered data
+		$('#common-code-filter').on('input', function() {
+			const searchText = $(this).val().toLowerCase().trim();
+			
+			// Get the base data after warehouse filter has been applied
+			const selectedWarehouse = $('#warehouse-filter').val();
+			const aggregated_result = me.aggregate_by_warehouse(selectedWarehouse);
+			let baseData = aggregated_result.data;
+			
 			if (searchText === '') {
-				// Show warehouse-filtered data (or all if no warehouse selected)
+				// No search - show all data from current warehouse filter
 				me.filtered_data = baseData;
+				me.grand_total = aggregated_result.grand_total;
 				$('.clear-search').hide();
 			} else {
-				// Apply search on top of warehouse filter
+				// Apply search on top of warehouse-filtered data
 				me.filtered_data = baseData.filter(row => 
 					row.common_code.toLowerCase().includes(searchText)
 				);
+				// Keep the same grand total (warehouse-filtered)
+				me.grand_total = aggregated_result.grand_total;
 				$('.clear-search').show();
 			}
 			
@@ -611,6 +752,54 @@ class SPPAggregatedReport {
 					indicator: 'red',
 					message: __('Failed to fetch batch details')
 				});
+			}
+		});
+	}
+	
+	export_to_excel() {
+		const filter_values = this.current_filters;
+		
+		if (!filter_values) {
+			frappe.msgprint(__('Please generate the report first before exporting.'));
+			return;
+		}
+		
+		frappe.show_alert({
+			message: __('Preparing Excel export...'),
+			indicator: 'blue'
+		}, 3);
+		
+		const warehouse = this.current_warehouse || '';
+		
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.export_to_excel',
+			args: {
+				filters: filter_values,
+				warehouse: warehouse
+			},
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					// Download the file
+					window.open(r.message.file_url, '_blank');
+					frappe.show_alert({
+						message: __('Excel file generated successfully!'),
+						indicator: 'green'
+					}, 5);
+				} else {
+					frappe.msgprint({
+						title: __('Export Failed'),
+						indicator: 'red',
+						message: r.message?.error || 'Failed to generate Excel file'
+					});
+				}
+			},
+			error: (err) => {
+				frappe.msgprint({
+					title: __('Error'),
+					indicator: 'red',
+					message: __('An error occurred while exporting to Excel')
+				});
+				console.error('Export error:', err);
 			}
 		});
 	}
