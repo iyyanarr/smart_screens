@@ -41,14 +41,67 @@ def get_spp_warehouses():
 	
 	return existing_warehouses
 
+def get_batch_wise_balance_history_data(company, from_date, to_date, warehouses, item_group=None):
+	"""
+	Fetch data using SPP Batch Balance Report (Custom Report)
+	This is the working report that returns the correct column structure
+	Returns accurate Opening, In, Out, and Balance quantities
+	"""
+	if not warehouses:
+		return []
+	
+	try:
+		frappe.logger().info(f"Fetching SPP Batch Balance Report for {len(warehouses)} warehouses...")
+		
+		# Call SPP Batch Balance Report for each warehouse and combine results
+		# Note: Custom Reports may not support multiple warehouses in one call
+		all_data = []
+		
+		for warehouse in warehouses:
+			# Prepare filters for SPP Batch Balance Report
+			report_filters = {
+				"company": company,
+				"from_date": from_date,
+				"to_date": to_date,
+				"warehouse": warehouse,  # Pass one warehouse at a time
+				"item_group": item_group or ""
+			}
+			
+			# Get the SPP Batch Balance Report (Custom Report)
+			report = frappe.get_doc("Report", "SPP Batch Balance Report")
+			
+			# Execute the report
+			columns, data = report.get_data(
+				limit=0,  # No limit, get all data
+				user=frappe.session.user,
+				filters=report_filters,
+				as_dict=True,
+				ignore_prepared_report=True,
+				are_default_filters=False,
+			)
+			
+			if data:
+				all_data.extend(data)
+				frappe.logger().info(f"✅ Got {len(data)} records from warehouse: {warehouse}")
+		
+		frappe.logger().info(f"✅ Total SPP Batch Balance records: {len(all_data)}")
+		
+		return all_data
+		
+	except Exception as e:
+		frappe.log_error(
+			f"Error fetching SPP Batch Balance Report: {str(e)}\n{frappe.get_traceback()}",
+			"SPP Aggregated Report - SPP Batch Balance Error"
+		)
+		return []
 
 @frappe.whitelist()
 def get_spp_batch_balance_data(filters=None):
 	"""
-	Get data from SPP Batch Balance Report API endpoint
-	This is the main data source for the SPP Aggregated Report
+	Get batch balance data aggregated across multiple SPP warehouses
+	Returns both raw filtered data (for warehouse-wise filtering) and aggregated data
 	
-	NEW: Now aggregates across multiple SPP warehouses:
+	Aggregates data from:
 	- U2-Store - SPP INDIA
 	- U1-Store - SPP INDIA
 	- Unit-1 Transit Store - SPP INDIA
@@ -65,7 +118,7 @@ def get_spp_batch_balance_data(filters=None):
 		filters = {}
 	
 	try:
-		# Get all SPP warehouses (hardcoded list + Deflashing Vendors children)
+		# Get all SPP warehouses
 		spp_warehouses = get_spp_warehouses()
 		
 		if not spp_warehouses:
@@ -83,44 +136,15 @@ def get_spp_batch_balance_data(filters=None):
 			user=frappe.session.user
 		)
 		
-		# Aggregate data from all warehouses
-		all_data = []
+		# Fetch data using SPP Batch Balance Report
 		t1 = time.time()
-		
-		for warehouse in spp_warehouses:
-			# Prepare filters for SPP Batch Balance Report
-			report_filters = {
-				"company": filters.get("company") or frappe.defaults.get_user_default("Company"),
-				"from_date": filters.get("from_date"),
-				"to_date": filters.get("to_date"),
-				"warehouse": warehouse,
-				"item_group": filters.get("item_group") or ""
-			}
-			
-			# Call the SPP Batch Balance Report
-			report = frappe.get_doc("Report", "SPP Batch Balance Report")
-			
-			try:
-				columns, data = report.get_data(
-					limit=0,  # No limit, get all data
-					user=frappe.session.user,
-					filters=report_filters,
-					as_dict=True,
-					ignore_prepared_report=True,
-					are_default_filters=False,
-				)
-				
-				if data:
-					all_data.extend(data)
-					
-			except Exception as wh_error:
-				frappe.log_error(
-					f"Error fetching data for warehouse {warehouse}: {str(wh_error)}",
-					"SPP Aggregated Report - Warehouse Fetch Error"
-				)
-				# Continue with other warehouses
-				continue
-		
+		all_data = get_batch_wise_balance_history_data(
+			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
+			from_date=filters.get("from_date"),
+			to_date=filters.get("to_date"),
+			warehouses=spp_warehouses,
+			item_group=filters.get("item_group")
+		)
 		t2 = time.time()
 		performance_log['spp_report_fetch'] = round(t2 - t1, 2)
 		
@@ -128,14 +152,6 @@ def get_spp_batch_balance_data(filters=None):
 			'spp_aggregated_progress',
 			{'step': 1, 'total': 4, 'message': f'Fetched {len(all_data)} batch records from {len(spp_warehouses)} warehouses', 'percent': 30},
 			user=frappe.session.user
-		)
-		
-		frappe.log_error(
-			f"⏱️ PERFORMANCE PROFILING:\n"
-			f"Step 1 - SPP Report Fetch: {performance_log['spp_report_fetch']}s\n"
-			f"Warehouses queried: {len(spp_warehouses)}\n"
-			f"Raw data records: {len(all_data)}",
-			"SPP Aggregated - Performance Profile"
 		)
 		
 		if not all_data:
@@ -153,23 +169,10 @@ def get_spp_batch_balance_data(filters=None):
 			user=frappe.session.user
 		)
 		
-		# EXCLUDE BATCHES - Get excluded batch list from Excluded Stock Batch doctype
 		t3 = time.time()
 		all_data, excluded_count = exclude_batches(all_data)
 		t4 = time.time()
 		performance_log['batch_exclusion'] = round(t4 - t3, 2)
-		
-		frappe.publish_realtime(
-			'spp_aggregated_progress',
-			{'step': 2, 'total': 4, 'message': f'Excluded {excluded_count} batches', 'percent': 60},
-			user=frappe.session.user
-		)
-		
-		frappe.log_error(
-			f"Step 2 - Batch Exclusion: {performance_log['batch_exclusion']}s\n"
-			f"Records after exclusion: {len(all_data)} (excluded: {excluded_count})",
-			"SPP Aggregated - Performance Profile"
-		)
 		
 		# STEP 3: Filtering by item groups
 		frappe.publish_realtime(
@@ -178,32 +181,18 @@ def get_spp_batch_balance_data(filters=None):
 			user=frappe.session.user
 		)
 		
-		# FILTER DATA using pandas
 		t5 = time.time()
 		filtered_data = filter_by_item_groups_pandas(all_data)
 		t6 = time.time()
 		performance_log['item_group_filtering'] = round(t6 - t5, 2)
 		
-		frappe.publish_realtime(
-			'spp_aggregated_progress',
-			{'step': 3, 'total': 4, 'message': f'Filtered to {len(filtered_data)} records', 'percent': 80},
-			user=frappe.session.user
-		)
-		
-		frappe.log_error(
-			f"Step 3 - Item Group Filtering: {performance_log['item_group_filtering']}s\n"
-			f"Records after filtering: {len(filtered_data)}",
-			"SPP Aggregated - Performance Profile"
-		)
-		
-		# STEP 4: Aggregating data
+		# STEP 4: Aggregating data (across ALL warehouses by default)
 		frappe.publish_realtime(
 			'spp_aggregated_progress',
 			{'step': 4, 'total': 4, 'message': 'Aggregating data by common code...', 'percent': 90},
 			user=frappe.session.user
 		)
 		
-		# AGGREGATE DATA by common code and stage
 		t7 = time.time()
 		aggregated_data = aggregate_by_common_code(filtered_data)
 		t8 = time.time()
@@ -218,22 +207,13 @@ def get_spp_batch_balance_data(filters=None):
 			user=frappe.session.user
 		)
 		
-		frappe.log_error(
-			f"Step 4 - Aggregation: {performance_log['aggregation']}s\n"
-			f"Aggregated records: {len(aggregated_data['data'])}\n\n"
-			f"📊 TOTAL TIME: {total_time}s\n"
-			f"   - SPP Report Fetch: {performance_log['spp_report_fetch']}s ({round(performance_log['spp_report_fetch']/total_time*100, 1)}%)\n"
-			f"   - Batch Exclusion: {performance_log['batch_exclusion']}s ({round(performance_log['batch_exclusion']/total_time*100, 1)}%)\n"
-			f"   - Item Filtering: {performance_log['item_group_filtering']}s ({round(performance_log['item_group_filtering']/total_time*100, 1)}%)\n"
-			f"   - Aggregation: {performance_log['aggregation']}s ({round(performance_log['aggregation']/total_time*100, 1)}%)",
-			"SPP Aggregated - Performance Profile"
-		)
-		
+		# NEW: Return both raw filtered data AND aggregated data
+		# Frontend will use raw data to re-aggregate by warehouse when filter changes
 		return {
 			"success": True,
 			"data": aggregated_data["data"],
 			"grand_total": aggregated_data["grand_total"],
-			"columns": columns,
+			"raw_filtered_data": filtered_data,  # NEW: Send raw data for client-side re-aggregation
 			"total_records": len(all_data),
 			"filtered_records": len(filtered_data),
 			"aggregated_records": len(aggregated_data["data"]),
@@ -255,12 +235,12 @@ def get_spp_batch_balance_data(filters=None):
 		}
 
 @frappe.whitelist()
-def get_batch_details_by_common_code(common_code, filters=None):
+def get_batch_details_by_common_code(common_code, filters=None, warehouse=''):
 	"""
 	Get detailed batch records for a specific common code
 	Returns data grouped by item group (Mat, Products, Finished Product)
-	
-	NEW: Now shows batches from ALL SPP warehouses (warehouse column visible)
+	Uses Batch-Wise Balance History report as the data source
+	Can optionally filter by a specific warehouse
 	"""
 	if isinstance(filters, str):
 		filters = json.loads(filters)
@@ -269,8 +249,13 @@ def get_batch_details_by_common_code(common_code, filters=None):
 		filters = {}
 	
 	try:
-		# Get all SPP warehouses
-		spp_warehouses = get_spp_warehouses()
+		# Get all SPP warehouses or filter by specific warehouse
+		if warehouse and warehouse != '':
+			# User selected a specific warehouse - only query that one
+			spp_warehouses = [warehouse]
+		else:
+			# No warehouse filter - get all SPP warehouses
+			spp_warehouses = get_spp_warehouses()
 		
 		if not spp_warehouses:
 			return {
@@ -279,46 +264,19 @@ def get_batch_details_by_common_code(common_code, filters=None):
 				"batches": {"Mat": [], "Products": [], "Finished Product": []}
 			}
 		
-		# Aggregate batch data from all warehouses
-		all_batches_data = []
-		
-		for warehouse in spp_warehouses:
-			# Prepare filters for SPP Batch Balance Report
-			report_filters = {
-				"company": filters.get("company") or frappe.defaults.get_user_default("Company"),
-				"from_date": filters.get("from_date"),
-				"to_date": filters.get("to_date"),
-				"warehouse": warehouse,
-				"item_group": filters.get("item_group") or ""
-			}
-			
-			# Call the SPP Batch Balance Report
-			report = frappe.get_doc("Report", "SPP Batch Balance Report")
-			
-			try:
-				columns, data = report.get_data(
-					limit=0,
-					user=frappe.session.user,
-					filters=report_filters,
-					as_dict=True,
-					ignore_prepared_report=True,
-					are_default_filters=False,
-				)
-				
-				if data:
-					all_batches_data.extend(data)
-					
-			except Exception as wh_error:
-				frappe.log_error(
-					f"Error fetching batch details for warehouse {warehouse}: {str(wh_error)}",
-					"SPP Aggregated Report - Batch Details Warehouse Error"
-				)
-				continue
+		# Fetch data using Batch-Wise Balance History report
+		all_batches_data = get_batch_wise_balance_history_data(
+			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
+			from_date=filters.get("from_date"),
+			to_date=filters.get("to_date"),
+			warehouses=spp_warehouses,
+			item_group=filters.get("item_group")
+		)
 		
 		if not all_batches_data:
 			return {
 				"success": False,
-				"error": "No data returned from SPP Batch Balance Report",
+				"error": "No data returned from batch balance query",
 				"batches": {"Mat": [], "Products": [], "Finished Product": []}
 			}
 		
@@ -368,7 +326,8 @@ def get_batch_details_by_common_code(common_code, filters=None):
 			"mat_count": len(batches_by_group["Mat"]),
 			"products_count": len(batches_by_group["Products"]),
 			"finished_count": len(batches_by_group["Finished Product"]),
-			"warehouses_included": spp_warehouses
+			"warehouses_included": spp_warehouses,
+			"warehouse_filter": warehouse  # NEW: Return the warehouse filter that was applied
 		}
 		
 	except Exception as e:
@@ -509,6 +468,14 @@ def aggregate_by_common_code(data):
 			if col in df.columns:
 				df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 		
+		 # Track warehouses for each common_code (NEW)
+		warehouse_tracking = {}
+		for common_code in df['common_code'].unique():
+			code_data = df[df['common_code'] == common_code]
+			# Get unique warehouses for this common_code
+			warehouses = code_data['warehouse'].dropna().unique().tolist()
+			warehouse_tracking[common_code] = warehouses
+		
 		# Aggregate by common_code and item_group
 		aggregated = df.groupby(['common_code', 'item_group']).agg({
 			'opening_qty': 'sum',
@@ -518,7 +485,6 @@ def aggregate_by_common_code(data):
 			'balance_value': 'sum'
 		}).reset_index()
 		
-		# Pivot to get Mat, Products, Finished Product as columns
 		result = []
 		grand_total = {
 			"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
@@ -532,6 +498,7 @@ def aggregate_by_common_code(data):
 			
 			row = {
 				"common_code": common_code,
+				 "warehouses": warehouse_tracking.get(common_code, []),  # NEW: Add warehouse list
 				"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
 				"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
 				"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},

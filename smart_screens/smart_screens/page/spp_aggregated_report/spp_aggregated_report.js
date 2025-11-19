@@ -87,6 +87,9 @@ class SPPAggregatedReport {
 			item_group: this.filters.get_value('item_group')
 		};
 		
+		// Store filter values for later use (e.g., when showing batch details)
+		this.current_filters = filter_values;
+		
 		this.show_loading_with_progress();
 		
 		// Subscribe to real-time progress updates
@@ -145,16 +148,10 @@ class SPPAggregatedReport {
 		// Store original data for filtering and sorting
 		this.report_data = data;
 		this.grand_total = grand_total;
+		this.raw_filtered_data = response.raw_filtered_data || []; // NEW: Store raw data for re-aggregation
 		this.filtered_data = [...data]; // Copy for filtering
 		this.current_sort = { column: 'common_code', order: 'asc' }; // Default sort
-		
-		// Store filters for batch details
-		this.current_filters = {
-			company: this.filters.get_value('company'),
-			from_date: this.filters.get_value('from_date'),
-			to_date: this.filters.get_value('to_date'),
-			item_group: this.filters.get_value('item_group')
-		};
+		this.current_warehouse = ''; // NEW: Track current warehouse filter
 		
 		// Create aggregated table HTML
 		let html = `
@@ -164,8 +161,18 @@ class SPPAggregatedReport {
 						<span><strong>Total Items:</strong> <span id="total-items">${response.aggregated_records || 0}</span></span>
 						<span class="ml-3"><strong>Filtered Records:</strong> ${response.filtered_records || 0}</span>
 						<span class="ml-3"><strong>Source Records:</strong> ${response.total_records || 0}</span>
+						<span class="ml-3"><strong>Warehouses:</strong> ${response.warehouse_count || 0}</span>
 					</div>
-					<div class="report-search">
+					<div class="report-filters-section">
+						<div class="warehouse-filter-wrapper">
+							<label for="warehouse-filter" class="filter-label">Warehouse:</label>
+							<select class="form-control warehouse-filter" id="warehouse-filter">
+								<option value="">All Warehouses</option>
+								${(response.warehouses_used || []).map(wh => 
+									`<option value="${wh}">${wh.replace(' - SPP INDIA', '')}</option>`
+								).join('')}
+							</select>
+						</div>
 						<div class="search-box">
 							<i class="fa fa-search search-icon"></i>
 							<input type="text" 
@@ -255,6 +262,116 @@ class SPPAggregatedReport {
 		this.bind_search_and_sort();
 	}
 	
+	// NEW: Function to re-aggregate data by warehouse
+	aggregate_by_warehouse(warehouse) {
+		if (!warehouse || warehouse === '') {
+			// Return original aggregated data (all warehouses)
+			return {
+				data: this.report_data,
+				grand_total: this.grand_total
+			};
+		}
+		
+		// Filter raw data by warehouse
+		const warehouse_data = this.raw_filtered_data.filter(row => {
+			return row.warehouse === warehouse;
+		});
+		
+		if (warehouse_data.length === 0) {
+			return {
+				data: [],
+				grand_total: {
+					"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+				}
+			};
+		}
+		
+		// Re-aggregate by common_code
+		const aggregated = {};
+		const grand_total = {
+			"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+		};
+		
+		warehouse_data.forEach(row => {
+			const item = row.item || '';
+			
+			// Extract common_code
+			let common_code;
+			if (item.startsWith('t.')) {
+				common_code = item.slice(-4);
+			} else {
+				common_code = item.substring(1, 5);
+			}
+			
+			if (!common_code) return;
+			
+			// Initialize aggregated row
+			if (!aggregated[common_code]) {
+				aggregated[common_code] = {
+					common_code: common_code,
+					warehouses: [warehouse],
+					"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+				};
+			}
+			
+			// Normalize item_group
+			let item_group = row.item_group || '';
+			if (item_group === 'Finished Products') {
+				item_group = 'Finished Product';
+			}
+			
+			if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
+				return;
+			}
+			
+			// Add quantities
+			const opening = parseFloat(row.opening_qty) || 0;
+			const in_qty = parseFloat(row.in_qty) || 0;
+			const out_qty = parseFloat(row.out_qty) || 0;
+			const balance = parseFloat(row.balance_qty) || 0;
+			
+			aggregated[common_code][item_group].opening_qty += opening;
+			aggregated[common_code][item_group].in_qty += in_qty;
+			aggregated[common_code][item_group].out_qty += out_qty;
+			aggregated[common_code][item_group].balance_qty += balance;
+			
+			aggregated[common_code].Total.opening_qty += opening;
+			aggregated[common_code].Total.in_qty += in_qty;
+			aggregated[common_code].Total.out_qty += out_qty;
+			aggregated[common_code].Total.balance_qty += balance;
+			
+			// Update grand totals
+			grand_total[item_group].opening_qty += opening;
+			grand_total[item_group].in_qty += in_qty;
+			grand_total[item_group].out_qty += out_qty;
+			grand_total[item_group].balance_qty += balance;
+			
+			grand_total.Total.opening_qty += opening;
+			grand_total.Total.in_qty += in_qty;
+			grand_total.Total.out_qty += out_qty;
+			grand_total.Total.balance_qty += balance;
+		});
+		
+		// Convert to array and sort
+		const result = Object.values(aggregated).sort((a, b) => 
+			a.common_code.localeCompare(b.common_code)
+		);
+		
+		return {
+			data: result,
+			grand_total: grand_total
+		};
+	}
+	
 	render_table_rows(data) {
 		const $tbody = $('#table-body');
 		$tbody.empty();
@@ -327,17 +444,47 @@ class SPPAggregatedReport {
 	bind_search_and_sort() {
 		const me = this;
 		
+		// Warehouse filter functionality - RE-AGGREGATES data
+		$('#warehouse-filter').on('change', function() {
+			const selectedWarehouse = $(this).val();
+			me.current_warehouse = selectedWarehouse;
+			
+			// Re-aggregate data based on warehouse selection
+			const aggregated_result = me.aggregate_by_warehouse(selectedWarehouse);
+			
+			me.filtered_data = aggregated_result.data;
+			me.grand_total = aggregated_result.grand_total;
+			
+			// Clear search box when warehouse changes
+			$('#common-code-filter').val('');
+			$('.clear-search').hide();
+			
+			// Re-apply current sort
+			me.sort_data(me.current_sort.column, me.current_sort.order, false);
+			me.render_table_rows(me.filtered_data);
+		});
+		
 		// Search functionality
 		$('#common-code-filter').on('input', function() {
 			const searchText = $(this).val().toLowerCase().trim();
+			const selectedWarehouse = $('#warehouse-filter').val();
+			
+			// Start with warehouse-filtered data or all data
+			let baseData = me.report_data;
+			if (selectedWarehouse !== '') {
+				baseData = me.report_data.filter(row => {
+					const warehouses = row.warehouses || [];
+					return warehouses.includes(selectedWarehouse);
+				});
+			}
 			
 			if (searchText === '') {
-				// Show all data
-				me.filtered_data = [...me.report_data];
+				// Show warehouse-filtered data (or all if no warehouse selected)
+				me.filtered_data = baseData;
 				$('.clear-search').hide();
 			} else {
-				// Filter by common code
-				me.filtered_data = me.report_data.filter(row => 
+				// Apply search on top of warehouse filter
+				me.filtered_data = baseData.filter(row => 
 					row.common_code.toLowerCase().includes(searchText)
 				);
 				$('.clear-search').show();
@@ -442,7 +589,8 @@ class SPPAggregatedReport {
 			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_batch_details_by_common_code',
 			args: {
 				common_code: common_code,
-				filters: this.current_filters
+				filters: this.current_filters,
+				warehouse: this.current_warehouse || '' // Pass the selected warehouse filter
 			},
 			callback: (r) => {
 				frappe.hide_progress();
@@ -892,6 +1040,28 @@ class SPPAggregatedReport {
 				}
 				.report-stats {
 					flex: 1;
+				}
+					.report-filters-section {
+					display: flex;
+					align-items: center;
+					gap: 10px;
+				}
+				.warehouse-filter-wrapper {
+					display: flex;
+					align-items: center;
+					gap: 5px;
+				}
+				.filter-label {
+					font-size: 14px;
+					color: #1e293b;
+					font-weight: 500;
+				}
+				.warehouse-filter {
+					padding: 5px 10px;
+					font-size: 14px;
+					border: 1px solid #cbd5e1;
+					border-radius: 4px;
+					color: #1e293b;
 				}
 				.report-search {
 					display: flex;
