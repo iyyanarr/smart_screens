@@ -102,8 +102,8 @@ def fetch_batch_balance_data(company, warehouses, item_code=None, item_group=Non
 	"""
 	Fetch data using SPP Batch Balance Report (Custom Report)
 	
-	OPTIMIZATION: Pass all warehouses at once instead of calling the report
-	separately for each warehouse to avoid N+1 query problem
+	OPTIMIZATION: Fetch all data from report, then filter by warehouses in Python
+	because the report doesn't properly handle warehouse list filters
 	"""
 	try:
 		# Expand child warehouses
@@ -113,10 +113,11 @@ def fetch_batch_balance_data(company, warehouses, item_code=None, item_group=Non
 		
 		frappe.logger().info(f"Fetching SPP Batch Balance Report for {len(expanded_warehouses)} warehouses (expanded from {len(warehouses)})...")
 		
-		# OPTIMIZATION: Prepare filters with ALL warehouses at once
+		# Pass warehouse filter as list - the report accepts it
+		# It will return data as arrays instead of dicts, which we'll convert below
 		filters = {
 			"company": company,
-			"warehouse": expanded_warehouses,  # Pass list of all warehouses
+			"warehouse": expanded_warehouses,  # Pass list - report requires this filter
 		}
 		
 		if item_code:
@@ -128,28 +129,107 @@ def fetch_batch_balance_data(company, warehouses, item_code=None, item_group=Non
 		if end_date:
 			filters["to_date"] = end_date
 		
+		# DEBUG: Log the filters being used
+		frappe.logger().info(f"Report Filters: {json.dumps(filters, default=str)}")
+		frappe.logger().info(f"Will filter results for warehouses: {expanded_warehouses}")
+		
+		# Check if the report exists
+		if not frappe.db.exists("Report", "SPP Batch Balance Report"):
+			error_msg = "Report 'SPP Batch Balance Report' does not exist in the system"
+			frappe.log_error(error_msg, "SPP Aggregated Report - Report Not Found")
+			frappe.logger().error(error_msg)
+			return []
+		
 		# Get the SPP Batch Balance Report (Custom Report)
 		report = frappe.get_doc("Report", "SPP Batch Balance Report")
 		
-		# OPTIMIZATION: Execute report ONCE for all warehouses
-		frappe.logger().info(f"Executing SPP Batch Balance Report with {len(expanded_warehouses)} warehouses in a single call...")
+		# DEBUG: Log report details
+		frappe.logger().info(f"Report Type: {report.report_type}, Module: {report.module}")
+		
+		 # Execute report without warehouse filter
+		frappe.logger().info(f"Executing SPP Batch Balance Report...")
 		start_time = frappe.utils.now()
 		
-		columns, data = report.get_data(
-			filters=filters,
-			as_dict=False,
-			ignore_prepared_report=True,
-			are_default_filters=False
-		)
-		
-		execution_time = frappe.utils.time_diff_in_seconds(frappe.utils.now(), start_time)
-		frappe.logger().info(f"SPP Batch Balance Report executed in {execution_time:.2f} seconds, returned {len(data) if data else 0} rows")
-		
-		return data
+		# Try to execute the report
+		try:
+			columns, data = report.get_data(
+				filters=filters,
+				as_dict=True,  # FIXED: Changed to True so report returns dicts instead of arrays
+				ignore_prepared_report=True,
+				are_default_filters=False
+			)
+			
+			execution_time = frappe.utils.time_diff_in_seconds(frappe.utils.now(), start_time)
+			frappe.logger().info(f"SPP Batch Balance Report executed in {execution_time:.2f} seconds, returned {len(data) if data else 0} rows")
+			
+			# CRITICAL: Filter data by warehouses AFTER fetching
+			if data and len(data) > 0:
+				# Data should now always be dicts (because as_dict=True)
+				# But keep conversion logic as fallback for safety
+				if data and not isinstance(data[0], dict):
+					# Data is list of lists/tuples - need to convert using column names
+					column_names = [col.get('fieldname') for col in columns] if columns else []
+					if column_names:
+						dict_data = []
+						for row in data:
+							row_dict = {}
+							for idx, col_name in enumerate(column_names):
+								if idx < len(row):
+									row_dict[col_name] = row[idx]
+							dict_data.append(row_dict)
+						data = dict_data
+				
+				# Now filter by warehouse
+				original_count = len(data)
+				warehouse_set = set(expanded_warehouses)
+				
+				filtered_data = []
+				for row in data:
+					row_warehouse = row.get('warehouse') if isinstance(row, dict) else None
+					if row_warehouse and row_warehouse in warehouse_set:
+						filtered_data.append(row)
+				
+				frappe.logger().info(
+					f"Warehouse filtering: {original_count} rows → {len(filtered_data)} rows "
+					f"(kept only data from {len(expanded_warehouses)} SPP warehouses)"
+				)
+				
+				data = filtered_data
+			
+			# If no data returned after filtering, log detailed information
+			if not data or len(data) == 0:
+				frappe.log_error(
+					f"SPP Batch Balance Report returned NO DATA after warehouse filtering\n"
+					f"Filters: {json.dumps(filters, default=str)}\n"
+					f"Target Warehouses: {expanded_warehouses}\n"
+					f"Company: {company}\n"
+					f"Report Type: {report.report_type}\n"
+					f"Columns returned: {len(columns) if columns else 0}",
+					"SPP Aggregated Report - No Data After Filtering"
+				)
+			
+			return data
+			
+		except AttributeError as ae:
+			# The report might not have get_data method
+			error_msg = f"Report 'SPP Batch Balance Report' does not have get_data() method or is not properly configured. Error: {str(ae)}"
+			frappe.log_error(
+				f"{error_msg}\n"
+				f"Report Type: {report.report_type}\n"
+				f"Report DocType: {report.doctype}\n"
+				f"Available methods: {dir(report)}\n"
+				f"{frappe.get_traceback()}",
+				"SPP Aggregated Report - Report Method Error"
+			)
+			frappe.logger().error(error_msg)
+			return []
 		
 	except Exception as e:
 		frappe.log_error(
-			f"Error fetching SPP Batch Balance Report: {str(e)}\n{frappe.get_traceback()}",
+			f"Error fetching SPP Batch Balance Report: {str(e)}\n"
+			f"Filters used: {json.dumps(filters if 'filters' in locals() else {}, default=str)}\n"
+			f"Warehouses: {expanded_warehouses if 'expanded_warehouses' in locals() else warehouses}\n"
+			f"{frappe.get_traceback()}",
 			"SPP Aggregated Report - SPP Batch Balance Error"
 		)
 		return []
@@ -584,17 +664,7 @@ def export_to_excel(filters=None, warehouse=''):
 			
 			current_row += 1
 		
-		# Grand Total Row
-		col_num = 1
-		cell = ws.cell(row=current_row, column=col_num)
-		cell.value = "GRAND TOTAL"
-		cell.fill = total_fill
-		cell.font = total_font
-		cell.alignment = center_align
-		cell.border = border
-		col_num += 1
-		
-		# Add grand total values
+		 # Add grand total values
 		for stage in ['Mat', 'Products', 'Finished Product', 'Total']:
 			stage_data = grand_total.get(stage, {})
 			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
