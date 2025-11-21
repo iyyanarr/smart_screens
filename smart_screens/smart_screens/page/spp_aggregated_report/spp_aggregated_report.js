@@ -811,7 +811,7 @@ class SPPAggregatedReport {
 		const products_count = data.products_count || 0;
 		const finished_count = data.finished_count || 0;
 		
-		// Create dialog
+		// Create dialog with Export to Excel button
 		const d = new frappe.ui.Dialog({
 			title: `Batch Details for Item ${common_code}`,
 			size: 'extra-large',
@@ -820,7 +820,11 @@ class SPPAggregatedReport {
 					fieldtype: 'HTML',
 					fieldname: 'batch_details_html'
 				}
-			]
+			],
+			primary_action_label: __('Export to Excel'),
+			primary_action: () => {
+				this.export_batch_details_to_excel(common_code, batches);
+			}
 		});
 		
 		// Build tabbed interface HTML - Use BUTTON elements instead of anchor tags
@@ -1663,4 +1667,45 @@ class SPPAggregatedReport {
 			`)
 			.appendTo("head");
 	}
+export_batch_details_to_excel(common_code, batches) {
+frappe.show_alert({
+message: __('Preparing Excel export for batch details...'),
+indicator: 'blue'
+}, 3);
+
+frappe.call({
+method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.export_batch_details_to_excel',
+args: {
+common_code: common_code,
+batches: batches,
+filters: this.current_filters,
+warehouse_filter: this.current_warehouse || ''
+},
+callback: (r) => {
+if (r.message && r.message.success) {
+// Download the file
+window.open(r.message.file_url, '_blank');
+frappe.show_alert({
+message: __('Batch details exported successfully!'),
+indicator: 'green'
+}, 5);
+} else {
+frappe.msgprint({
+title: __('Export Failed'),
+indicator: 'red',
+message: r.message?.error || 'Failed to generate Excel file'
+});
+}
+},
+error: (err) => {
+frappe.msgprint({
+title: __('Error'),
+indicator: 'red',
+message: __('An error occurred while exporting batch details')
+});
+console.error('Batch export error:', err);
+}
+});
+}
+
 }

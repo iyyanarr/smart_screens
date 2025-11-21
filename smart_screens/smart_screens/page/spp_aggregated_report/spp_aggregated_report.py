@@ -325,6 +325,28 @@ def get_spp_batch_balance_data(filters=None):
 		t6 = time.time()
 		performance_log['item_group_filtering'] = round(t6 - t5, 2)
 		
+		 # **NEW: Apply Mat conversion to raw_filtered_data BEFORE aggregation**
+		# This ensures that when frontend re-aggregates by warehouse, the conversion is already applied
+		conversion_factors = get_mat_kg_to_nos_conversion_factors()
+		conversion_applied_raw = 0
+		
+		for row in filtered_data:
+			item_group = row.get('item_group', '')
+			batch_no = row.get('batch') or row.get('batch_no')
+			
+			if item_group == "Mat" and batch_no and batch_no in conversion_factors:
+				conversion_factor = conversion_factors[batch_no]['conversion_factor']
+				if conversion_factor > 0:
+					# Apply conversion to ALL quantity fields in raw data
+					row['opening_qty'] = (row.get('opening_qty', 0) or 0) * conversion_factor
+					row['in_qty'] = (row.get('in_qty', 0) or 0) * conversion_factor
+					row['out_qty'] = (row.get('out_qty', 0) or 0) * conversion_factor
+					row['balance_qty'] = (row.get('balance_qty', 0) or 0) * conversion_factor
+					row['converted'] = True
+					conversion_applied_raw += 1
+		
+		frappe.logger().info(f"Applied Mat conversion to {conversion_applied_raw} raw batch records")
+		
 		# STEP 4: Aggregating data (across ALL warehouses by default)
 		frappe.publish_realtime(
 			'spp_aggregated_progress',
@@ -389,7 +411,7 @@ def get_batch_details_by_common_code(common_code, filters=None, warehouse=''):
 	
 	try:
 		# Get all SPP warehouses or filter by specific warehouse
-		if warehouse and warehouse != '':
+		if (warehouse and warehouse != ''):
 			# User selected a specific warehouse - only query that one
 			spp_warehouses = [warehouse]
 		else:
@@ -961,17 +983,110 @@ def filter_by_item_groups_pandas(data):
 		
 		return filtered_data
 
+def get_mat_kg_to_nos_conversion_factors():
+	"""
+	Get conversion factors for Mat items using Moulding Production Entry and Mould Specification.
+	
+	Logic:
+	1. Query Moulding Production Entries that have Stock Entry references
+	2. Get avg_blank_wtproduct_gms from linked Mould Specification
+	3. Extract T item batch from Stock Entry Detail (TARGET item with t_warehouse)
+	4. Calculate conversion: (Kg * 1000) / avg_blank_wt_gms = Number of pieces
+	"""
+	conversion_data = {}
+	
+	try:
+		# Get submitted Moulding Production Entries with mould specifications
+		query = """
+			SELECT 
+				mpe.name as production_entry,
+				mpe.scan_lot_number,
+				mpe.mould_reference,
+				mpe.stock_entry_reference,
+				ms.avg_blank_wtproduct_gms,
+				ms.spp_ref
+			FROM `tabMoulding Production Entry` mpe
+			LEFT JOIN `tabMould Specification` ms ON mpe.mould_reference = ms.mould_ref
+			WHERE mpe.docstatus = 1
+				AND mpe.stock_entry_reference IS NOT NULL 
+				AND mpe.mould_reference IS NOT NULL 
+				AND mpe.mould_reference != ''
+				AND ms.avg_blank_wtproduct_gms IS NOT NULL
+				AND ms.avg_blank_wtproduct_gms != ''
+				AND ms.avg_blank_wtproduct_gms != '0'
+			ORDER BY mpe.creation DESC
+		"""
+		
+		data = frappe.db.sql(query, as_dict=1)
+		
+		frappe.logger().info(f"Found {len(data)} Moulding Production Entries with blank weight data")
+		
+		for row in data:
+			try:
+				# Get T item batch from Stock Entry Detail TARGET items (t_warehouse)
+				t_item_data = frappe.db.sql("""
+					SELECT sed.item_code, sed.batch_no, sed.qty, i.item_group
+					FROM `tabStock Entry Detail` sed
+					INNER JOIN `tabItem` i ON sed.item_code = i.name
+					WHERE sed.parent = %s 
+						AND sed.t_warehouse IS NOT NULL
+						AND sed.s_warehouse IS NULL
+						AND (sed.item_code LIKE 'T%%' OR i.item_group = 'Mat')
+					ORDER BY sed.idx
+					LIMIT 1
+				""", (row.stock_entry_reference,), as_dict=True)
+				
+				if t_item_data:
+					t_item = t_item_data[0]
+					t_batch_no = t_item.batch_no
+					t_item_code = t_item.item_code
+					
+					# Validate blank weight
+					blank_wt_float = float(row.avg_blank_wtproduct_gms)
+					if blank_wt_float > 0 and t_batch_no:
+						# Formula: (Kg * 1000) / avg_blank_wt_gms = Number of pieces
+						conversion_factor = 1000.0 / blank_wt_float
+						
+						conversion_data[t_batch_no] = {
+							'conversion_factor': conversion_factor,
+							'scan_lot_number': row.scan_lot_number,
+							'mould_reference': row.mould_reference,
+							'item_code': t_item_code,
+							'blank_wt_gms': blank_wt_float,
+							'spp_ref': row.spp_ref,
+							'production_entry': row.production_entry,
+							'source': 'Moulding Production Entry + Mould Specification'
+						}
+						
+			except (ValueError, TypeError, AttributeError) as e:
+				# Skip invalid entries
+				frappe.logger().debug(f"Error processing entry {row.get('production_entry', 'Unknown')}: {str(e)}")
+				continue
+		
+		frappe.logger().info(f"Successfully created conversion factors for {len(conversion_data)} batches")
+	
+	except Exception as e:
+		frappe.log_error(f"Error in get_mat_kg_to_nos_conversion_factors: {str(e)}", "SPP Aggregated Report")
+		return {}
+	
+	return conversion_data
 
 def aggregate_by_common_code(data):
 	"""
 	Aggregate batch balance data by common code and stage (Mat/Products/Finished Product)
 	Returns aggregated data with one row per common_code
+	**NEW: Converts Mat items from KG to Numbers using Production Batch Weight data**
 	"""
 	if not data:
 		return {"data": [], "grand_total": {}}
 	
 	try:
-		# Pre-process data to convert datetime objects to strings
+		# **NEW: Get Mat conversion factors BEFORE processing data**
+		conversion_factors = get_mat_kg_to_nos_conversion_factors()
+		conversion_applied = 0
+		conversion_skipped = 0
+		
+		# Pre-process data to convert datetime objects to strings AND apply Mat conversion
 		processed_data = []
 		for row in data:
 			if not row or not isinstance(row, dict):
@@ -987,7 +1102,32 @@ def aggregate_by_common_code(data):
 				else:
 					clean_row[key] = value
 			
+			# **NEW: Apply Mat conversion if this is a Mat item with a batch**
+			item_group = clean_row.get('item_group', '')
+			batch_no = clean_row.get('batch') or clean_row.get('batch_no')
+			
+			if item_group == "Mat" and batch_no and batch_no in conversion_factors:
+				conversion_factor = conversion_factors[batch_no]['conversion_factor']
+				if conversion_factor > 0:
+					# Apply conversion to ALL quantity fields
+					clean_row['opening_qty'] = (clean_row.get('opening_qty', 0) or 0) * conversion_factor
+					clean_row['in_qty'] = (clean_row.get('in_qty', 0) or 0) * conversion_factor
+					clean_row['out_qty'] = (clean_row.get('out_qty', 0) or 0) * conversion_factor
+					clean_row['balance_qty'] = (clean_row.get('balance_qty', 0) or 0) * conversion_factor
+					clean_row['converted'] = True
+					conversion_applied += 1
+				else:
+					conversion_skipped += 1
+			elif item_group == "Mat" and batch_no:
+				conversion_skipped += 1
+			
 			processed_data.append(clean_row)
+		
+		# Log conversion stats
+		frappe.logger().info(
+			f"Mat Conversion: {conversion_applied} batches converted to Nos, "
+			f"{conversion_skipped} batches remain in Kg"
+		)
 		
 		if not processed_data:
 			return {"data": [], "grand_total": {}}
@@ -1101,7 +1241,9 @@ def aggregate_by_common_code(data):
 		
 		return {
 			"data": result,
-			"grand_total": grand_total
+			"grand_total": grand_total,
+			"conversion_applied": conversion_applied,
+			"conversion_skipped": conversion_skipped
 		}
 		
 	except Exception as e:
