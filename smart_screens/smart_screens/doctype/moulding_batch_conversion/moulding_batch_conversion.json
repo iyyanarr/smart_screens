@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2025-11-23 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "production_entry",
+  "batch_no",
+  "item_code",
+  "item_name",
+  "item_group",
+  "mould_spec",
+  "warehouse",
+  "posting_datetime",
+  "section_moulding_params",
+  "cavities_per_cycle",
+  "cycle_time_sec",
+  "shots",
+  "section_weights",
+  "gross_qty_kg",
+  "net_qty_kg",
+  "rejects_qty_kg",
+  "section_conversion",
+  "conversion_factor",
+  "calculated_nos",
+  "section_tracking",
+  "company",
+  "status",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "production_entry",
+   "fieldtype": "Link",
+   "label": "Production Entry",
+   "options": "Moulding Production Entry",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item Code",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Data",
+   "label": "Item Group",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mould_spec",
+   "fieldtype": "Link",
+   "label": "Mould Specification",
+   "options": "Mould Specification"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting DateTime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_moulding_params",
+   "fieldtype": "Section Break",
+   "label": "Moulding Parameters"
+  },
+  {
+   "fieldname": "cavities_per_cycle",
+   "fieldtype": "Int",
+   "label": "Cavities Per Cycle"
+  },
+  {
+   "fieldname": "cycle_time_sec",
+   "fieldtype": "Float",
+   "label": "Cycle Time (Seconds)"
+  },
+  {
+   "fieldname": "shots",
+   "fieldtype": "Int",
+   "label": "Number of Shots"
+  },
+  {
+   "fieldname": "section_weights",
+   "fieldtype": "Section Break",
+   "label": "Weights"
+  },
+  {
+   "fieldname": "gross_qty_kg",
+   "fieldtype": "Float",
+   "label": "Gross Qty (kg)",
+   "precision": 3
+  },
+  {
+   "fieldname": "net_qty_kg",
+   "fieldtype": "Float",
+   "label": "Net Qty (kg)",
+   "precision": 3
+  },
+  {
+   "fieldname": "rejects_qty_kg",
+   "fieldtype": "Float",
+   "label": "Rejects Qty (kg)",
+   "precision": 3
+  },
+  {
+   "fieldname": "section_conversion",
+   "fieldtype": "Section Break",
+   "label": "Conversion Factors"
+  },
+  {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Conversion Factor (Nos/Kg)",
+   "precision": 4
+  },
+  {
+   "fieldname": "calculated_nos",
+   "fieldtype": "Float",
+   "label": "Calculated Nos",
+   "precision": 2,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_tracking",
+   "fieldtype": "Section Break",
+   "label": "Tracking"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nActive\nArchived",
+   "default": "Active"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "idx": 1,
+ "links": [],
+ "modified": "2025-11-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Smart Screens",
+ "name": "Moulding Batch Conversion",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 0,
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
