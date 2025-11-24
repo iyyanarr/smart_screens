@@ -19,6 +19,7 @@ Date: November 2025
 import frappe
 from frappe import _
 import time
+import json
 from typing import List, Dict, Tuple, Any
 
 
@@ -33,8 +34,8 @@ def get_mat_conversion_from_mbc(
 	
 	Args:
 		batch_data: List of batch balance records
-		from_date: Optional date filter
-		to_date: Optional date filter
+		from_date: Optional date filter (NOT USED - kept for compatibility)
+		to_date: Optional date filter (NOT USED - kept for compatibility)
 	
 	Returns:
 		{
@@ -73,14 +74,13 @@ def get_mat_conversion_from_mbc(
 	query_start = time.time()
 	
 	try:
-		conditions = ["mbc.status = 'Active'"]  # Only active records
-		
-		if from_date:
-			conditions.append(f"DATE(mbc.posting_datetime) >= '{from_date}'")
-		if to_date:
-			conditions.append(f"DATE(mbc.posting_datetime) <= '{to_date}'")
-		
-		where_clause = " AND " + " AND ".join(conditions) if conditions else ""
+		# IMPORTANT: We do NOT filter by date here!
+		# Conversion factors are permanent properties of batches and should be
+		# available regardless of the report date range.
+		# 
+		# The previous implementation incorrectly filtered by posting_datetime,
+		# which caused batches created before the report from_date to be excluded,
+		# resulting in opening_qty not being converted while in_qty/out_qty were.
 		
 		sql = f"""
 			SELECT 
@@ -98,7 +98,7 @@ def get_mat_conversion_from_mbc(
 				mbc.warehouse
 			FROM `tabMoulding Batch Conversion` mbc
 			WHERE mbc.batch_no IN ({','.join(['%s'] * len(mat_batches))})
-			{where_clause}
+			AND mbc.status = 'Active'
 			ORDER BY mbc.posting_datetime DESC
 		"""
 		
@@ -165,6 +165,10 @@ def apply_mat_conversion_to_data(
 		(modified_data, stats)
 	"""
 	if not conversion_result.get('success'):
+		frappe.logger().warning(
+			f"Mat conversion not applied - conversion_result success=False. "
+			f"Method: {conversion_result.get('method', 'unknown')}"
+		)
 		return batch_data, {
 			'conversion_applied': 0,
 			'conversion_failed': 0,
@@ -173,47 +177,138 @@ def apply_mat_conversion_to_data(
 	
 	conversion_map = conversion_result.get('conversion_map', {})
 	
+	if not conversion_map:
+		frappe.logger().warning("Mat conversion not applied - conversion_map is empty")
+		return batch_data, {
+			'conversion_applied': 0,
+			'conversion_failed': 0,
+			'method': conversion_result.get('method', 'unknown'),
+			'error': 'Empty conversion map'
+		}
+	
+	frappe.logger().info(f"Mat Conversion Map loaded with {len(conversion_map)} batch conversions")
+	
 	converted_count = 0
 	not_found_count = 0
+	zero_conversion_count = 0
 	
 	# Quantity fields to convert (batch balance report uses these field names)
-	qty_fields = ['balance_qty', 'opening_qty', 'in_qty', 'out_qty', 'qty']
+	qty_fields = ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'qty']
+	
+	# Track conversion details for debugging
+	conversion_samples = []
+	missing_conversion_samples = []
 	
 	for row in batch_data:
 		if row.get('item_group') == item_group_name:
 			batch_no = row.get('batch') or row.get('batch_no')
+			item_code = row.get('item', 'N/A')
+			
+			if not batch_no:
+				frappe.logger().warning(f"Mat item {item_code} has no batch number - skipping conversion")
+				continue
 			
 			if batch_no and batch_no in conversion_map:
 				conversion_factor = conversion_map[batch_no]
 				
+				# Check for zero or invalid conversion factor
+				if not conversion_factor or conversion_factor == 0:
+					zero_conversion_count += 1
+					row['converted'] = False
+					row['conversion_error'] = 'Zero conversion factor'
+					
+					frappe.logger().warning(
+						f"✗ Mat batch {batch_no} (item: {item_code}) has ZERO conversion factor - "
+						f"Opening: {row.get('opening_qty', 0)} KG will NOT be converted"
+					)
+					continue
+				
+				# Track BEFORE conversion for logging
+				before_values = {
+					'opening_qty': row.get('opening_qty', 0),
+					'in_qty': row.get('in_qty', 0),
+					'out_qty': row.get('out_qty', 0),
+					'balance_qty': row.get('balance_qty', 0)
+				}
+				
 				# Convert ALL quantity fields from KG to Nos
 				for field in qty_fields:
 					if field in row and row[field] is not None:
-						original_value = row[field]
-						row[field] = original_value * conversion_factor
+						original_value = float(row[field])
+						converted_value = original_value * conversion_factor
+						row[field] = converted_value
 						
-						# Store original value for reference (using first qty field found)
+						# Store original value for reference (only once)
 						if not row.get('original_qty_kg'):
 							row['original_qty_kg'] = original_value
 				
 				row['converted'] = True
 				row['conversion_factor'] = conversion_factor
 				
+				# Track AFTER conversion
+				after_values = {
+					'opening_qty': row.get('opening_qty', 0),
+					'in_qty': row.get('in_qty', 0),
+					'out_qty': row.get('out_qty', 0),
+					'balance_qty': row.get('balance_qty', 0)
+				}
+				
+				# Log first 5 conversions for debugging
+				if len(conversion_samples) < 5:
+					conversion_samples.append({
+						'batch': batch_no,
+						'item': item_code,
+						'conversion_factor': conversion_factor,
+						'before_kg': before_values,
+						'after_nos': after_values
+					})
+				
 				converted_count += 1
 			else:
 				not_found_count += 1
 				row['converted'] = False
+				row['conversion_error'] = 'No conversion factor found'
+				
+				# Log first 5 batches without conversion for debugging
+				if len(missing_conversion_samples) < 5:
+					missing_conversion_samples.append({
+						'batch': batch_no,
+						'item': item_code,
+						'opening_qty_kg': row.get('opening_qty', 0),
+						'balance_qty_kg': row.get('balance_qty', 0)
+					})
+					
+					frappe.logger().warning(
+						f"✗ Mat batch {batch_no} (item: {item_code}) - "
+						f"No conversion factor found in Moulding Batch Conversion. "
+						f"Opening: {row.get('opening_qty', 0)} KG, Balance: {row.get('balance_qty', 0)} KG"
+					)
+	
+	# Log conversion samples for debugging
+	if conversion_samples:
+		frappe.logger().info(
+			f"✓ MAT CONVERSION SUCCESS - Sample conversions:\n{json.dumps(conversion_samples, indent=2)}"
+		)
+	
+	if missing_conversion_samples:
+		frappe.logger().warning(
+			f"✗ MAT CONVERSION MISSING - Batches without conversion factors:\n{json.dumps(missing_conversion_samples, indent=2)}"
+		)
 	
 	stats = {
 		'conversion_applied': converted_count,
 		'conversion_not_found': not_found_count,
+		'zero_conversion_factor': zero_conversion_count,
 		'method': conversion_result.get('method', 'mbc'),
-		'mbc_stats': conversion_result.get('stats', {})
+		'mbc_stats': conversion_result.get('stats', {}),
+		'success_samples': conversion_samples,
+		'missing_samples': missing_conversion_samples
 	}
 	
 	frappe.logger().info(
-		f"Mat Conversion Applied: {converted_count} batches converted, "
-		f"{not_found_count} batches not found"
+		f"Mat Conversion Summary: {converted_count} batches converted, "
+		f"{not_found_count} batches missing conversion, "
+		f"{zero_conversion_count} batches with zero conversion factor"
 	)
 	
 	return batch_data, stats

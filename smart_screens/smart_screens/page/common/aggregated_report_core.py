@@ -335,6 +335,19 @@ def aggregate_by_common_code(data):
 		return {"data": [], "grand_total": {}}
 	
 	try:
+			# DIAGNOSTIC: Log sample Mat data BEFORE aggregation
+		mat_samples_before = [row for row in data if row.get('item_group') == 'Mat'][:3]
+		if mat_samples_before:
+			frappe.logger().info(
+				f"=== MAT DATA BEFORE AGGREGATION (first 3 records) ===\n" +
+				"\n".join([
+					f"Batch: {row.get('batch')}, Item: {row.get('item')}, "
+					f"Opening: {row.get('opening_qty')}, Balance: {row.get('balance_qty')}, "
+					f"Converted: {row.get('converted', 'N/A')}, Factor: {row.get('conversion_factor', 'N/A')}"
+					for row in mat_samples_before
+				])
+			)
+		
 		# Pre-process data to convert datetime objects to strings
 		processed_data = []
 		for row in data:
@@ -358,6 +371,14 @@ def aggregate_by_common_code(data):
 		
 		# Create DataFrame from cleaned data
 		df = pd.DataFrame(processed_data)
+		
+			# DIAGNOSTIC: Log Mat data in DataFrame before aggregation
+		if 'item_group' in df.columns:
+			mat_df = df[df['item_group'] == 'Mat'][['item', 'batch', 'opening_qty', 'balance_qty']].head(3)
+			if not mat_df.empty:
+				frappe.logger().info(
+					f"=== MAT DATAFRAME BEFORE AGGREGATION ===\n{mat_df.to_string()}"
+				)
 		
 		# Extract common_code from item code
 		def extract_common_code(item_code):
@@ -402,6 +423,16 @@ def aggregate_by_common_code(data):
 		# Get unique item groups in the data
 		unique_item_groups = df['item_group'].unique().tolist()
 		
+			# DIAGNOSTIC: Log Mat data by common_code before groupby
+		if 'Mat' in unique_item_groups:
+			mat_by_code = df[df['item_group'] == 'Mat'].groupby('common_code').agg({
+				'opening_qty': ['sum', 'count'],
+				'balance_qty': 'sum'
+			}).head(3)
+			frappe.logger().info(
+				f"=== MAT BY COMMON_CODE (before groupby) ===\n{mat_by_code.to_string()}"
+			)
+		
 		# Aggregate by common_code and item_group
 		aggregated = df.groupby(['common_code', 'item_group']).agg({
 			'opening_qty': 'sum',
@@ -410,6 +441,13 @@ def aggregate_by_common_code(data):
 			'balance_qty': 'sum',
 			'balance_value': 'sum'
 		}).reset_index()
+		
+			# DIAGNOSTIC: Log Mat data AFTER aggregation
+		mat_aggregated = aggregated[aggregated['item_group'] == 'Mat'].head(5)
+		if not mat_aggregated.empty:
+			frappe.logger().info(
+				f"=== MAT DATA AFTER AGGREGATION (first 5 codes) ===\n{mat_aggregated.to_string()}"
+			)
 		
 		result = []
 		
