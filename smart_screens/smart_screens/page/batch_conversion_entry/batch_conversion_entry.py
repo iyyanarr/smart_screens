@@ -207,7 +207,7 @@ def process_month_background(month):
 		
 		# Enqueue background job
 		frappe.enqueue(
-			method='aggregated_report.aggregated_report.page.batch_conversion_entry.batch_conversion_entry.process_month_job',
+			method='smart_screens.smart_screens.page.batch_conversion_entry.batch_conversion_entry.process_month_job',
 			queue='long',
 			timeout=3600,
 			job_id=job_id,

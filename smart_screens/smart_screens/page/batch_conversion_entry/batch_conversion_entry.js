@@ -131,7 +131,7 @@ function setup_page(wrapper, page) {
 		`);
 
 		frappe.call({
-			method: 'aggregated_report.aggregated_report.page.batch_conversion_entry.batch_conversion_entry.get_month_batches',
+			method: 'smart_screens.smart_screens.page.batch_conversion_entry.batch_conversion_entry.get_month_batches',
 			args: { month: month },
 			callback: function(r) {
 				if (r.message && r.message.success) {
@@ -224,7 +224,7 @@ function setup_page(wrapper, page) {
 
 	function process_single_batch(wrapper, mpe_name) {
 		frappe.call({
-			method: 'aggregated_report.aggregated_report.page.batch_conversion_entry.batch_conversion_entry.process_single_batch',
+			method: 'smart_screens.smart_screens.page.batch_conversion_entry.batch_conversion_entry.process_single_batch',
 			args: { mpe_name: mpe_name },
 			callback: function(r) {
 				if (r.message && r.message.success) {
@@ -254,7 +254,7 @@ function setup_page(wrapper, page) {
 				$(wrapper).find('#btn_process_month').prop('disabled', true);
 
 				frappe.call({
-					method: 'aggregated_report.aggregated_report.page.batch_conversion_entry.batch_conversion_entry.process_month_background',
+					method: 'smart_screens.smart_screens.page.batch_conversion_entry.batch_conversion_entry.process_month_background',
 					args: { month: month },
 					callback: function(r) {
 						if (r.message && r.message.success) {
@@ -280,7 +280,7 @@ function setup_page(wrapper, page) {
 	function monitor_background_job(wrapper, job_id, month) {
 		const interval = setInterval(function() {
 			frappe.call({
-				method: 'aggregated_report.aggregated_report.page.batch_conversion_entry.batch_conversion_entry.get_job_status',
+				method: 'smart_screens.smart_screens.page.batch_conversion_entry.batch_conversion_entry.get_job_status',
 				args: { job_id: job_id },
 				callback: function(r) {
 					if (r.message) {
