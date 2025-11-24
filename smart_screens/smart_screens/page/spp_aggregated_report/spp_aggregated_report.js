@@ -625,9 +625,11 @@ class SPPAggregatedReport {
 				// Apply search on top of warehouse-filtered data
 				me.filtered_data = baseData.filter(row => 
 					row.common_code.toLowerCase().includes(searchText)
-				);
-				// Keep the same grand total (warehouse-filtered)
-				me.grand_total = aggregated_result.grand_total;
+					);
+				
+				// FIXED: Recalculate grand total for filtered data only
+				me.grand_total = me.calculate_grand_total(me.filtered_data);
+				
 				$('.clear-search').show();
 			}
 			
@@ -654,6 +656,44 @@ class SPPAggregatedReport {
 			
 			me.sort_data(column, order, true);
 		});
+	}
+	
+	// Helper function to calculate grand total from filtered data
+	calculate_grand_total(data) {
+		const grand_total = {
+			"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
+			"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+		};
+		
+		data.forEach(row => {
+			// Add Mat quantities
+			grand_total.Mat.opening_qty += parseFloat(row.Mat.opening_qty) || 0;
+			grand_total.Mat.in_qty += parseFloat(row.Mat.in_qty) || 0;
+			grand_total.Mat.out_qty += parseFloat(row.Mat.out_qty) || 0;
+			grand_total.Mat.balance_qty += parseFloat(row.Mat.balance_qty) || 0;
+			
+			// Add Products quantities
+			grand_total.Products.opening_qty += parseFloat(row.Products.opening_qty) || 0;
+			grand_total.Products.in_qty += parseFloat(row.Products.in_qty) || 0;
+			grand_total.Products.out_qty += parseFloat(row.Products.out_qty) || 0;
+			grand_total.Products.balance_qty += parseFloat(row.Products.balance_qty) || 0;
+			
+			// Add Finished Product quantities
+			grand_total['Finished Product'].opening_qty += parseFloat(row['Finished Product'].opening_qty) || 0;
+			grand_total['Finished Product'].in_qty += parseFloat(row['Finished Product'].in_qty) || 0;
+			grand_total['Finished Product'].out_qty += parseFloat(row['Finished Product'].out_qty) || 0;
+			grand_total['Finished Product'].balance_qty += parseFloat(row['Finished Product'].balance_qty) || 0;
+			
+			// Add to Total
+			grand_total.Total.opening_qty += parseFloat(row.Total.opening_qty) || 0;
+			grand_total.Total.in_qty += parseFloat(row.Total.in_qty) || 0;
+			grand_total.Total.out_qty += parseFloat(row.Total.out_qty) || 0;
+			grand_total.Total.balance_qty += parseFloat(row.Total.balance_qty) || 0;
+		});
+		
+		return grand_total;
 	}
 	
 	sort_data(column, order, updateUI = true) {
