@@ -151,10 +151,11 @@ class BatComAggregatedReport {
 		// Store original data for filtering and sorting
 		this.report_data = data;
 		this.grand_total = grand_total;
-		this.raw_filtered_data = response.raw_filtered_data || []; // NEW: Store raw data for re-aggregation
+		this.grand_total_original = JSON.parse(JSON.stringify(grand_total)); // Store original for reset
+		this.raw_filtered_data = response.raw_filtered_data || []; // Store raw data for re-aggregation
 		this.filtered_data = [...data]; // Copy for filtering
 		this.current_sort = { column: 'common_code', order: 'asc' }; // Default sort
-		this.current_warehouse = ''; // NEW: Track current warehouse filter
+		this.current_warehouse = ''; // Track current warehouse filter
 		
 		// Create aggregated table HTML
 		let html = `
@@ -265,13 +266,52 @@ class BatComAggregatedReport {
 		this.bind_search_and_sort();
 	}
 	
+	// BatCom-specific common code extraction
+	// Patterns: B_4910 → 4910, MB_60103v5 → 60103, C_50EP02v3 → 50EP02, CMB_7025 → 7025
+	extract_batcom_common_code(item_code) {
+		if (!item_code) return null;
+		
+		item_code = String(item_code).trim();
+		
+		// Remove prefix (order matters - check longer prefixes first)
+		const prefixes = ['CMB_D', 'CMB_', 'MB_', 'B_', 'C_', 'BC_'];
+		let code_part = item_code;
+		
+		for (const prefix of prefixes) {
+			if (item_code.toUpperCase().startsWith(prefix.toUpperCase())) {
+				code_part = item_code.substring(prefix.length);
+				break;
+			}
+		}
+		
+		if (!code_part) return null;
+		
+		// Handle special cases with space (e.g., "6025 A" → "6025")
+		if (code_part.includes(' ')) {
+			code_part = code_part.split(' ')[0];
+		}
+		
+		// Remove trailing 'L' for CMB_D items (e.g., "7025L" → "7025")
+		if (code_part.endsWith('L') && code_part.length > 1 && /\d/.test(code_part[code_part.length - 2])) {
+			code_part = code_part.slice(0, -1);
+		}
+		
+		// Remove version suffix (v0, v1, v23, V24, etc.) - case insensitive
+		const versionMatch = code_part.match(/[vV]\d+$/);
+		if (versionMatch) {
+			code_part = code_part.substring(0, versionMatch.index);
+		}
+		
+		return code_part.trim() || null;
+	}
+	
 	// NEW: Function to re-aggregate data by warehouse
 	aggregate_by_warehouse(warehouse) {
 		if (!warehouse || warehouse === '') {
 			// Return original aggregated data (all warehouses)
 			return {
 				data: this.report_data,
-				grand_total: this.grand_total
+				grand_total: this.grand_total_original || this.grand_total
 			};
 		}
 		
@@ -292,7 +332,7 @@ class BatComAggregatedReport {
 			};
 		}
 		
-		// Re-aggregate by common_code
+		// Re-aggregate by common_code using BatCom extraction
 		const aggregated = {};
 		const grand_total = {
 			"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
@@ -304,13 +344,8 @@ class BatComAggregatedReport {
 		warehouse_data.forEach(row => {
 			const item = row.item || '';
 			
-			// Extract common_code
-			let common_code;
-			if (item.startsWith('t.')) {
-				common_code = item.slice(-4);
-			} else {
-				common_code = item.substring(1, 5);
-			}
+				// Use BatCom-specific common code extraction
+			const common_code = this.extract_batcom_common_code(item);
 			
 			if (!common_code) return;
 			
@@ -326,13 +361,11 @@ class BatComAggregatedReport {
 				};
 			}
 			
-			// Normalize item_group
+				// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
 			let item_group = row.item_group || '';
-			if (item_group === 'Finished Products') {
-				item_group = 'Finished Product';
-			}
 			
-			if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
+			// Only process BatCom item groups
+			if (!['Batch', 'Master Batch', 'Compound'].includes(item_group)) {
 				return;
 			}
 			
@@ -454,8 +487,8 @@ class BatComAggregatedReport {
 			if (!selectedWarehouse) {
 				// No warehouse selected - show all data
 				me.current_warehouse = '';
-				me.filtered_data = me.report_data;
-				me.grand_total = me.grand_total_original || me.grand_total;
+				me.filtered_data = [...me.report_data];
+				me.grand_total = JSON.parse(JSON.stringify(me.grand_total_original));
 				
 				// Clear search box when warehouse changes
 				$('#common-code-filter').val('');
@@ -475,7 +508,7 @@ class BatComAggregatedReport {
 			
 			// Call server to expand parent warehouse to child warehouses
 			frappe.call({
-				method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.get_child_warehouses',
+				method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.get_child_warehouses_api',
 				args: { warehouse: selectedWarehouse },
 				callback: (r) => {
 					if (r.message && r.message.length > 0) {
@@ -501,7 +534,7 @@ class BatComAggregatedReport {
 								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
 							};
 						} else {
-							// Re-aggregate the filtered data
+							// Re-aggregate the filtered data using BatCom extraction
 							const aggregated = {};
 							const grand_total = {
 								"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
@@ -513,13 +546,8 @@ class BatComAggregatedReport {
 							warehouse_data.forEach(row => {
 								const item = row.item || '';
 								
-								// Extract common_code
-								let common_code;
-								if (item.startsWith('t.')) {
-									common_code = item.slice(-4);
-								} else {
-									common_code = item.substring(1, 5);
-								}
+									// Use BatCom-specific common code extraction
+								const common_code = me.extract_batcom_common_code(item);
 								
 								if (!common_code) return;
 								
@@ -535,13 +563,11 @@ class BatComAggregatedReport {
 									};
 								}
 								
-								// Normalize item_group
+									// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
 								let item_group = row.item_group || '';
-								if (item_group === 'Finished Products') {
-									item_group = 'Finished Product';
-								}
 								
-								if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
+								// Only process BatCom item groups
+								if (!['Batch', 'Master Batch', 'Compound'].includes(item_group)) {
 									return;
 								}
 								
@@ -1667,45 +1693,45 @@ class BatComAggregatedReport {
 			`)
 			.appendTo("head");
 	}
-export_batch_details_to_excel(common_code, batches) {
-frappe.show_alert({
-message: __('Preparing Excel export for batch details...'),
-indicator: 'blue'
-}, 3);
+	
+	export_batch_details_to_excel(common_code, batches) {
+		frappe.show_alert({
+			message: __('Preparing Excel export for batch details...'),
+			indicator: 'blue'
+		}, 3);
 
-frappe.call({
-method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.export_batch_details_to_excel',
-args: {
-common_code: common_code,
-batches: batches,
-filters: this.current_filters,
-warehouse_filter: this.current_warehouse || ''
-},
-callback: (r) => {
-if (r.message && r.message.success) {
-// Download the file
-window.open(r.message.file_url, '_blank');
-frappe.show_alert({
-message: __('Batch details exported successfully!'),
-indicator: 'green'
-}, 5);
-} else {
-frappe.msgprint({
-title: __('Export Failed'),
-indicator: 'red',
-message: r.message?.error || 'Failed to generate Excel file'
-});
-}
-},
-error: (err) => {
-frappe.msgprint({
-title: __('Error'),
-indicator: 'red',
-message: __('An error occurred while exporting batch details')
-});
-console.error('Batch export error:', err);
-}
-});
-}
-
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.export_batch_details_to_excel_api',
+			args: {
+				common_code: common_code,
+				batches: batches,
+				filters: this.current_filters,
+				warehouse_filter: this.current_warehouse || ''
+			},
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					// Download the file
+					window.open(r.message.file_url, '_blank');
+					frappe.show_alert({
+						message: __('Batch details exported successfully!'),
+						indicator: 'green'
+					}, 5);
+				} else {
+					frappe.msgprint({
+						title: __('Export Failed'),
+						indicator: 'red',
+						message: r.message?.error || 'Failed to generate Excel file'
+					});
+				}
+			},
+			error: (err) => {
+				frappe.msgprint({
+					title: __('Error'),
+					indicator: 'red',
+					message: __('An error occurred while exporting batch details')
+				});
+				console.error('Batch export error:', err);
+			}
+		});
+	}
 }

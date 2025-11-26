@@ -6,6 +6,7 @@ import frappe
 import json
 import pandas as pd
 import time
+import re
 
 def expand_parent_warehouses(warehouse_list):
 	"""
@@ -320,13 +321,84 @@ f"{report_name} - Batch Exclusion Error"
 		return data, 0
 
 
-def aggregate_by_common_code(data):
+def extract_spp_common_code(item_code):
+	"""
+	Extract common code from SPP item codes (Mat, Products, Finished Product)
+	Pattern: F5035 → 5035, t.F5035 → 5035
+	"""
+	if not item_code:
+		return None
+	item_code = str(item_code)
+	if item_code.startswith('t.'):
+		# Pattern: t.F5035 → 5035
+		return item_code[-4:] if len(item_code) >= 4 else None
+	else:
+		# Pattern: F5035 → 5035
+		return item_code[1:5] if len(item_code) >= 5 else None
+
+
+def extract_batcom_common_code(item_code):
+	"""
+	Extract common code from BatCom item codes (Batch, Master Batch, Compound)
+	
+	Patterns:
+	- B_4910, B_4910v1 → 4910
+	- MB_4910, MB_4910v1 → 4910
+	- C_4910, C_4910v1 → 4910
+	- B_60103, B_60103v5 → 60103
+	- B_50EP02, B_50EP02v3 → 50EP02
+	- CMB_7025, CMB_7025v2 → 7025
+	- CMB_70253, CMB_70253v24 → 70253
+	- CMB_D7025Lv1 → 7025
+	- B_6025 A → 6025
+	"""
+	if not item_code:
+		return None
+	
+	item_code = str(item_code).strip()
+	
+	# Remove prefix
+	prefixes = ['CMB_D', 'CMB_', 'MB_', 'B_', 'C_', 'BC_']
+	code_part = item_code
+	
+	for prefix in prefixes:
+		if item_code.upper().startswith(prefix.upper()):
+			code_part = item_code[len(prefix):]
+			break
+	
+	if not code_part:
+		return None
+	
+	# Handle special cases with space (e.g., "6025 A" → "6025")
+	if ' ' in code_part:
+		code_part = code_part.split(' ')[0]
+	
+	# Remove trailing 'L' for CMB_D items (e.g., "7025L" → "7025")
+	if code_part.endswith('L') and not code_part[-2:-1].isdigit() == False:
+		# Only remove L if it's not part of a code like "60NVC01"
+		if len(code_part) > 1 and code_part[-2].isdigit():
+			code_part = code_part[:-1]
+	
+	# Remove version suffix (v0, v1, v23, V24, etc.) - case insensitive
+	# Pattern: ends with 'v' or 'V' followed by digits
+	version_match = re.search(r'[vV]\d+$', code_part)
+	if version_match:
+		code_part = code_part[:version_match.start()]
+	
+	# Clean up any remaining issues
+	code_part = code_part.strip()
+	
+	return code_part if code_part else None
+
+
+def aggregate_by_common_code(data, report_type="SPP"):
 	"""
 	Aggregate batch balance data by common code and stage (item groups)
 	Returns aggregated data with one row per common_code
 	
 	Args:
 		data: List of batch records (already cleaned and converted)
+		report_type: "SPP" for Mat/Products/Finished Product, "BatCom" for Batch/Master Batch/Compound
 	
 	Returns:
 		dict: {"data": [...], "grand_total": {...}}
@@ -335,18 +407,13 @@ def aggregate_by_common_code(data):
 		return {"data": [], "grand_total": {}}
 	
 	try:
-			# DIAGNOSTIC: Log sample Mat data BEFORE aggregation
-		mat_samples_before = [row for row in data if row.get('item_group') == 'Mat'][:3]
-		if mat_samples_before:
-			frappe.logger().info(
-				f"=== MAT DATA BEFORE AGGREGATION (first 3 records) ===\n" +
-				"\n".join([
-					f"Batch: {row.get('batch')}, Item: {row.get('item')}, "
-					f"Opening: {row.get('opening_qty')}, Balance: {row.get('balance_qty')}, "
-					f"Converted: {row.get('converted', 'N/A')}, Factor: {row.get('conversion_factor', 'N/A')}"
-					for row in mat_samples_before
-				])
-			)
+		# Select the appropriate extraction function based on report type
+		if report_type == "BatCom":
+			extract_common_code = extract_batcom_common_code
+			frappe.logger().info("Using BatCom common code extraction")
+		else:
+			extract_common_code = extract_spp_common_code
+			frappe.logger().info("Using SPP common code extraction")
 		
 		# Pre-process data to convert datetime objects to strings
 		processed_data = []
@@ -357,7 +424,7 @@ def aggregate_by_common_code(data):
 			# Create a copy of the row and convert datetime objects
 			clean_row = {}
 			for key, value in row.items():
-				if value is None or pd.isna(value):
+				if value is None or (hasattr(pd, 'isna') and pd.isna(value)):
 					clean_row[key] = None
 				elif hasattr(value, 'isoformat'):  # datetime object
 					clean_row[key] = str(value)
@@ -372,27 +439,12 @@ def aggregate_by_common_code(data):
 		# Create DataFrame from cleaned data
 		df = pd.DataFrame(processed_data)
 		
-			# DIAGNOSTIC: Log Mat data in DataFrame before aggregation
-		if 'item_group' in df.columns:
-			mat_df = df[df['item_group'] == 'Mat'][['item', 'batch', 'opening_qty', 'balance_qty']].head(3)
-			if not mat_df.empty:
-				frappe.logger().info(
-					f"=== MAT DATAFRAME BEFORE AGGREGATION ===\n{mat_df.to_string()}"
-				)
-		
-		# Extract common_code from item code
-		def extract_common_code(item_code):
-			if not item_code:
-				return None
-			item_code = str(item_code)
-			if item_code.startswith('t.'):
-				# Pattern: t.F5035 → 5035
-				return item_code[-4:] if len(item_code) >= 4 else None
-			else:
-				# Pattern: F5035 → 5035
-				return item_code[1:5] if len(item_code) >= 5 else None
-		
+		# Extract common_code from item code using the selected extraction function
 		df['common_code'] = df['item'].apply(extract_common_code)
+		
+		# Log some samples for debugging
+		sample_items = df[['item', 'item_group', 'common_code']].head(10)
+		frappe.logger().info(f"Sample common code extraction:\n{sample_items.to_string()}")
 		
 		# Remove rows where common_code couldn't be extracted
 		df = df[df['common_code'].notna()]
@@ -403,9 +455,6 @@ def aggregate_by_common_code(data):
 				"Aggregated Report - Aggregation Warning"
 			)
 			return {"data": [], "grand_total": {}}
-		
-		# Normalize item_group (Finished Products → Finished Product)
-		df['item_group'] = df['item_group'].replace('Finished Products', 'Finished Product')
 		
 		# Convert quantity columns to numeric
 		qty_columns = ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'balance_value']
@@ -423,16 +472,6 @@ def aggregate_by_common_code(data):
 		# Get unique item groups in the data
 		unique_item_groups = df['item_group'].unique().tolist()
 		
-			# DIAGNOSTIC: Log Mat data by common_code before groupby
-		if 'Mat' in unique_item_groups:
-			mat_by_code = df[df['item_group'] == 'Mat'].groupby('common_code').agg({
-				'opening_qty': ['sum', 'count'],
-				'balance_qty': 'sum'
-			}).head(3)
-			frappe.logger().info(
-				f"=== MAT BY COMMON_CODE (before groupby) ===\n{mat_by_code.to_string()}"
-			)
-		
 		# Aggregate by common_code and item_group
 		aggregated = df.groupby(['common_code', 'item_group']).agg({
 			'opening_qty': 'sum',
@@ -441,13 +480,6 @@ def aggregate_by_common_code(data):
 			'balance_qty': 'sum',
 			'balance_value': 'sum'
 		}).reset_index()
-		
-			# DIAGNOSTIC: Log Mat data AFTER aggregation
-		mat_aggregated = aggregated[aggregated['item_group'] == 'Mat'].head(5)
-		if not mat_aggregated.empty:
-			frappe.logger().info(
-				f"=== MAT DATA AFTER AGGREGATION (first 5 codes) ===\n{mat_aggregated.to_string()}"
-			)
 		
 		result = []
 		
@@ -501,6 +533,8 @@ def aggregate_by_common_code(data):
 		
 		# Sort by common_code
 		result = sorted(result, key=lambda x: x['common_code'])
+		
+		frappe.logger().info(f"Aggregation complete: {len(result)} unique common codes")
 		
 		return {
 			"data": result,

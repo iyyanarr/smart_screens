@@ -14,6 +14,7 @@ from smart_screens.smart_screens.page.common.aggregated_report_core import (
 	filter_by_item_groups_pandas,
 	exclude_batches,
 	aggregate_by_common_code,
+	extract_batcom_common_code,
 	get_child_warehouses
 )
 from smart_screens.smart_screens.page.common.excel_export import (
@@ -115,7 +116,7 @@ user=frappe.session.user
 		t6 = time.time()
 		performance_log['item_group_filtering'] = round(t6 - t5, 2)
 		
-		# STEP 4: Aggregate data
+		# STEP 4: Aggregate data using BatCom-specific common code extraction
 		frappe.publish_realtime(
 'batcom_aggregated_progress',
 {'step': 4, 'total': 4, 'message': 'Aggregating data by common code...', 'percent': 90},
@@ -123,7 +124,7 @@ user=frappe.session.user
 )
 		
 		t7 = time.time()
-		aggregated_data = aggregate_by_common_code(filtered_data)
+		aggregated_data = aggregate_by_common_code(filtered_data, report_type="BatCom")
 		t8 = time.time()
 		performance_log['aggregation'] = round(t8 - t7, 2)
 		
@@ -187,13 +188,13 @@ def get_batch_details_by_common_code(common_code, filters=None, warehouse=''):
 		
 		# Fetch data
 		all_batches_data = fetch_batch_balance_data(
-report_name="BatCom Aggregated Report",
-company=filters.get("company") or frappe.defaults.get_user_default("Company"),
-warehouses=batcom_warehouses,
-item_group=filters.get("item_group"),
-start_date=filters.get("from_date"),
-end_date=filters.get("to_date")
-)
+			report_name="BatCom Aggregated Report",
+			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
+			warehouses=batcom_warehouses,
+			item_group=filters.get("item_group"),
+			start_date=filters.get("from_date"),
+			end_date=filters.get("to_date")
+		)
 		
 		if not all_batches_data:
 			return {
@@ -209,7 +210,7 @@ end_date=filters.get("to_date")
 		item_groups = config.get_item_groups()
 		filtered_data = filter_by_item_groups_pandas(all_batches_data, item_groups)
 		
-		# Extract common_code and filter
+		# Extract common_code using BatCom-specific logic and filter
 		batches_by_group = {
 			"Batch": [],
 			"Master Batch": [],
@@ -219,12 +220,8 @@ end_date=filters.get("to_date")
 		for row in filtered_data:
 			item_code = row.get("item", "")
 			
-			# Extract common_code
-			extracted_code = None
-			if item_code.startswith('t.'):
-				extracted_code = item_code[-4:] if len(item_code) >= 4 else None
-			else:
-				extracted_code = item_code[1:5] if len(item_code) >= 5 else None
+			 # Use BatCom-specific common code extraction
+			extracted_code = extract_batcom_common_code(item_code)
 			
 			if extracted_code == str(common_code):
 				item_group = row.get("item_group", "")
@@ -248,9 +245,9 @@ end_date=filters.get("to_date")
 		
 	except Exception as e:
 		frappe.log_error(
-f"Error getting batch details: {str(e)}\n{frappe.get_traceback()}",
-"BatCom Aggregated Report - Batch Details Error"
-)
+			f"Error getting batch details: {str(e)}\n{frappe.get_traceback()}",
+			"BatCom Aggregated Report - Batch Details Error"
+		)
 		return {
 			"success": False,
 			"error": str(e),
@@ -278,13 +275,13 @@ def export_to_excel(filters=None, warehouse=''):
 			}
 		
 		all_data = fetch_batch_balance_data(
-report_name="BatCom Aggregated Report",
-company=filters.get("company") or frappe.defaults.get_user_default("Company"),
-warehouses=batcom_warehouses,
-item_group=filters.get("item_group"),
-start_date=filters.get("from_date"),
-end_date=filters.get("to_date")
-)
+			report_name="BatCom Aggregated Report",
+			company=filters.get("company") or frappe.defaults.get_user_default("Company"),
+			warehouses=batcom_warehouses,
+			item_group=filters.get("item_group"),
+			start_date=filters.get("from_date"),
+			end_date=filters.get("to_date")
+		)
 		
 		if not all_data:
 			return {
@@ -303,24 +300,24 @@ end_date=filters.get("to_date")
 		if warehouse and warehouse != '':
 			filtered_data = [row for row in filtered_data if row.get('warehouse') == warehouse]
 		
-		# Aggregate
-		aggregated_result = aggregate_by_common_code(filtered_data)
+		# Aggregate using BatCom-specific common code extraction
+		aggregated_result = aggregate_by_common_code(filtered_data, report_type="BatCom")
 		
 		# Export to Excel using common module
 		return export_aggregated_data_to_excel(
-data=aggregated_result.get("data", []),
-grand_total=aggregated_result.get("grand_total", {}),
-report_title="BatCom Aggregated Report",
-filters=filters,
-warehouse_filter=warehouse,
-item_groups=["Batch", "Master Batch", "Compound"]
-)
+			data=aggregated_result.get("data", []),
+			grand_total=aggregated_result.get("grand_total", {}),
+			report_title="BatCom Aggregated Report",
+			filters=filters,
+			warehouse_filter=warehouse,
+			item_groups=["Batch", "Master Batch", "Compound"]
+		)
 		
 	except Exception as e:
 		frappe.log_error(
-f"Error exporting to Excel: {str(e)}\n{frappe.get_traceback()}",
-"BatCom Aggregated Report - Export Error"
-)
+			f"Error exporting to Excel: {str(e)}\n{frappe.get_traceback()}",
+			"BatCom Aggregated Report - Export Error"
+		)
 		return {
 			"success": False,
 			"error": str(e)
@@ -342,3 +339,12 @@ filters=filters or {},
 warehouse_filter=warehouse_filter,
 item_groups=["Batch", "Master Batch", "Compound"]
 )
+
+
+@frappe.whitelist()
+def get_child_warehouses_api(warehouse):
+	"""
+	Get all child warehouses for a parent warehouse.
+	Wrapper for the common module function.
+	"""
+	return get_child_warehouses(warehouse)
