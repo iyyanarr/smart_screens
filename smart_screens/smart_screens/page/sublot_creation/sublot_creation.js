@@ -3,13 +3,13 @@
  * Standalone page for creating sub-lots from main production lots
  */
 
-frappe.pages['sublot-creation'].on_page_load = function(wrapper) {
+frappe.pages['sublot-creation'].on_page_load = function (wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Sub-Lot Creation Center',
         single_column: true
     });
-    
+
     // Show location selector first
     FinishingCommon.showLocationSelector(page, (locationData) => {
         new SubLotCreationPage(page, locationData);
@@ -21,23 +21,23 @@ class SubLotCreationPage {
         this.page = page;
         this.wrapper = $(page.wrapper);
         this.user_settings = locationData;
-        
+
         this.lot_details = null;
         this.bom_details = null;
         this.sublot_details = null;
-        
+
         FinishingCommon.addFactoryStyles();
         this.make();
     }
-    
+
     make() {
         this.wrapper.find('.page-content').empty();
-        
+
         this.add_header_section();
         this.add_sublot_entry_section();
         this.add_information_section();
     }
-    
+
     add_header_section() {
         $(`<div class="page-head-content mb-4">
             <p class="text-muted" style="font-size: 16px;">
@@ -46,7 +46,7 @@ class SubLotCreationPage {
             </p>
         </div>`).appendTo(this.wrapper.find('.page-content'));
     }
-    
+
     add_sublot_entry_section() {
         this.sublot_section = $(`
             <div class="factory-section">
@@ -100,10 +100,10 @@ class SubLotCreationPage {
                 </div>
             </div>
         `).appendTo(this.wrapper.find('.page-content'));
-        
+
         this.attach_event_handlers();
     }
-    
+
     add_information_section() {
         FinishingCommon.createInfoSection(
             this.wrapper.find('.page-content'),
@@ -111,7 +111,7 @@ class SubLotCreationPage {
             "Current Settings"
         );
     }
-    
+
     attach_event_handlers() {
         // Validate lot on Enter key
         this.sublot_section.find('#scan_lot').on('keypress', (e) => {
@@ -120,34 +120,34 @@ class SubLotCreationPage {
                 this.validate_lot();
             }
         });
-        
+
         // Validate lot on button click
         this.sublot_section.find('#validate_lot_btn').on('click', () => {
             this.validate_lot();
         });
-        
+
         // Create sub-lot
         this.sublot_section.find('#create_sublot_btn').on('click', () => {
             this.create_sublot();
         });
-        
+
         // Reset form
         this.sublot_section.find('#reset_form_btn').on('click', () => {
             this.reset_form();
         });
     }
-    
+
     validate_lot() {
         const lot_number = this.sublot_section.find('#scan_lot').val().trim();
-        
+
         if (!lot_number) {
             frappe.msgprint(__("Please scan or enter a lot number"));
             return;
         }
-        
+
         const result_div = this.sublot_section.find('#lot_validation_result');
         result_div.html('<div class="alert alert-info">Validating lot...</div>');
-        
+
         FinishingCommon.validateLot(lot_number, this.user_settings, (error, data) => {
             if (error) {
                 result_div.html(`<div class="alert alert-danger">
@@ -166,7 +166,7 @@ class SubLotCreationPage {
                     warehouse: data.warehouse,
                     stock_entry: data.stock_entry
                 };
-                
+
                 result_div.html(`<div class="alert alert-success">
                     <i class="fa fa-check-circle mr-2"></i>Lot validated successfully!
                     <div class="mt-2">
@@ -175,20 +175,20 @@ class SubLotCreationPage {
                         <strong>Available:</strong> ${this.lot_details.qty} ${this.lot_details.uom}
                     </div>
                 </div>`);
-                
+
                 this.sublot_section.find('#available_qty').text(`${this.lot_details.qty} ${this.lot_details.uom}`);
                 this.sublot_section.find('#sublot_qty')
                     .prop('disabled', false)
                     .attr('max', this.lot_details.qty)
                     .focus();
                 this.sublot_section.find('#create_sublot_btn').prop('disabled', false);
-                
+
                 // Fetch BOM details
                 this.fetch_bom_details(this.lot_details.item_code);
             }
         });
     }
-    
+
     fetch_bom_details(item_code) {
         FinishingCommon.fetchBOM(item_code, (error, bom) => {
             if (!error) {
@@ -197,25 +197,25 @@ class SubLotCreationPage {
             }
         });
     }
-    
+
     create_sublot() {
         if (!this.lot_details) {
             frappe.msgprint(__("Please validate a lot first"));
             return;
         }
-        
+
         const sublot_qty = parseFloat(this.sublot_section.find('#sublot_qty').val());
-        
+
         if (!sublot_qty || sublot_qty <= 0) {
             frappe.msgprint(__("Please enter a valid quantity"));
             return;
         }
-        
+
         if (sublot_qty > this.lot_details.qty) {
             frappe.msgprint(__("Quantity cannot exceed available quantity"));
             return;
         }
-        
+
         frappe.call({
             method: "smart_screens.smart_screens.utils.generate_sublot.generate_sublot",
             args: {
@@ -236,7 +236,7 @@ class SubLotCreationPage {
             }
         });
     }
-    
+
     create_sublot_entry(sublot_data, qty) {
         frappe.call({
             method: "frappe.client.insert",
@@ -265,7 +265,7 @@ class SubLotCreationPage {
             }
         });
     }
-    
+
     submit_sublot_entry(doc, sublot_data) {
         frappe.call({
             method: "frappe.client.submit",
@@ -275,7 +275,7 @@ class SubLotCreationPage {
             callback: (r) => {
                 if (r.message) {
                     this.sublot_details = r.message;
-                    
+
                     // ✅ FIX: Store lot_details before reset to use in print dialog
                     const lot_details_copy = {
                         item_code: this.lot_details.item_code,
@@ -284,20 +284,20 @@ class SubLotCreationPage {
                         uom: this.lot_details.uom,
                         warehouse: this.lot_details.warehouse
                     };
-                    
+
                     const user_settings_copy = {
                         default_warehouse: this.user_settings.default_warehouse,
                         target_warehouse: this.user_settings.target_warehouse
                     };
-                    
+
                     frappe.show_alert({
                         message: __("Sub-Lot created and submitted successfully: " + r.message.name),
                         indicator: 'green'
                     }, 10);
-                    
+
                     // ✅ FIX: Reset form BEFORE showing the dialog
                     this.reset_form();
-                    
+
                     // Show success dialog with Print Label and View options
                     frappe.msgprint({
                         title: __('Sub-Lot Created'),
@@ -341,7 +341,7 @@ class SubLotCreationPage {
             }
         });
     }
-    
+
     print_sublot_label(doc, sublot_data, lot_details, user_settings) {
         const print_dialog = new frappe.ui.Dialog({
             title: __('Print Sub-Lot Label'),
@@ -369,10 +369,10 @@ class SubLotCreationPage {
                 print_dialog.hide();
             }
         });
-        
+
         print_dialog.show();
     }
-    
+
     generate_label_preview_html(doc, sublot_data, lot_details, user_settings) {
         // ✅ FIX: Use passed lot_details parameter instead of this.lot_details
         let barcode_img_src = '';
@@ -383,24 +383,24 @@ class SubLotCreationPage {
                 barcode_img_src = `data:image/png;base64,${sublot_data.barcode_image}`;
             }
         }
-        
+
         return `
-            <div class="label-container" style="border: 2px solid #333; padding: 20px; max-width: 500px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
+            <div class="label-container" style="border: 2px solid #333; padding: 20px; width: 100%; max-width: 800px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
-                    <h3 style="margin: 0; font-size: 20px; font-weight: bold;">SHREE POLYMER</h3>
-                    <p style="margin: 5px 0; font-size: 12px;">Sub-Lot Label</p>
+                    <h3 style="margin: 0; font-size: 24px; font-weight: bold;">SHREE POLYMER</h3>
+                    <p style="margin: 5px 0; font-size: 16px;">Sub-Lot Label</p>
                 </div>
                 
                 <div style="text-align: center; margin: 15px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">SUB-LOT NUMBER</div>
-                    ${barcode_img_src ? 
-                        `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 80px; display: block; margin: 0 auto;" />` : 
-                        `<div style="background: #e0e0e0; padding: 20px; font-size: 24px; font-weight: bold; letter-spacing: 2px;">${sublot_data.new_batch_number}</div>`
-                    }
-                    <p style="margin: 10px 0 0 0; font-size: 18px; font-weight: bold;">${sublot_data.sub_lot_number}</p>
+                    <div style="font-weight: bold; margin-bottom: 10px; color: #333; font-size: 18px;">SUB-LOT NUMBER</div>
+                    ${barcode_img_src ?
+                `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 150px; display: block; margin: 0 auto;" />` :
+                `<div style="background: #e0e0e0; padding: 20px; font-size: 32px; font-weight: bold; letter-spacing: 2px;">${sublot_data.new_batch_number}</div>`
+            }
+                    <p style="margin: 10px 0 0 0; font-size: 28px; font-weight: bold;">${sublot_data.sub_lot_number}</p>
                 </div>
                 
-                <div style="margin-top: 15px; font-size: 14px; line-height: 1.8;">
+                <div style="margin-top: 15px; font-size: 18px; line-height: 1.8;">
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
@@ -416,11 +416,11 @@ class SubLotCreationPage {
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${user_settings.default_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.default_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px;">${user_settings.target_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.target_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
@@ -428,7 +428,7 @@ class SubLotCreationPage {
                         </tr>
                         <tr>
                             <td style="padding: 8px;"><strong>Created By:</strong></td>
-                            <td style="padding: 8px; font-size: 11px;">${frappe.session.user}</td>
+                            <td style="padding: 8px; font-size: 14px;">${frappe.session.user}</td>
                         </tr>
                     </table>
                 </div>
@@ -440,12 +440,12 @@ class SubLotCreationPage {
             </div>
         `;
     }
-    
+
     print_label_to_printer(doc, sublot_data, copies, lot_details, user_settings) {
         const label_html = this.generate_label_preview_html(doc, sublot_data, lot_details, user_settings);
-        
+
         const print_window = window.open('', '_blank');
-        
+
         print_window.document.write(`
             <!DOCTYPE html>
             <html>
@@ -472,20 +472,20 @@ class SubLotCreationPage {
             </body>
             </html>
         `);
-        
+
         print_window.document.close();
-        
+
         frappe.show_alert({
             message: __('Printing {0} label(s)...', [copies]),
             indicator: 'blue'
         }, 3);
     }
-    
+
     reset_form() {
         this.lot_details = null;
         this.bom_details = null;
         this.sublot_details = null;
-        
+
         this.sublot_section.find('#scan_lot').val('');
         this.sublot_section.find('#sublot_qty').val('').prop('disabled', true);
         this.sublot_section.find('#lot_validation_result').html('');
