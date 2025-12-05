@@ -387,53 +387,53 @@ class SubLotCreationPage {
         return `
             <div class="label-container" style="border: 2px solid #333; padding: 20px; width: 100%; max-width: 800px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
-                    <h3 style="margin: 0; font-size: 24px; font-weight: bold;">SHREE POLYMER</h3>
-                    <p style="margin: 5px 0; font-size: 16px;">Sub-Lot Label</p>
+                    <h3 style="margin: 0; font-size: 28px; font-weight: bold;">SHREE POLYMER</h3>
+                    <p style="margin: 5px 0; font-size: 18px;">Sub-Lot Label</p>
                 </div>
                 
-                <div style="text-align: center; margin: 15px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333; font-size: 18px;">SUB-LOT NUMBER</div>
+                <div style="text-align: center; margin: 20px 0; padding: 20px; background: #f9f9f9; border: 2px solid #ddd;">
+                    <div style="font-weight: bold; margin-bottom: 15px; color: #333; font-size: 22px;">SUB-LOT NUMBER</div>
                     ${barcode_img_src ?
-                `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 150px; display: block; margin: 0 auto;" />` :
-                `<div style="background: #e0e0e0; padding: 20px; font-size: 32px; font-weight: bold; letter-spacing: 2px;">${sublot_data.new_batch_number}</div>`
+                `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 250px; display: block; margin: 0 auto;" />` :
+                `<div style="background: #e0e0e0; padding: 30px; font-size: 48px; font-weight: bold; letter-spacing: 3px;">${sublot_data.new_batch_number}</div>`
             }
-                    <p style="margin: 10px 0 0 0; font-size: 28px; font-weight: bold;">${sublot_data.sub_lot_number}</p>
+                    <p style="margin: 15px 0 0 0; font-size: 36px; font-weight: bold; letter-spacing: 2px;">${sublot_data.sub_lot_number}</p>
                 </div>
                 
-                <div style="margin-top: 15px; font-size: 18px; line-height: 1.8;">
+                <div style="margin-top: 20px; font-size: 20px; line-height: 2;">
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${lot_details.item_code}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${lot_details.item_code}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.new_batch_number}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 24px; font-weight: bold;">${sublot_data.new_batch_number}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.processed_qty} ${lot_details.uom}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 24px; font-weight: bold;">${sublot_data.processed_qty} ${lot_details.uom}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.default_warehouse || 'N/A'}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 16px;">${user_settings.default_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.target_warehouse || 'N/A'}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 16px;">${user_settings.target_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
-                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${frappe.datetime.str_to_user(frappe.datetime.now_date())}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${frappe.datetime.str_to_user(frappe.datetime.now_date())}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px;"><strong>Created By:</strong></td>
-                            <td style="padding: 8px; font-size: 14px;">${frappe.session.user}</td>
+                            <td style="padding: 10px;"><strong>Created By:</strong></td>
+                            <td style="padding: 10px; font-size: 16px;">${frappe.session.user}</td>
                         </tr>
                     </table>
                 </div>
                 
-                <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; text-align: center; font-size: 10px; color: #666;">
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; text-align: center; font-size: 12px; color: #666;">
                     <p style="margin: 0;">Stock Entry: ${sublot_data.stock_entry_name}</p>
                     <p style="margin: 5px 0 0 0;">Sub-Lot Entry: ${doc.name}</p>
                 </div>
