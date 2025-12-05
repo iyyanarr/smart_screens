@@ -218,15 +218,15 @@ def generate_sublot(batch_number, qty, source_warehouse, target_warehouse, uom=N
             
         timing['create_batch'] = round((time.time() - start_time) * 1000, 2)
 
-        # Step 6: Generate a barcode for the new batch
+        # Step 6: Generate a barcode for the sublot number (what users will scan in next stages)
         start_time = time.time()
-        barcode_image = generate_barcode_image(new_batch_number)
+        barcode_image = generate_barcode_image(sub_lot_number)
         timing['generate_barcode'] = round((time.time() - start_time) * 1000, 2)
         
         # Prepare barcode data structure
         barcode_data = {
             "barcode": barcode_image,
-            "barcode_text": new_batch_number
+            "barcode_text": sub_lot_number  # Users scan sublot number, not batch number
         }
         
         # Step 7: Create a stock entry for the new batch

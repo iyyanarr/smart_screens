@@ -3,13 +3,13 @@
  * Standalone page for assigning operations and employees to sub-lots
  */
 
-frappe.pages['resource-tagging'].on_page_load = function(wrapper) {
+frappe.pages['resource-tagging'].on_page_load = function (wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Resource Tagging Center',
         single_column: true
     });
-    
+
     FinishingCommon.showLocationSelector(page, (locationData) => {
         new ResourceTaggingPage(page, locationData);
     });
@@ -20,29 +20,29 @@ class ResourceTaggingPage {
         this.page = page;
         this.wrapper = $(page.wrapper);
         this.user_settings = locationData;
-        
+
         this.sublot_details = null;
         this.employee_details = null;
         this.resource_tags = [];  // Saved tags from database
         this.pending_tags = [];   // ✅ NEW: Pending tags not yet saved
         this.bom_operations = [];
         this.bom_details = null;  // ✅ NEW: Store full BOM details
-        
+
         // ✅ NEW: Add color options for operation badges
         this.badgeColors = ["primary", "secondary", "success", "danger", "warning", "info", "dark"];
-        
+
         FinishingCommon.addFactoryStyles();
         this.make();
     }
-    
+
     make() {
         this.wrapper.find('.page-content').empty();
-        
+
         this.add_header_section();
         this.add_resource_tagging_section();
         this.add_information_section();
     }
-    
+
     add_header_section() {
         $(`<div class="page-head-content mb-4">
             <p class="text-muted" style="font-size: 16px;">
@@ -51,7 +51,7 @@ class ResourceTaggingPage {
             </p>
         </div>`).appendTo(this.wrapper.find('.page-content'));
     }
-    
+
     add_resource_tagging_section() {
         this.resource_section = $(`
             <div class="factory-section">
@@ -186,10 +186,10 @@ class ResourceTaggingPage {
                 </div>
             </div>
         `).appendTo(this.wrapper.find('.page-content'));
-        
+
         this.attach_event_handlers();
     }
-    
+
     add_information_section() {
         FinishingCommon.createInfoSection(
             this.wrapper.find('.page-content'),
@@ -197,7 +197,7 @@ class ResourceTaggingPage {
             "Current Settings"
         );
     }
-    
+
     attach_event_handlers() {
         // Validate sublot on Enter
         this.resource_section.find('#scan_sublot').on('keypress', (e) => {
@@ -206,12 +206,12 @@ class ResourceTaggingPage {
                 this.validate_sublot();
             }
         });
-        
+
         // Validate sublot on button click
         this.resource_section.find('#validate_sublot_btn').on('click', () => {
             this.validate_sublot();
         });
-        
+
         // Validate employee on Enter
         this.resource_section.find('#scan_employee').on('keypress', (e) => {
             if (e.which === 13) {
@@ -219,34 +219,34 @@ class ResourceTaggingPage {
                 this.validate_employee();
             }
         });
-        
+
         // Validate employee on button click
         this.resource_section.find('#validate_employee_btn').on('click', () => {
             this.validate_employee();
         });
-        
+
         // Add resource tag
         this.resource_section.find('#add_resource_tag_btn').on('click', () => {
             this.add_resource_tag();
         });
-        
+
         // ✅ Save all pending tags
         this.resource_section.find('#save_all_tags_btn').on('click', () => {
             this.save_all_pending_tags();
         });
     }
-    
+
     validate_sublot() {
         const sublot_number = this.resource_section.find('#scan_sublot').val().trim();
-        
+
         if (!sublot_number) {
             frappe.msgprint(__("Please scan or enter a sub-lot number"));
             return;
         }
-        
+
         const result_div = this.resource_section.find('#sublot_validation_result');
         result_div.html('<div class="alert alert-info">Validating sub-lot...</div>');
-        
+
         // Search by sublot_number field instead of document name
         frappe.call({
             method: "frappe.client.get_list",
@@ -262,48 +262,97 @@ class ResourceTaggingPage {
             callback: (r) => {
                 if (r.message && r.message.length > 0) {
                     this.sublot_details = r.message[0];
-                    
-                    result_div.html(`<div class="alert alert-success">
-                        <i class="fa fa-check-circle mr-2"></i>Sub-Lot validated successfully!
-                    </div>`);
-                    
-                    // Display sublot info
-                    this.resource_section.find('#sublot_info_display').show();
-                    this.resource_section.find('#display_item_code').text(this.sublot_details.item_code);
-                    this.resource_section.find('#display_qty').text(`${this.sublot_details.sublot_qty} ${this.sublot_details.uom}`);
-                    
-                    // Show resource assignment section
-                    this.resource_section.find('#resource_assignment_section').show();
-                    
-                    // Fetch BOM operations
-                    this.fetch_operations(this.sublot_details.item_code);
-                    
-                    // Load existing tags
-                    this.load_existing_tags(this.sublot_details.name);
-                    
+
+                    // ✅ NEW: Check if Sub Lot Process already exists for this sublot
+                    frappe.call({
+                        method: "frappe.client.get_list",
+                        args: {
+                            doctype: "Sub Lot Process",
+                            filters: {
+                                spp_batch_id: this.sublot_details.sublot_number
+                            },
+                            fields: ["name", "docstatus", "creation"],
+                            limit: 1
+                        },
+                        callback: (process_check) => {
+                            if (process_check.message && process_check.message.length > 0) {
+                                // Sub Lot Process already exists - BLOCK tagging
+                                const existing_process = process_check.message[0];
+                                const status_map = {
+                                    0: "Draft",
+                                    1: "Submitted",
+                                    2: "Cancelled"
+                                };
+                                const status = status_map[existing_process.docstatus] || "Unknown";
+
+                                result_div.html(`<div class="alert alert-danger">
+                                    <i class="fa fa-exclamation-circle mr-2"></i>
+                                    <strong>Cannot Tag This Sub-Lot</strong>
+                                    <div class="mt-2">
+                                        A Sub Lot Process already exists for this sublot number.
+                                        <br><strong>Document:</strong> <a href="/app/sub-lot-process/${existing_process.name}" target="_blank">${existing_process.name}</a>
+                                        <br><strong>Status:</strong> ${status}
+                                    </div>
+                                    <div class="mt-2 text-muted small">
+                                        Resource tagging cannot be performed on sublots that already have a Sub Lot Process.
+                                    </div>
+                                </div>`);
+
+                                // Hide assignment section
+                                this.resource_section.find('#sublot_info_display').hide();
+                                this.resource_section.find('#bom_info_display').hide();
+                                this.resource_section.find('#resource_assignment_section').hide();
+
+                                // Clear sublot details
+                                this.sublot_details = null;
+
+                            } else {
+                                // No Sub Lot Process exists - ALLOW tagging (normal flow)
+                                result_div.html(`<div class="alert alert-success">
+                                    <i class="fa fa-check-circle mr-2"></i>Sub-Lot validated successfully!
+                                </div>`);
+
+                                // Display sublot info
+                                this.resource_section.find('#sublot_info_display').show();
+                                this.resource_section.find('#display_item_code').text(this.sublot_details.item_code);
+                                this.resource_section.find('#display_qty').text(`${this.sublot_details.sublot_qty} ${this.sublot_details.uom}`);
+
+                                // Show resource assignment section
+                                this.resource_section.find('#resource_assignment_section').show();
+
+                                // Fetch BOM operations
+                                this.fetch_operations(this.sublot_details.item_code);
+
+                                // Load existing tags
+                                this.load_existing_tags(this.sublot_details.name);
+                            }
+                        }
+                    });
+
                 } else {
                     result_div.html(`<div class="alert alert-danger">
                         <i class="fa fa-times-circle mr-2"></i>Invalid sub-lot number or sub-lot not submitted
                     </div>`);
                     this.resource_section.find('#sublot_info_display').hide();
+                    this.resource_section.find('#bom_info_display').hide();
                     this.resource_section.find('#resource_assignment_section').hide();
                 }
             }
         });
     }
-    
+
     fetch_operations(item_code) {
         // ✅ NEW: Show loading indicator
         const bomDisplay = this.resource_section.find('#bom_info_display');
         const bomContent = this.resource_section.find('#bom_details_content');
-        
+
         bomDisplay.show();
         bomContent.html(`
             <div class="text-center">
                 <i class="fa fa-spinner fa-spin"></i> Loading BOM...
             </div>
         `);
-        
+
         // ✅ Use the same method as Sub Lot Process Page
         frappe.call({
             method: "smart_screens.smart_screens.utils.bom_validation.get_boms_by_component_item",
@@ -314,12 +363,12 @@ class ResourceTaggingPage {
             callback: (response) => {
                 if (response.message && response.message.success) {
                     const bomData = response.message.data;
-                    
+
                     if (bomData.boms && bomData.boms.length > 0) {
                         // ✅ Store BOM details for later use
                         this.bom_details = bomData.boms;
                         const defaultBom = bomData.boms[0];
-                        
+
                         // ✅ Extract operations from BOM
                         if (defaultBom.operations && defaultBom.operations.length > 0) {
                             this.bom_operations = defaultBom.operations
@@ -328,12 +377,12 @@ class ResourceTaggingPage {
                         } else {
                             this.bom_operations = [];
                         }
-                        
+
                         // ✅ Create visual BOM display with badges
                         let bomHtml = '<div class="bom-info-content">';
                         bomHtml += `<div class="mb-1"><strong>BOM:</strong> <small>${defaultBom.bom_no}</small></div>`;
                         bomHtml += `<div class="mb-2"><strong>Item:</strong> <small>${defaultBom.parent_item_code}</small></div>`;
-                        
+
                         // Show operations as colored badges
                         if (this.bom_operations.length > 0) {
                             bomHtml += `<div><strong>Operations:</strong></div>`;
@@ -346,13 +395,13 @@ class ResourceTaggingPage {
                         } else {
                             bomHtml += `<div class="text-warning small">No operations defined in BOM</div>`;
                         }
-                        
+
                         bomHtml += '</div>';
                         bomContent.html(bomHtml);
-                        
+
                         // Update operation dropdown
                         this.update_operation_dropdown();
-                        
+
                     } else {
                         // ✅ No BOM found - show warning but allow manual operations
                         bomContent.html(`
@@ -360,7 +409,7 @@ class ResourceTaggingPage {
                                 <small><i class="fa fa-exclamation-triangle mr-1"></i>No default BOM found</small>
                             </div>
                         `);
-                        
+
                         // ✅ Use fallback operations instead of hardcoded
                         this.bom_operations = [
                             'Moulding',
@@ -370,7 +419,7 @@ class ResourceTaggingPage {
                             'Visual Inspection',
                             'Final Visual Inspection'
                         ];
-                        
+
                         this.update_operation_dropdown();
                     }
                 } else {
@@ -380,7 +429,7 @@ class ResourceTaggingPage {
                             <small><i class="fa fa-times-circle mr-1"></i>Error loading BOM</small>
                         </div>
                     `);
-                    
+
                     // ✅ Use fallback operations
                     this.bom_operations = [
                         'Moulding',
@@ -390,19 +439,19 @@ class ResourceTaggingPage {
                         'Visual Inspection',
                         'Final Visual Inspection'
                     ];
-                    
+
                     this.update_operation_dropdown();
                 }
             },
             error: (err) => {
                 console.error("Error fetching BOM:", err);
-                
+
                 bomContent.html(`
                     <div class="alert alert-danger mb-0 p-2">
                         <small><i class="fa fa-times-circle mr-1"></i>Failed to load BOM</small>
                     </div>
                 `);
-                
+
                 // ✅ Use fallback operations on error
                 this.bom_operations = [
                     'Moulding',
@@ -412,27 +461,27 @@ class ResourceTaggingPage {
                     'Visual Inspection',
                     'Final Visual Inspection'
                 ];
-                
+
                 this.update_operation_dropdown();
             }
         });
     }
-    
+
     update_operation_dropdown() {
         const select = this.resource_section.find('#operation_select');
         select.html('<option value="">Select operation...</option>');
-        
+
         this.bom_operations.forEach(op => {
             select.append(`<option value="${op}">${op}</option>`);
         });
     }
-    
+
     load_existing_tags(sublot_id) {
         frappe.call({
             method: "frappe.client.get_list",
             args: {
                 doctype: "SPP Lot Resource Tagging",
-                filters: { 
+                filters: {
                     spp_batch_no: this.sublot_details.sublot_number // ✅ FIXED: Use spp_batch_no instead of scan_lot_no
                 },
                 fields: ["name", "operation_type", "operator_id", "operator_name", "posting_date"]
@@ -452,18 +501,18 @@ class ResourceTaggingPage {
             }
         });
     }
-    
+
     validate_employee() {
         const employee_id = this.resource_section.find('#scan_employee').val().trim();
-        
+
         if (!employee_id) {
             frappe.msgprint(__("Please scan or enter an employee ID"));
             return;
         }
-        
+
         const result_div = this.resource_section.find('#employee_validation_result');
         result_div.html('<div class="alert alert-info">Validating employee...</div>');
-        
+
         FinishingCommon.validateEmployee(employee_id, (error, data) => {
             if (error) {
                 result_div.html(`<div class="alert alert-danger">
@@ -478,24 +527,24 @@ class ResourceTaggingPage {
             }
         });
     }
-    
+
     add_resource_tag() {
         if (!this.sublot_details) {
             frappe.msgprint(__("Please validate a sub-lot first"));
             return;
         }
-        
+
         if (!this.employee_details) {
             frappe.msgprint(__("Please validate an employee first"));
             return;
         }
-        
+
         const operation = this.resource_section.find('#operation_select').val();
         if (!operation) {
             frappe.msgprint(__("Please select an operation"));
             return;
         }
-        
+
         // ✅ Validate operation exists in BOM
         if (!this.isBomOperation(operation)) {
             frappe.msgprint({
@@ -505,10 +554,10 @@ class ResourceTaggingPage {
             });
             return;
         }
-        
+
         // ✅ Check for duplicate operations
         const isDuplicate = this.resource_tags.some(tag => tag.operation_type === operation) ||
-                            this.pending_tags.some(tag => tag.operation_type === operation);
+            this.pending_tags.some(tag => tag.operation_type === operation);
         if (isDuplicate) {
             frappe.msgprint({
                 title: __('Duplicate Operation'),
@@ -517,9 +566,9 @@ class ResourceTaggingPage {
             });
             return;
         }
-        
+
         // ✅ Validate employee is authorized for this operation
-        if (this.employee_details.allowed_operations && 
+        if (this.employee_details.allowed_operations &&
             this.employee_details.allowed_operations.length > 0 &&
             !this.employee_details.allowed_operations.includes(operation)) {
             frappe.msgprint({
@@ -529,33 +578,33 @@ class ResourceTaggingPage {
             });
             return;
         }
-        
+
         // ✅ NEW: Add to pending tags
         this.pending_tags.push({
             operation_type: operation,
             operator_id: this.employee_details.employee.name,
             operator_name: this.employee_details.employee.employee_name
         });
-        
+
         this.update_resource_table();
-        
+
         // Clear inputs
         this.resource_section.find('#operation_select').val('');
         this.resource_section.find('#scan_employee').val('');
         this.resource_section.find('#employee_validation_result').html('');
         this.employee_details = null;
-        
+
         // Focus back to operation
         this.resource_section.find('#operation_select').focus();
     }
-    
+
     // ✅ NEW: Save all pending tags using the complete workflow
     save_all_pending_tags() {
         if (this.pending_tags.length === 0) {
             frappe.msgprint(__("No pending tags to save"));
             return;
         }
-        
+
         // Show progress dialog
         const progressDialog = new frappe.ui.Dialog({
             title: __('Processing Resource Tagging Workflow'),
@@ -567,24 +616,24 @@ class ResourceTaggingPage {
                 }
             ],
             primary_action_label: __('Close'),
-            primary_action: function() {
+            primary_action: function () {
                 progressDialog.hide();
             }
         });
-        
+
         progressDialog.show();
         progressDialog.$wrapper.find('.btn-primary').hide(); // Hide close button initially
-        
+
         // Update progress function
         const updateProgress = (percent, message, stage) => {
             progressDialog.fields_dict.progress_html.$wrapper.html(
                 this.getProgressHTML(percent, message, stage)
             );
         };
-        
+
         // Call the new workflow API
         updateProgress(20, 'Creating Sub Lot Process...', 'process');
-        
+
         frappe.call({
             method: "smart_screens.smart_screens.api.resource_tagging.create_resource_tagging_workflow",
             args: {
@@ -594,67 +643,67 @@ class ResourceTaggingPage {
             callback: (r) => {
                 if (r.message && r.message.status === "success") {
                     updateProgress(100, 'Workflow completed successfully!', 'complete');
-                    
+
                     const data = r.message.data;
-                    
+
                     // Show success message with details
                     frappe.show_alert({
-                        message: __("Resource tagging workflow completed! Created {0} resource tags, {1} job cards", 
+                        message: __("Resource tagging workflow completed! Created {0} resource tags, {1} job cards",
                             [data.resource_tags.length, data.job_cards.length]),
                         indicator: 'green'
                     }, 5);
-                    
+
                     // Show detailed results
                     this.showWorkflowResults(data);
-                    
+
                     // Clear pending tags
                     this.pending_tags = [];
-                    
+
                     // Reload existing tags
                     this.load_existing_tags(this.sublot_details.name);
-                    
+
                     // Show close button
                     progressDialog.$wrapper.find('.btn-primary').show();
-                    
+
                 } else if (r.message && r.message.status === "warning") {
                     updateProgress(75, 'Completed with warnings', 'warning');
-                    
+
                     frappe.msgprint({
                         title: __('Partial Success'),
                         message: r.message.message,
                         indicator: 'orange'
                     });
-                    
+
                     // Reload tags anyway
                     this.load_existing_tags(this.sublot_details.name);
                     progressDialog.$wrapper.find('.btn-primary').show();
-                    
+
                 } else {
                     updateProgress(0, 'Failed: ' + (r.message ? r.message.message : 'Unknown error'), 'error');
-                    
+
                     frappe.msgprint({
                         title: __('Error'),
                         message: __('Failed to create workflow: ') + (r.message ? r.message.message : 'Unknown error'),
                         indicator: 'red'
                     });
-                    
+
                     progressDialog.$wrapper.find('.btn-primary').show();
                 }
             },
             error: (err) => {
                 updateProgress(0, 'Error: ' + (err.message || 'Unknown error'), 'error');
-                
+
                 frappe.msgprint({
                     title: __('Error'),
                     message: __('Failed to create workflow: ') + (err.message || 'Unknown error'),
                     indicator: 'red'
                 });
-                
+
                 progressDialog.$wrapper.find('.btn-primary').show();
             }
         });
     }
-    
+
     // ✅ NEW: Generate progress HTML for dialog
     getProgressHTML(percent, message, stage = 'process') {
         const stageIcons = {
@@ -663,17 +712,17 @@ class ResourceTaggingPage {
             'warning': 'fa-exclamation-triangle',
             'error': 'fa-times-circle'
         };
-        
+
         const stageColors = {
             'process': 'primary',
             'complete': 'success',
             'warning': 'warning',
             'error': 'danger'
         };
-        
+
         const icon = stageIcons[stage] || 'fa-cog fa-spin';
         const color = stageColors[stage] || 'primary';
-        
+
         return `
             <div class="text-center" style="padding: 20px;">
                 <div style="font-size: 48px; color: var(--bs-${color}); margin-bottom: 20px;">
@@ -694,7 +743,7 @@ class ResourceTaggingPage {
             </div>
         `;
     }
-    
+
     // ✅ NEW: Show workflow results in a nice dialog
     showWorkflowResults(data) {
         const resultsDialog = new frappe.ui.Dialog({
@@ -837,14 +886,14 @@ class ResourceTaggingPage {
                 }
             ],
             primary_action_label: __('Close'),
-            primary_action: function() {
+            primary_action: function () {
                 resultsDialog.hide();
             }
         });
-        
+
         resultsDialog.show();
     }
-    
+
     // ✅ Helper method to check if operation is in BOM
     isBomOperation(operation) {
         if (!this.bom_operations || this.bom_operations.length === 0) {
@@ -852,25 +901,25 @@ class ResourceTaggingPage {
         }
         return this.bom_operations.includes(operation);
     }
-    
+
     // ✅ NEW: Check if all BOM operations have been assigned
     check_bom_completion() {
         if (!this.bom_operations || this.bom_operations.length === 0) return;
-        
+
         const assignedOperations = this.resource_tags.map(tag => tag.operation_type);
         const pendingOperations = this.pending_tags.map(tag => tag.operation_type);
         const allAssignedOperations = [...assignedOperations, ...pendingOperations];
         const missingOperations = this.bom_operations.filter(op => !allAssignedOperations.includes(op));
-        
+
         // Remove previous info if exists
         this.resource_section.find('.bom-completion-info').remove();
-        
+
         if (missingOperations.length === 0) {
             frappe.show_alert({
                 message: __("All BOM operations have been assigned! ✓"),
                 indicator: 'green'
             }, 5);
-            
+
             // Add success badge
             const $success = $(`
                 <div class="alert alert-success mt-3 bom-completion-info">
@@ -890,11 +939,11 @@ class ResourceTaggingPage {
             this.resource_section.find('#resource_tags_table').closest('.table-responsive').after($info);
         }
     }
-    
+
     update_resource_table() {
         const tbody = this.resource_section.find('#resource_tags_table tbody');
         tbody.empty();
-        
+
         if (this.resource_tags.length === 0 && this.pending_tags.length === 0) {
             tbody.append(`
                 <tr>
@@ -905,7 +954,7 @@ class ResourceTaggingPage {
             `);
             return;
         }
-        
+
         this.resource_tags.forEach((tag, idx) => {
             tbody.append(`
                 <tr>
@@ -920,7 +969,7 @@ class ResourceTaggingPage {
                 </tr>
             `);
         });
-        
+
         this.pending_tags.forEach((tag, idx) => {
             tbody.append(`
                 <tr class="table-warning">
@@ -935,13 +984,13 @@ class ResourceTaggingPage {
                 </tr>
             `);
         });
-        
+
         // Attach delete handlers
         tbody.find('button[data-tag-name]').on('click', (e) => {
             const tag_name = $(e.currentTarget).data('tag-name');
             this.remove_resource_tag(tag_name);
         });
-        
+
         // Attach remove handlers for pending tags
         tbody.find('button[data-pending-index]').on('click', (e) => {
             const index = $(e.currentTarget).data('pending-index');
@@ -949,7 +998,7 @@ class ResourceTaggingPage {
             this.update_resource_table();
         });
     }
-    
+
     remove_resource_tag(tag_name) {
         frappe.confirm(
             __('Are you sure you want to remove this resource tag?'),
@@ -965,10 +1014,10 @@ class ResourceTaggingPage {
                             message: __("Resource tag removed"),
                             indicator: 'red'
                         }, 3);
-                        
+
                         this.resource_tags = this.resource_tags.filter(t => t.name !== tag_name);
                         this.update_resource_table();
-                        
+
                         // ✅ Re-check BOM completion after deletion
                         this.check_bom_completion();
                     }
@@ -976,7 +1025,7 @@ class ResourceTaggingPage {
             }
         );
     }
-    
+
     // ✅ NEW: Generate random badge color
     getRandomBadgeColor() {
         const randomIndex = Math.floor(Math.random() * this.badgeColors.length);
