@@ -374,16 +374,6 @@ class SubLotCreationPage {
     }
 
     generate_label_preview_html(doc, sublot_data, lot_details, user_settings) {
-        // ✅ FIX: Use passed lot_details parameter instead of this.lot_details
-        let barcode_img_src = '';
-        if (sublot_data.barcode_image) {
-            if (sublot_data.barcode_image.startsWith('data:')) {
-                barcode_img_src = sublot_data.barcode_image;
-            } else {
-                barcode_img_src = `data:image/png;base64,${sublot_data.barcode_image}`;
-            }
-        }
-
         return `
             <div class="label-container" style="border: 2px solid #333; padding: 20px; width: 100%; max-width: 800px; margin: 0 auto; background: white; font-family: Arial, sans-serif;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
@@ -393,51 +383,73 @@ class SubLotCreationPage {
                 
                 <div style="text-align: center; margin: 20px 0; padding: 20px; background: #f9f9f9; border: 2px solid #ddd;">
                     <div style="font-weight: bold; margin-bottom: 15px; color: #333; font-size: 22px;">SUB-LOT NUMBER</div>
-                    ${barcode_img_src ?
-                `<img src="${barcode_img_src}" alt="Barcode" style="max-width: 100%; height: 250px; display: block; margin: 0 auto;" />` :
-                `<div style="background: #e0e0e0; padding: 30px; font-size: 48px; font-weight: bold; letter-spacing: 3px;">${sublot_data.new_batch_number}</div>`
-            }
+                    <div id="preview-barcode-container" style="margin: 15px auto; width: 100%; text-align: center;"></div>
                     <p style="margin: 15px 0 0 0; font-size: 36px; font-weight: bold; letter-spacing: 2px;">${sublot_data.sub_lot_number}</p>
                 </div>
                 
-                <div style="margin-top: 20px; font-size: 20px; line-height: 2;">
+                <div style="margin-top: 15px; font-size: 18px; line-height: 1.8;">
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${lot_details.item_code}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Item Code:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${lot_details.item_code}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 24px; font-weight: bold;">${sublot_data.new_batch_number}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Batch No:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.new_batch_number}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 24px; font-weight: bold;">${sublot_data.processed_qty} ${lot_details.uom}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Quantity:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${sublot_data.processed_qty} ${lot_details.uom}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 16px;">${user_settings.default_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Source WH:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.default_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 16px;">${user_settings.target_warehouse || 'N/A'}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Target WH:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 14px;">${user_settings.target_warehouse || 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
-                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${frappe.datetime.str_to_user(frappe.datetime.now_date())}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date:</strong></td>
+                            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${frappe.datetime.str_to_user(frappe.datetime.now_date())}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px;"><strong>Created By:</strong></td>
-                            <td style="padding: 10px; font-size: 16px;">${frappe.session.user}</td>
+                            <td style="padding: 8px;"><strong>Created By:</strong></td>
+                            <td style="padding: 8px; font-size: 14px;">${frappe.session.user}</td>
                         </tr>
                     </table>
                 </div>
                 
-                <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; text-align: center; font-size: 12px; color: #666;">
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #333; text-align: center; font-size: 10px; color: #666;">
                     <p style="margin: 0;">Stock Entry: ${sublot_data.stock_entry_name}</p>
                     <p style="margin: 5px 0 0 0;">Sub-Lot Entry: ${doc.name}</p>
                 </div>
             </div>
+            
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+            <script>
+                // Generate barcode after JsBarcode library loads
+                (function generateBarcode() {
+                    try {
+                        if (typeof JsBarcode !== 'undefined') {
+                            var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                            svgElement.id = "preview-barcode";
+                            document.getElementById("preview-barcode-container").appendChild(svgElement);
+                            
+                            JsBarcode("#preview-barcode", "${sublot_data.sub_lot_number}", {
+                                format: "CODE128",
+                                width: 2,
+                                height: 70,
+                                displayValue: false
+                            });
+                        } else {
+                            setTimeout(generateBarcode, 100);
+                        }
+                    } catch(e) {
+                        console.error("Error generating preview barcode:", e);
+                    }
+                })();
+            </script>
         `;
     }
 
