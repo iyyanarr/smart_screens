@@ -4,27 +4,27 @@ let sortedData = [];
 let currentSort = { column: null, direction: 'asc' };
 
 // Initial        tableBody.innerHTML = '<tr><td colspan="15" class="text-center">No data found for the selected criteria</td></tr>';ze the page
-frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
+frappe.pages['planned-vs-actual-production'].on_page_load = function (wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Production vs Plan Report',
         single_column: true
     });
-    
+
     page.main.html(frappe.render_template('planned_vs_actual_production'));
-    
+
     // Initialize date filters with default values (last 7 days)
     initializeDateFilters();
-    
+
     // Initialize table sorting
     initializeTableSorting();
-    
+
     // Load shift options
     loadShiftOptions();
-    
+
     // Load initial data
     loadData();
-    
+
     // Initialize Bootstrap tooltips
     initializeTooltips();
 };
@@ -32,7 +32,7 @@ frappe.pages['planned-vs-actual-production'].on_page_load = function(wrapper) {
 function initializeDateFilters() {
     const today = new Date();
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
+
     document.getElementById('to_date').value = today.toISOString().split('T')[0];
     document.getElementById('from_date').value = weekAgo.toISOString().split('T')[0];
 }
@@ -47,14 +47,14 @@ function hideLoading() {
 
 function loadData() {
     showLoading();
-    
+
     const fromDate = document.getElementById('from_date').value;
     const toDate = document.getElementById('to_date').value;
     const itemFilter = document.getElementById('item_filter').value;
     const lotFilter = document.getElementById('lot_filter').value;
     const shiftFilter = document.getElementById('shift_filter').value;
     const productionFilter = document.getElementById('production_filter').value;
-    
+
     // Load main data using the new backend function
     frappe.call({
         method: 'smart_screens.smart_screens.page.planned_vs_actual_production.planned_vs_actual_production_new.get_planned_vs_actual_production_data',
@@ -66,11 +66,11 @@ function loadData() {
             shift_filter: shiftFilter,
             production_filter: productionFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 currentData = r.message;
                 sortedData = [...currentData]; // Create a copy for sorting
-                
+
                 // Debug variance data
                 console.log("Received data:", r.message.length, "records");
                 if (r.message.length > 0) {
@@ -79,16 +79,16 @@ function loadData() {
                     console.log("Produced pieces:", r.message[0].total_pieces_produced);
                     console.log("Variance pieces:", r.message[0].variance_pieces);
                 }
-                
+
                 updateTable(sortedData);
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error loading data:', err);
             frappe.msgprint('Error loading data. Please try again.');
         }
     });
-    
+
     // Load summary statistics
     frappe.call({
         method: 'smart_screens.smart_screens.page.planned_vs_actual_production.planned_vs_actual_production_new.get_summary_statistics',
@@ -100,13 +100,13 @@ function loadData() {
             shift_filter: shiftFilter,
             production_filter: productionFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 updateSummaryCards(r.message);
                 hideLoading();
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error loading summary:', err);
             hideLoading();
         }
@@ -119,6 +119,11 @@ function updateSummaryCards(summary) {
     document.getElementById('total-produced-records').textContent = summary.total_pieces_produced || 0;
     document.getElementById('total-production-lifts').textContent = summary.total_production_lifts || 0;
     document.getElementById('production-efficiency').textContent = (summary.production_efficiency_percentage || 0) + '%';
+
+    // Format production value with Indian number formatting
+    const totalValue = summary.total_production_value || 0;
+    document.getElementById('total-production-value').textContent =
+        '₹' + totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function updateTable(data) {
@@ -132,7 +137,7 @@ function updateTable(data) {
 
     data.forEach(row => {
         const tr = document.createElement('tr');
-        
+
         // Determine production status badge
         let productionBadge = '';
         if (row.has_production) {
@@ -140,7 +145,7 @@ function updateTable(data) {
         } else {
             productionBadge = '<span class="badge badge-warning">Not Produced</span>';
         }
-        
+
         // Format source type badge
         let sourceBadge = '';
         if (row.source_type === 'Work Planning') {
@@ -148,11 +153,11 @@ function updateTable(data) {
         } else {
             sourceBadge = '<span class="badge badge-info">AWP</span>';
         }
-        
+
         // Calculate variance (Produced - Planned)
         const plannedPieces = row.planned_pieces || 0;
         const producedPieces = row.total_pieces_produced || 0;
-        
+
         // Try to use backend variance first, if not available calculate it
         let variance = 0;
         if (row.variance_pieces !== undefined) {
@@ -162,7 +167,7 @@ function updateTable(data) {
             variance = producedPieces - plannedPieces;
             console.log("Calculated frontend variance:", variance);
         }
-        
+
         // Format variance with color coding
         let varianceDisplay = '';
         if (variance > 0) {
@@ -172,7 +177,7 @@ function updateTable(data) {
         } else {
             varianceDisplay = `<span class="text-muted">${variance}</span>`;
         }
-        
+
         tr.innerHTML = `
             <td>${row.work_plan_no || ''}</td>
             <td>${row.work_plan_submission_datetime || ''}</td>
@@ -187,29 +192,31 @@ function updateTable(data) {
             <td class="text-right"><strong>${plannedPieces}</strong></td>
             <td class="text-right"><strong>${producedPieces}</strong></td>
             <td class="text-right">${varianceDisplay}</td>
+            <td class="text-right">₹${(row.item_rate || 0).toFixed(2)}</td>
+            <td class="text-right"><strong class="text-primary">₹${(row.production_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
             <td class="text-center">${sourceBadge}</td>
             <td class="text-center">${productionBadge}</td>
         `;
-        
+
         // Add hover effect
-        tr.addEventListener('mouseenter', function() {
+        tr.addEventListener('mouseenter', function () {
             this.style.backgroundColor = '#f8f9fa';
         });
-        
-        tr.addEventListener('mouseleave', function() {
+
+        tr.addEventListener('mouseleave', function () {
             this.style.backgroundColor = '';
         });
-        
+
         tableBody.appendChild(tr);
     });
 }
 
 function initializeTableSorting() {
     document.querySelectorAll('.sortable').forEach(header => {
-        header.addEventListener('click', function() {
+        header.addEventListener('click', function () {
             const column = this.getAttribute('data-column');
             const type = this.getAttribute('data-type');
-            
+
             // Update sort direction
             if (currentSort.column === column) {
                 currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -217,12 +224,12 @@ function initializeTableSorting() {
                 currentSort.column = column;
                 currentSort.direction = 'asc';
             }
-            
+
             // Sort data
             sortedData = [...currentData].sort((a, b) => {
                 let aVal = a[column];
                 let bVal = b[column];
-                
+
                 // Handle different data types
                 if (type === 'number') {
                     aVal = parseFloat(aVal) || 0;
@@ -234,17 +241,17 @@ function initializeTableSorting() {
                     aVal = (aVal || '').toString().toLowerCase();
                     bVal = (bVal || '').toString().toLowerCase();
                 }
-                
+
                 if (currentSort.direction === 'asc') {
                     return aVal > bVal ? 1 : -1;
                 } else {
                     return aVal < bVal ? 1 : -1;
                 }
             });
-            
+
             // Update table
             updateTable(sortedData);
-            
+
             // Update sort icons
             updateSortIcons();
         });
@@ -255,9 +262,9 @@ function updateSortIcons() {
     document.querySelectorAll('.sortable').forEach(header => {
         const icon = header.querySelector('.sort-icon');
         const column = header.getAttribute('data-column');
-        
+
         header.classList.remove('sorted');
-        
+
         if (column === currentSort.column) {
             header.classList.add('sorted');
             if (currentSort.direction === 'asc') {
@@ -281,22 +288,27 @@ function refreshData() {
 
 function exportData() {
     const dataToExport = sortedData.length > 0 ? sortedData : currentData;
-    
+
     if (!dataToExport || dataToExport.length === 0) {
         frappe.msgprint('No data to export');
         return;
     }
-    
+
     // Create CSV content
     const headers = [
-        'Work Plan No', 'Work Plan Submission Date/Time', 'Production Date', 'Shift Type', 
-        'Item Code', 'Mould Ref', 'Lot No', 'Production Lifts', 'No. of Cavities', 
-        'Total Pieces Produced', 'Source Type', 'Has Production'
+        'Work Plan No', 'Work Plan Submission Date/Time', 'Production Date', 'Shift Type',
+        'Item Code', 'Mould Ref', 'Lot No', 'Production Lifts', 'Target Lifts',
+        'No. of Cavities', 'Planned Pieces', 'Produced Pieces', 'Variance',
+        'Item Rate', 'Production Value', 'Source Type', 'Has Production'
     ];
-    
+
     let csvContent = headers.join(',') + '\n';
-    
+
     dataToExport.forEach(row => {
+        const planedPieces = row.planned_pieces || 0;
+        const producedPieces = row.total_pieces_produced || 0;
+        const variance = row.variance_pieces !== undefined ? row.variance_pieces : (producedPieces - planedPieces);
+
         const csvRow = [
             row.work_plan_no || '',
             row.work_plan_submission_datetime || '',
@@ -306,15 +318,20 @@ function exportData() {
             row.mould_ref || '',
             row.lot_no || '',
             row.production_lifts || 0,
+            row.target_lifts || 0,
             row.no_of_cavities || 0,
-            row.total_pieces_produced || 0,
+            planedPieces,
+            producedPieces,
+            variance,
+            row.item_rate || 0,
+            row.production_value || 0,
             row.source_type || '',
             row.has_production ? 'Yes' : 'No'
         ];
-        
+
         csvContent += csvRow.map(field => `"${field}"`).join(',') + '\n';
     });
-    
+
     // Download CSV
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -330,21 +347,21 @@ function exportData() {
 function loadShiftOptions() {
     const fromDate = document.getElementById('from_date').value;
     const toDate = document.getElementById('to_date').value;
-    
+
     console.log('Loading shift options for date range:', fromDate, 'to', toDate);
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.page.planned_vs_actual_production.planned_vs_actual_production_new.get_shift_options',
         args: {
             from_date: fromDate,
             to_date: toDate
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 console.log('Received shift options:', r.message);
                 const shiftSelect = document.getElementById('shift_filter');
                 shiftSelect.innerHTML = '';
-                
+
                 r.message.forEach(option => {
                     const optionElement = document.createElement('option');
                     optionElement.value = option.value;
@@ -355,7 +372,7 @@ function loadShiftOptions() {
                 console.warn('No shift options received');
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error loading shift options:', err);
             // Fallback to default options
             const shiftSelect = document.getElementById('shift_filter');

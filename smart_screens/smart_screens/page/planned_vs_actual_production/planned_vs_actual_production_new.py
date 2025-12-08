@@ -1,6 +1,111 @@
 import frappe
 from frappe.utils import flt, cint, formatdate, today, getdate
 from datetime import timedelta
+import requests
+import json
+
+
+def get_remote_pricing_config():
+    """Get remote pricing configuration from Settings or site_config"""
+    try:
+        settings = frappe.get_single("Rejection Analysis Settings")
+        remote_url = settings.sales_site_url or ""
+        api_key = settings.sales_site_api_key or ""
+        api_secret = settings.get_password("sales_site_api_secret") or ""
+    except Exception:
+        remote_url = frappe.conf.get("sales_site_url") or ""
+        api_key = frappe.conf.get("sales_site_api_key") or ""
+        api_secret = frappe.conf.get("sales_site_api_secret") or ""
+    
+    return remote_url, api_key, api_secret
+
+
+def convert_to_finished_product_code(material_item_code):
+    """
+    Convert item code for remote pricing lookup
+    - T-codes: Convert T2438 → F2438 (Material to Finished)
+    - P-codes: Keep as P6117 (Product codes used as-is)
+    - F-codes: Keep as F2438 (Finished codes used as-is)
+    """
+    if not material_item_code:
+        return None
+    
+    # Clean up item code
+    cleaned = material_item_code.strip().replace('t.', '').replace('T.', '').split()[0].upper()
+    
+    # Only convert T-codes to F-codes
+    if cleaned.startswith('T'):
+        return 'F' + cleaned[1:]
+    
+    # P-codes and F-codes pass through unchanged
+    return cleaned
+
+
+def fetch_remote_item_prices(item_codes):
+    """
+    Fetch item prices from remote Sales site
+    
+    Args:
+        item_codes: List of Finished Product item codes (F-prefix)
+    
+    Returns:
+        dict: Mapping of item_code → price_list_rate
+    """
+    if not item_codes:
+        return {}
+    
+    remote_url, api_key, api_secret = get_remote_pricing_config()
+    
+    if not (remote_url and api_key and api_secret):
+        return {}
+    
+    try:
+        filters = [
+            ["item_code", "in", item_codes],
+            ["price_list", "=", "Standard Selling"]
+        ]
+        fields = ["item_code", "price_list_rate"]
+        
+        response = requests.get(
+            f"{remote_url}/api/resource/Item Price",
+            params={
+                "filters": json.dumps(filters),
+                "fields": json.dumps(fields),
+                "limit_page_length": 500
+            },
+            headers={
+                "Authorization": f"token {api_key}:{api_secret}"
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            price_map = {}
+            for item_price in data.get("data", []):
+                item_code = item_price.get("item_code")
+                rate = flt(item_price.get("price_list_rate", 0))
+                if item_code and rate > 0:
+                    price_map[item_code] = rate
+            return price_map
+        else:
+            error_text = response.text[:500] if response.text else "No response"
+            frappe.log_error(
+                f"Remote pricing API returned {response.status_code}: {error_text}",
+                "Planned vs Actual - Remote Pricing Error"
+            )
+            return {}
+            
+    except requests.exceptions.Timeout:
+        frappe.log_error("Remote pricing API timeout", "Planned vs Actual - Timeout")
+        return {}
+    except Exception as e:
+        error_msg = str(e)[:300]
+        frappe.log_error(f"Remote pricing failed: {error_msg}", "Planned vs Actual - Pricing Error")
+        return {}
+
+
+
 
 @frappe.whitelist()
 def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_filter=None, lot_filter=None, shift_filter=None, production_filter=None):
@@ -392,6 +497,47 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         # Show only records planned but not produced
         final_results = [row for row in final_results if not row['has_production']]
 
+    # STEP 5: Fetch remote pricing and calculate production values
+    # Collect unique item codes
+    material_items = set()
+    finished_items = set()  # Changed from list to set to avoid duplicates
+    t_to_f_map = {}
+    
+    frappe.logger().info(f"DEBUG PRICING: Processing {len(final_results)} records")
+    
+    for row in final_results:
+        material_code = row.get('item_code')
+        if material_code:
+            material_items.add(material_code)
+            finished_code = convert_to_finished_product_code(material_code)
+            if finished_code:
+                finished_items.add(finished_code)  # Changed from append to add
+                t_to_f_map[material_code] = finished_code
+    
+    frappe.logger().info(f"DEBUG PRICING: Found {len(material_items)} unique material codes")
+    frappe.logger().info(f"DEBUG PRICING: Converted to {len(finished_items)} finished codes")
+    frappe.logger().info(f"DEBUG PRICING: T-to-F map: {t_to_f_map}")
+    
+    # Fetch remote pricing for finished product codes (convert set to list for API)
+    pricing_map = fetch_remote_item_prices(list(finished_items))
+    
+    frappe.logger().info(f"DEBUG PRICING: Got {len(pricing_map)} prices from remote API")
+    frappe.logger().info(f"DEBUG PRICING: Pricing map: {pricing_map}")
+    
+    # Add pricing to each result
+    for row in final_results:
+        material_code = row.get('item_code')
+        
+        # Get rate from remote pricing via T-to-F conversion
+        finished_code = t_to_f_map.get(material_code)
+        rate = pricing_map.get(finished_code, 0) if finished_code else 0
+        
+        row['item_rate'] = flt(rate, 2)
+        
+        # Calculate production value = produced_pieces × rate
+        produced_pieces = flt(row.get('produced_pieces', 0))
+        row['production_value'] = flt(produced_pieces * rate, 2)
+
     # Sort results by production date and shift type
     final_results.sort(key=lambda x: (x['production_date'], x['shift_type']))
 
@@ -472,7 +618,8 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
                 'total_planned_pieces': 0,
                 'total_unique_items': 0,
                 'total_unique_moulds': 0,
-                'production_efficiency_percentage': 0
+                'production_efficiency_percentage': 0,
+                'total_production_value': 0
             }
         
         # Calculate summary metrics
@@ -490,6 +637,9 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
         if total_planned_pieces > 0:
             production_efficiency_percentage = round((total_pieces_produced / total_planned_pieces) * 100, 2)
         
+        # Calculate total production value
+        total_production_value = sum(row.get('production_value', 0) for row in data)
+        
         return {
             'total_planned_records': total_planned_records,
             'total_produced_records': total_produced_records,
@@ -499,7 +649,8 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             'total_planned_pieces': total_planned_pieces,
             'total_unique_items': total_unique_items,
             'total_unique_moulds': total_unique_moulds,
-            'production_efficiency_percentage': production_efficiency_percentage
+            'production_efficiency_percentage': production_efficiency_percentage,
+            'total_production_value': total_production_value
         }
         
     except Exception as e:
@@ -514,5 +665,6 @@ def get_summary_statistics(from_date=None, to_date=None, item_filter=None, lot_f
             'total_unique_items': 0,
             'total_unique_moulds': 0,
             'production_efficiency_percentage': 0,
+            'total_production_value': 0,
             'error': str(e)
         }

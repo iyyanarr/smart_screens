@@ -66,8 +66,8 @@
     <div class="summary-section">
         <div class="row">
             <div class="col-md-3 col-sm-6">
-                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Total number of planned pieces in the selected date range">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top"
+                    title="Total number of planned pieces in the selected date range">
                     <div class="card-body text-center">
                         <h4 id="total-planned-records" class="text-primary">0</h4>
                         <small>Total Planned Pieces <i class="fa fa-info-circle"></i></small>
@@ -75,8 +75,8 @@
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
-                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Total number of pieces produced in the selected date range">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top"
+                    title="Total number of pieces produced in the selected date range">
                     <div class="card-body text-center">
                         <h4 id="total-produced-records" class="text-success">0</h4>
                         <small>Total Produced Pieces <i class="fa fa-info-circle"></i></small>
@@ -84,8 +84,8 @@
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
-                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Total production lifts executed across all records">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top"
+                    title="Total production lifts executed across all records">
                     <div class="card-body text-center">
                         <h4 id="total-production-lifts" class="text-info">0</h4>
                         <small>Total Production Lifts <i class="fa fa-info-circle"></i></small>
@@ -93,11 +93,20 @@
                 </div>
             </div>
             <div class="col-md-3 col-sm-6">
-                <div class="card summary-card" data-toggle="tooltip" data-placement="top" 
-                     title="Production efficiency calculated as (Total Produced Count / Total Planned Count) * 100">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top"
+                    title="Production efficiency calculated as (Total Produced Count / Total Planned Count) * 100">
                     <div class="card-body text-center">
                         <h4 id="production-efficiency" class="text-warning">0%</h4>
                         <small>Production Efficiency <i class="fa fa-info-circle"></i></small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card summary-card" data-toggle="tooltip" data-placement="top"
+                    title="Total monetary value of production (Pieces × Rate)">
+                    <div class="card-body text-center">
+                        <h4 id="total-production-value" class="text-success">₹0</h4>
+                        <small>Total Production Value <i class="fa fa-info-circle"></i></small>
                     </div>
                 </div>
             </div>
@@ -136,34 +145,52 @@
                                 Lot No. <i class="fa fa-sort sort-icon"></i>
                             </th>
                             <th class="text-right sortable" data-column="production_lifts" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Number of production lifts entered against the lot (submitted values only)">
-                                Production Lifts <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                Production Lifts <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="target_lifts" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Target number of lifts planned for this item from Work Plan Item Target">
-                                Target Lifts <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                Target Lifts <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="no_of_cavities" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Number of cavities from mould specification list">
-                                No. of Cavities <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                No. of Cavities <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="planned_pieces" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Planned pieces calculated as Target Lifts × No. of Cavities (Expected Production Qty)">
-                                Planned Pieces <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                Planned Pieces <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="total_pieces_produced" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Total pieces produced calculated as Production Lifts × Running Cavities">
-                                Produced Pieces <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                Produced Pieces <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-right sortable" data-column="variance_pieces" data-type="number"
-                                data-toggle="tooltip" data-placement="top" 
+                                data-toggle="tooltip" data-placement="top"
                                 title="Variance calculated as Produced Pieces - Planned Pieces">
-                                Variance (Pieces) <i class="fa fa-sort sort-icon"></i> <i class="fa fa-info-circle text-muted"></i>
+                                Variance (Pieces) <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
+                            </th>
+                            <th class="text-right sortable" data-column="item_rate" data-type="number"
+                                data-toggle="tooltip" data-placement="top"
+                                title="Item selling price from remote Sales site">
+                                Item Rate (₹) <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
+                            </th>
+                            <th class="text-right sortable" data-column="production_value" data-type="number"
+                                data-toggle="tooltip" data-placement="top"
+                                title="Production Value = Produced Pieces × Item Rate">
+                                Production Value (₹) <i class="fa fa-sort sort-icon"></i> <i
+                                    class="fa fa-info-circle text-muted"></i>
                             </th>
                             <th class="text-center sortable" data-column="source_type" data-type="text">
                                 Source <i class="fa fa-sort sort-icon"></i>
@@ -193,429 +220,432 @@
 </div>
 
 <style>
-.planned-vs-actual-container {
-    padding: 20px;
-    background-color: #f8f9fa;
-    min-height: 100vh;
-}
-
-.page-header {
-    margin-bottom: 30px;
-    padding: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.filter-section {
-    margin-bottom: 30px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    border-radius: 10px;
-}
-
-.summary-section {
-    margin-bottom: 30px;
-}
-
-.summary-card {
-    border: none;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s;
-    margin-bottom: 20px;
-}
-
-.summary-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.table-section {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    border-radius: 10px;
-}
-
-.table th {
-    background-color: #343a40;
-    color: white;
-    font-weight: 600;
-    border: none;
-    padding: 15px 8px;
-}
-
-.table td {
-    padding: 12px 8px;
-    vertical-align: middle;
-}
-
-.sortable {
-    cursor: pointer;
-    user-select: none;
-}
-
-.sortable:hover {
-    background-color: #495057 !important;
-}
-
-.sort-icon {
-    margin-left: 5px;
-    opacity: 0.6;
-}
-
-.sortable.sorted .sort-icon {
-    opacity: 1;
-}
-
-.badge {
-    font-size: 0.8em;
-    padding: 0.4em 0.6em;
-}
-
-.status-target {
-    background-color: #28a745;
-    color: white;
-}
-
-.status-over {
-    background-color: #17a2b8;
-    color: white;
-}
-
-.status-under {
-    background-color: #dc3545;
-    color: white;
-}
-
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
-.loading-content {
-    background-color: white;
-    padding: 30px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.btn-refresh, .btn-secondary {
-    margin-left: 10px;
-}
-
-.form-control:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-}
-
-.btn-success {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    border: none;
-}
-
-.btn-success:hover {
-    background: linear-gradient(135deg, #218838 0%, #1ea888 100%);
-}
-
-@media (max-width: 768px) {
     .planned-vs-actual-container {
-        padding: 10px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        min-height: 100vh;
     }
-    
+
     .page-header {
-        padding: 15px;
+        margin-bottom: 30px;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    
-    .table-responsive {
-        font-size: 0.9em;
+
+    .filter-section {
+        margin-bottom: 30px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
     }
-    
-    .summary-card h4 {
-        font-size: 1.5rem;
+
+    .summary-section {
+        margin-bottom: 30px;
     }
-}
+
+    .summary-card {
+        border: none;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s;
+        margin-bottom: 20px;
+    }
+
+    .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .table-section {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+    }
+
+    .table th {
+        background-color: #343a40;
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 15px 8px;
+    }
+
+    .table td {
+        padding: 12px 8px;
+        vertical-align: middle;
+    }
+
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .sortable:hover {
+        background-color: #495057 !important;
+    }
+
+    .sort-icon {
+        margin-left: 5px;
+        opacity: 0.6;
+    }
+
+    .sortable.sorted .sort-icon {
+        opacity: 1;
+    }
+
+    .badge {
+        font-size: 0.8em;
+        padding: 0.4em 0.6em;
+    }
+
+    .status-target {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .status-over {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .status-under {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .loading-content {
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-refresh,
+    .btn-secondary {
+        margin-left: 10px;
+    }
+
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border: none;
+    }
+
+    .btn-success:hover {
+        background: linear-gradient(135deg, #218838 0%, #1ea888 100%);
+    }
+
+    @media (max-width: 768px) {
+        .planned-vs-actual-container {
+            padding: 10px;
+        }
+
+        .page-header {
+            padding: 15px;
+        }
+
+        .table-responsive {
+            font-size: 0.9em;
+        }
+
+        .summary-card h4 {
+            font-size: 1.5rem;
+        }
+    }
 </style>
-                    </div>
-                </div>
-            </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+
+<!-- Loading Indicator -->
+<div class="loading-indicator" id="loading" style="display: none;">
+    <div class="text-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
         </div>
+        <p class="mt-2">Loading production data...</p>
     </div>
-
-
-
-    <!-- Loading Indicator -->
-    <div class="loading-indicator" id="loading" style="display: none;">
-        <div class="text-center">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
-            </div>
-            <p class="mt-2">Loading production data...</p>
-        </div>
-    </div>
+</div>
 </div>
 
 <style>
-.planned-vs-actual-container {
-    padding: 20px;
-    background-color: #f8f9fa;
-    min-height: 100vh;
-}
-
-.page-header {
-    margin-bottom: 30px;
-    padding: 20px 0;
-}
-
-.page-header h3 {
-    margin-bottom: 5px;
-    color: #2c3e50;
-}
-
-.page-header .text-muted {
-    margin-bottom: 0;
-}
-
-.page-header {
-    margin-bottom: 20px;
-    padding: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 8px;
-}
-
-.filter-section {
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.filter-section .row {
-    margin-left: -10px;
-    margin-right: -10px;
-}
-
-.filter-section .col-md-2,
-.filter-section .col-sm-6 {
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
-.summary-section {
-    margin-bottom: 20px;
-}
-
-.summary-section .row {
-    margin-left: -10px;
-    margin-right: -10px;
-}
-
-.summary-section .col-md-3,
-.summary-section .col-sm-6 {
-    padding-left: 10px;
-    padding-right: 10px;
-    margin-bottom: 20px;
-}
-
-.summary-card {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border: none;
-    transition: transform 0.2s;
-    height: 100%;
-    min-height: 120px;
-}
-
-.summary-card .card-body {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-}
-
-.summary-card:hover {
-    transform: translateY(-2px);
-}
-
-.summary-card .fa-info-circle {
-    opacity: 0.6;
-    font-size: 0.8em;
-}
-
-.summary-card .card-body h4 {
-    margin-bottom: 10px;
-    font-size: 2rem;
-    font-weight: bold;
-}
-
-.summary-card .card-body small {
-    font-size: 0.9rem;
-    color: #6c757d;
-    font-weight: 500;
-}
-
-.badge-info {
-    background-color: #17a2b8;
-    color: white;
-    font-size: 0.85em;
-    padding: 0.3em 0.6em;
-}
-
-.data-section {
-    margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.table {
-    font-size: 0.9em;
-}
-
-.table th {
-    font-weight: 600;
-    border-top: none;
-}
-
-.sortable {
-    cursor: pointer;
-    user-select: none;
-    position: relative;
-    transition: background-color 0.2s;
-}
-
-.sortable:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.sort-icon {
-    margin-left: 5px;
-    opacity: 0.5;
-    font-size: 0.8em;
-}
-
-.sortable.sort-asc .sort-icon:before {
-    content: "\f0de"; /* fa-sort-up */
-    opacity: 1;
-}
-
-.sortable.sort-desc .sort-icon:before {
-    content: "\f0dd"; /* fa-sort-down */
-    opacity: 1;
-}
-
-.sortable.sort-asc,
-.sortable.sort-desc {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.status-badge {
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: 500;
-}
-
-.status-over {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.status-under {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.status-target {
-    background-color: #d1ecf1;
-    color: #0c5460;
-}
-
-.loading-indicator {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(255,255,255,0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
-.btn-refresh {
-    background: linear-gradient(45deg, #28a745, #20c997);
-    border: none;
-}
-
-.btn-refresh:hover {
-    background: linear-gradient(45deg, #218838, #1ea98c);
-}
-
-/* Responsive design */
-@media (max-width: 992px) {
-    .page-header .col-4 {
-        text-align: left !important;
-        margin-top: 10px;
+    .planned-vs-actual-container {
+        padding: 20px;
+        background-color: #f8f9fa;
+        min-height: 100vh;
     }
-    
-    .summary-section .col-md-3 {
-        margin-bottom: 15px;
-    }
-}
 
-@media (max-width: 768px) {
-    .filter-section .form-label {
-        font-size: 0.9em;
+    .page-header {
+        margin-bottom: 30px;
+        padding: 20px 0;
+    }
+
+    .page-header h3 {
         margin-bottom: 5px;
+        color: #2c3e50;
     }
-    
-    .filter-section .col-md-2 {
+
+    .page-header .text-muted {
+        margin-bottom: 0;
+    }
+
+    .page-header {
+        margin-bottom: 20px;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+    }
+
+    .filter-section {
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .filter-section .row {
+        margin-left: -10px;
+        margin-right: -10px;
+    }
+
+    .filter-section .col-md-2,
+    .filter-section .col-sm-6 {
         padding-left: 10px;
         padding-right: 10px;
     }
-    
-    .summary-section .col-md-3 {
-        width: 50%;
-        margin-bottom: 15px;
-    }
-    
-    .planned-vs-actual-container {
-        padding: 15px;
-    }
-    
-    .page-header {
-        padding: 15px;
-    }
-    
-    .table-responsive {
-        font-size: 0.85em;
-    }
-}
 
-@media (max-width: 576px) {
-    .summary-section .col-md-3 {
-        width: 100%;
+    .summary-section {
+        margin-bottom: 20px;
     }
-    
-    .filter-section .col-md-2 {
-        width: 100%;
-        margin-bottom: 15px;
+
+    .summary-section .row {
+        margin-left: -10px;
+        margin-right: -10px;
     }
-    
-    .page-header .row {
+
+    .summary-section .col-md-3,
+    .summary-section .col-sm-6 {
+        padding-left: 10px;
+        padding-right: 10px;
+        margin-bottom: 20px;
+    }
+
+    .summary-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border: none;
+        transition: transform 0.2s;
+        height: 100%;
+        min-height: 120px;
+    }
+
+    .summary-card .card-body {
+        display: flex;
         flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
     }
-    
-    .page-header .col-4 {
-        text-align: center !important;
-        margin-top: 15px;
+
+    .summary-card:hover {
+        transform: translateY(-2px);
     }
-}
+
+    .summary-card .fa-info-circle {
+        opacity: 0.6;
+        font-size: 0.8em;
+    }
+
+    .summary-card .card-body h4 {
+        margin-bottom: 10px;
+        font-size: 2rem;
+        font-weight: bold;
+    }
+
+    .summary-card .card-body small {
+        font-size: 0.9rem;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .badge-info {
+        background-color: #17a2b8;
+        color: white;
+        font-size: 0.85em;
+        padding: 0.3em 0.6em;
+    }
+
+    .data-section {
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .table {
+        font-size: 0.9em;
+    }
+
+    .table th {
+        font-weight: 600;
+        border-top: none;
+    }
+
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        transition: background-color 0.2s;
+    }
+
+    .sortable:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .sort-icon {
+        margin-left: 5px;
+        opacity: 0.5;
+        font-size: 0.8em;
+    }
+
+    .sortable.sort-asc .sort-icon:before {
+        content: "\f0de";
+        /* fa-sort-up */
+        opacity: 1;
+    }
+
+    .sortable.sort-desc .sort-icon:before {
+        content: "\f0dd";
+        /* fa-sort-down */
+        opacity: 1;
+    }
+
+    .sortable.sort-asc,
+    .sortable.sort-desc {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .status-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: 500;
+    }
+
+    .status-over {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .status-under {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .status-target {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .loading-indicator {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .btn-refresh {
+        background: linear-gradient(45deg, #28a745, #20c997);
+        border: none;
+    }
+
+    .btn-refresh:hover {
+        background: linear-gradient(45deg, #218838, #1ea98c);
+    }
+
+    /* Responsive design */
+    @media (max-width: 992px) {
+        .page-header .col-4 {
+            text-align: left !important;
+            margin-top: 10px;
+        }
+
+        .summary-section .col-md-3 {
+            margin-bottom: 15px;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .filter-section .form-label {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .filter-section .col-md-2 {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        .summary-section .col-md-3 {
+            width: 50%;
+            margin-bottom: 15px;
+        }
+
+        .planned-vs-actual-container {
+            padding: 15px;
+        }
+
+        .page-header {
+            padding: 15px;
+        }
+
+        .table-responsive {
+            font-size: 0.85em;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .summary-section .col-md-3 {
+            width: 100%;
+        }
+
+        .filter-section .col-md-2 {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .page-header .row {
+            flex-direction: column;
+        }
+
+        .page-header .col-4 {
+            text-align: center !important;
+            margin-top: 15px;
+        }
+    }
 </style>
