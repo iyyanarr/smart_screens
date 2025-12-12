@@ -13,6 +13,7 @@ from smart_screens.smart_screens.page.common.aggregated_report_core import (
 	fetch_batch_balance_data,
 	filter_by_item_groups_pandas,
 	exclude_batches,
+	exclude_positive_stock_reconciliation,
 	aggregate_by_common_code,
 	get_child_warehouses
 )
@@ -104,6 +105,23 @@ user=frappe.session.user
 		all_data, excluded_count = exclude_batches(all_data, "SPP Aggregated Report")
 		t4 = time.time()
 		performance_log['batch_exclusion'] = round(t4 - t3, 2)
+		
+		# STEP 2b: Exclude positive Stock Reconciliation (Option B fix)
+		frappe.publish_realtime(
+			'spp_aggregated_progress',
+			{'step': 2, 'total': 4, 'message': 'Processing stock reconciliation corrections...', 'percent': 55},
+			user=frappe.session.user
+		)
+		
+		t4a = time.time()
+		all_data, excluded_sr_count = exclude_positive_stock_reconciliation(
+			all_data, 
+			from_date=filters.get("from_date"),
+			to_date=filters.get("to_date"),
+			report_name="SPP Aggregated Report"
+		)
+		t4b = time.time()
+		performance_log['stock_recon_exclusion'] = round(t4b - t4a, 2)
 		
 		# STEP 3: Filter by item groups
 		frappe.publish_realtime(
@@ -240,6 +258,14 @@ Get detailed batch records for a specific common code
 		# Exclude batches
 		all_batches_data, excluded_count = exclude_batches(all_batches_data, "SPP Aggregated Report")
 		
+		# Exclude positive Stock Reconciliation
+		all_batches_data, _ = exclude_positive_stock_reconciliation(
+			all_batches_data,
+			from_date=filters.get("from_date"),
+			to_date=filters.get("to_date"),
+			report_name="SPP Aggregated Report (Details)"
+		)
+				
 		# Filter by item groups
 		item_groups = config.get_item_groups()
 		filtered_data = filter_by_item_groups_pandas(all_batches_data, item_groups)
@@ -350,6 +376,14 @@ end_date=filters.get("to_date")
 		
 		# Exclude batches
 		all_data, excluded_count = exclude_batches(all_data, "SPP Aggregated Report")
+		
+		# Exclude positive Stock Reconciliation
+		all_data, _ = exclude_positive_stock_reconciliation(
+			all_data,
+			from_date=filters.get("from_date"),
+			to_date=filters.get("to_date"),
+			report_name="SPP Aggregated Report (Export)"
+		)
 		
 		# Filter by item groups
 		item_groups = config.get_item_groups()

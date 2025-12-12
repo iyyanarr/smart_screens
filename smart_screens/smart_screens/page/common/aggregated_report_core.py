@@ -321,6 +321,122 @@ f"{report_name} - Batch Exclusion Error"
 		return data, 0
 
 
+def exclude_positive_stock_reconciliation(data, from_date=None, to_date=None, report_name="Aggregated Report"):
+	"""
+	Exclude positive Stock Reconciliation quantities (qty added) from the report data.
+	This handles specific corrections where Stock Reconciliations were made on wrong batches.
+	
+	Logic:
+	- Find all positive Stock Reconciliation SLEs for the batches in data
+	- If SLE date < from_date: Subtract from Opening Qty (and Balance)
+	- If SLE date >= from_date: Subtract from In Qty (and Balance)
+	
+	Args:
+		data: List of batch records
+		from_date: Start date of the report
+		to_date: End date of the report
+		report_name: For logging
+		
+	Returns:
+		tuple: (adjusted_data, affected_count)
+	"""
+	if not data:
+		return data, 0
+		
+	try:
+		# Collect involved batches to minimize query scope
+		batches = set()
+		for row in data:
+			batch = row.get("batch") or row.get("batch_no")
+			if batch:
+				batches.add(batch)
+				
+		if not batches:
+			return data, 0
+			
+		# Fetch relevant Stock Reconciliation SLEs
+		# We only care about POSITIVE adjustments (actual_qty > 0)
+		filters = {
+			"batch_no": ["in", list(batches)],
+			"voucher_type": "Stock Reconciliation",
+			"actual_qty": [">", 0],
+			"is_cancelled": 0
+		}
+		
+		# Optimization: If to_date is provided, ignore future entries
+		if to_date:
+			filters["posting_date"] = ["<=", to_date]
+			
+		sles = frappe.get_all("Stock Ledger Entry",
+			filters=filters,
+			fields=["batch_no", "warehouse", "actual_qty", "posting_date"]
+		)
+		
+		if not sles:
+			return data, 0
+			
+		# Create adjustment map: (batch, warehouse) -> { 'opening': qty, 'in': qty }
+		adj_map = {}
+		
+		for sle in sles:
+			key = (sle.batch_no, sle.warehouse)
+			if key not in adj_map:
+				adj_map[key] = {'opening': 0.0, 'in': 0.0}
+			
+			sle_date = str(sle.posting_date)
+			
+			# Determine if it affects Opening or In
+			if from_date and sle_date < str(from_date):
+				adj_map[key]['opening'] += sle.actual_qty
+			else:
+				# Inside period (or no start date provided)
+				adj_map[key]['in'] += sle.actual_qty
+		
+		affected_count = 0
+		
+		# Apply adjustments to data
+		for row in data:
+			batch = row.get("batch") or row.get("batch_no")
+			warehouse = row.get("warehouse")
+			key = (batch, warehouse)
+			
+			if key in adj_map:
+				adjustments = adj_map[key]
+				opening_adj = adjustments['opening']
+				in_adj = adjustments['in']
+				total_adj = opening_adj + in_adj
+				
+				if total_adj > 0:
+					# Apply subtractions
+					if opening_adj > 0 and 'opening_qty' in row:
+						row['opening_qty'] = float(row.get('opening_qty', 0)) - opening_adj
+						
+					if in_adj > 0 and 'in_qty' in row:
+						row['in_qty'] = float(row.get('in_qty', 0)) - in_adj
+						
+					# Balance is reduced by total adjustment
+					if 'balance_qty' in row:
+						row['balance_qty'] = float(row.get('balance_qty', 0)) - total_adj
+						
+					# Tag row as modified (optional, for debugging)
+					row['_stock_recon_excluded'] = total_adj
+					affected_count += 1
+		
+		if affected_count > 0:
+			frappe.logger().info(
+				f"{report_name}: Removed positive Stock Recon effects from {affected_count} rows"
+			)
+			
+		return data, affected_count
+		
+	except Exception as e:
+		frappe.log_error(
+			f"Error excluding Stock Reconciliation: {str(e)}\n{frappe.get_traceback()}",
+			f"{report_name} - Stock Recon Exclusion Error"
+		)
+		return data, 0
+
+
 def extract_spp_common_code(item_code):
 	"""
 	Extract common code from SPP item codes (Mat, Products, Finished Product)
