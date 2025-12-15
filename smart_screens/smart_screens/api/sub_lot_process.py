@@ -491,8 +491,11 @@ def create_simplified_sublot_process(batch_info, inspection_qty=None, rejection_
         process_doc.sublot_qty = parsed_inspection_qty
         
         # Generate sub_lot_number by appending a counter if needed
-        base_batch_num = process_doc.spp_batch_number
-        process_doc.sub_lot_number = f"{base_batch_num}-2"  # Default to -2 suffix
+        if batch_info.get("sub_lot_number"):
+            process_doc.sub_lot_number = batch_info.get("sub_lot_number")
+        else:
+            base_batch_num = process_doc.spp_batch_number
+            process_doc.sub_lot_number = f"{base_batch_num}-2"  # Default to -2 suffix
         
         # Set barcode based on item code and sub lot number
         process_doc.barcode = f"{item_code}{process_doc.sub_lot_number}"

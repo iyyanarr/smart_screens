@@ -290,6 +290,44 @@ class SubLotCreationPage {
                         target_warehouse: this.user_settings.target_warehouse
                     };
 
+                    // ---------------------------------------------------------
+                    // AUTO-CREATE SUB LOT PROCESS
+                    // ---------------------------------------------------------
+                    const batch_info = {
+                        sppBatchId: sublot_data.new_batch_number,
+                        // ✅ FIX: Pass explicit sub_lot_number to prevent -2 suffix
+                        sub_lot_number: sublot_data.new_batch_number,
+                        batch_no: sublot_data.new_batch_number,
+                        item_code: this.lot_details.item_code,
+                        warehouse: this.user_settings.target_warehouse,
+                        quantity: sublot_data.processed_qty,
+                        // Optional work order if you have it in lot_details, else skip
+                        work_order: this.lot_details.stock_entry || ""
+                    };
+
+                    frappe.call({
+                        method: "smart_screens.smart_screens.api.sub_lot_process.create_simplified_sublot_process",
+                        args: {
+                            batch_info: batch_info,
+                            inspection_qty: sublot_data.processed_qty // Assuming full quantity processed
+                        },
+                        callback: (proc_res) => {
+                            if (proc_res.message && proc_res.message.status === 'success') {
+                                frappe.show_alert({
+                                    message: __('Sub Lot Process record created successfully'),
+                                    indicator: 'green'
+                                }, 5);
+                            } else {
+                                console.error("Failed to auto-create process:", proc_res);
+                                frappe.show_alert({
+                                    message: __('Warning: Sub Lot Process record creation failed'),
+                                    indicator: 'orange'
+                                }, 7);
+                            }
+                        }
+                    });
+                    // ---------------------------------------------------------
+
                     frappe.show_alert({
                         message: __("Sub-Lot created and submitted successfully: " + r.message.name),
                         indicator: 'green'

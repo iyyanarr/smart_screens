@@ -269,7 +269,7 @@ class ResourceTaggingPage {
                         args: {
                             doctype: "Sub Lot Process",
                             filters: {
-                                spp_batch_id: this.sublot_details.sublot_number
+                                spp_batch_number: this.sublot_details.sublot_number
                             },
                             fields: ["name", "docstatus", "creation"],
                             limit: 1
