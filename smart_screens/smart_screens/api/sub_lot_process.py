@@ -505,8 +505,8 @@ def create_simplified_sublot_process(batch_info, inspection_qty=None, rejection_
             process_doc.inspector_code = inspector_info.get("inspector_code")
             process_doc.inspector_name = inspector_info.get("inspector_name")
         
-        # Set work order if available
-        if batch_info.get("work_order"):
+        # Set work order if available and valid
+        if batch_info.get("work_order") and frappe.db.exists("Work Order", batch_info.get("work_order")):
             process_doc.work_order = batch_info.get("work_order")
         
         # 4. Add operations

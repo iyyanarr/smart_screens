@@ -100,9 +100,43 @@ def create_lot_resource_tag_and_job_card(sublot_process, work_order=None):
                 # Skip to the next operation since we've already handled Final Visual Inspection
                 continue
             
+            # Check if a resource tag already exists for this operation and sublot
+            existing_tag = frappe.get_all("SPP Lot Resource Tagging",
+                filters={
+                    "spp_batch_no": sublot_process.sub_lot_number,
+                    "operation_type": op.operation,
+                    "docstatus": 1
+                },
+                fields=["name"],
+                limit=1
+            )
+            
+            if existing_tag:
+                lot_tag_name = existing_tag[0].name
+                frappe.logger().info(f"Using existing Lot Resource Tag {lot_tag_name} for operation {op.operation}")
+                
+                # Update reference for later use
+                latest_lot_resource_tag = lot_tag_name
+                created_resources.append(lot_tag_name)
+                
+                # Check if job card exists for this existing tag
+                if work_order and (not work_order_operations or op.operation in work_order_operations):
+                    job_card = create_job_card(
+                        work_order=work_order,
+                        operation=op.operation,
+                        employee=op.employee_code,
+                        lot_resource_tag=lot_tag_name,
+                        sublot_process=sublot_process.name
+                    )
+                    
+                    if job_card and job_card.get("status") == "success":
+                        created_job_cards.append(job_card.get("job_card"))
+                
+                continue
+
             # For all other operations, create a lot resource tagging entry
             lot_tag = frappe.new_doc("SPP Lot Resource Tagging")
-            lot_tag.lot_number = sublot_process.sub_lot_number
+            lot_tag.spp_batch_no = sublot_process.sub_lot_number
             lot_tag.item_code = sublot_process.item_code
             lot_tag.batch_no = sublot_process.barcode
             lot_tag.warehouse = sublot_process.warehouse
