@@ -271,6 +271,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             INNER JOIN `tabWork Plan Item` wpi ON wp.name = wpi.parent
             LEFT JOIN `tabMould Specification` ms ON wpi.mould = ms.mould_ref AND ms.docstatus = 1
             WHERE wpi.lot_number IN ({lot_numbers_condition})
+            AND wp.docstatus != 2
             AND wpi.mould IS NOT NULL
             AND wpi.lot_number IS NOT NULL
             AND wpi.lot_number != ''
@@ -312,6 +313,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
             INNER JOIN `tabAdd On Work Plan Item` awpi ON awp.name = awpi.parent
             LEFT JOIN `tabMould Specification` ms ON awpi.mould = ms.mould_ref AND ms.docstatus = 1
             WHERE awpi.lot_number IN ({lot_numbers_condition})
+            AND awp.docstatus != 2
             AND awpi.mould IS NOT NULL
             AND awpi.lot_number IS NOT NULL
             AND awpi.lot_number != ''
