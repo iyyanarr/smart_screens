@@ -190,6 +190,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         {wp_item_condition}
         {wp_lot_condition}
         {wp_shift_condition}
+        GROUP BY wp.name, wpi.lot_number
     """
     
     # 1.2 Add On Work Planning
@@ -230,6 +231,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
         {awp_item_condition}
         {awp_lot_condition}
         {awp_shift_condition}
+        GROUP BY awp.name, awpi.lot_number
     """
 
     planned_data = frappe.db.sql(f"{wp_query} UNION ALL {awp_query}", as_dict=True)
