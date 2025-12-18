@@ -358,37 +358,7 @@ def get_planned_vs_actual_production_data(from_date=None, to_date=None, item_fil
                 'has_production': True,
                 'match_type': 'Planned & Produced'
             }
-        else:
-            # --- NOT PRODUCED (Planned but No Production found) ---
-            planned_pieces = (no_of_cavities * target_lifts)
-            
-            row = {
-                'work_plan_no': plan['work_plan_no'],
-                'work_plan_submission_datetime': str(plan['work_plan_submission_datetime']),
-                'production_date': plan['production_date'],
-                'production_date_formatted': formatdate(plan['production_date']),
-                'shift_type': plan['shift_type'],
-                'item_code': plan['item_code'],
-                'mould_ref': plan['mould_ref'],
-                'lot_no': lot_no,
-                
-                'production_lifts': 0,
-                'target_lifts': target_lifts,
-                'no_of_cavities': no_of_cavities,
-                
-                'source_type': plan['source_type'],
-                'docstatus': plan['docstatus'],
-                
-                'planned_pieces': planned_pieces,
-                'produced_pieces': 0,
-                'total_pieces_produced': 0,
-                'variance_pieces': 0 - planned_pieces,
-                
-                'has_production': False,
-                'match_type': 'Planned Only'
-            }
-        
-        final_results.append(row)
+            final_results.append(row)
         
     # 4.2 Process Unplanned Items (Production Only)
     for prod in unplanned_data:
