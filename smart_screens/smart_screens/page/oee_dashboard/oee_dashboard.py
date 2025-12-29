@@ -167,6 +167,7 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
                 'target_quantity': flt(target_qty, 2),
                 'actual_quantity': flt(actual_qty, 2),
                 'variance_qty': flt(actual_qty - target_qty, 2),
+                'utilisation_hours': flt((actual_qty / target_qty) * (planned_time / 60) if target_qty > 0 else 0, 2),
                 
                 # FIX: Use aggregated number_of_products for linked lots
                 'number_of_products': number_of_products,
@@ -540,6 +541,11 @@ def get_oee_summary(production_date=None, process_type='Moulding', shift_filter=
     # Production efficiency percentage (Produced / Planned * 100)
     production_efficiency_pct = (total_produced_qty / total_planned_qty * 100) if total_planned_qty > 0 else 0.0
     
+    # Capacity Utilisation (Total Utilisation Hours / Total Press Capacity)
+    # Total press capacity = 19 presses * 24 hours = 456 press-hours
+    total_utilisation_hours = sum(row['utilisation_hours'] for row in oee_data)
+    capacity_utilisation_pct = (total_utilisation_hours / 456 * 100)
+    
     return {
         'total_records': total_records,
         'avg_availability': round(avg_availability * 100, 2),
@@ -554,7 +560,9 @@ def get_oee_summary(production_date=None, process_type='Moulding', shift_filter=
         # Additional metrics for Corrective Action Report
         'total_planned_pieces': int(total_planned_qty),
         'total_produced_pieces': int(total_produced_qty),
-        'production_efficiency_pct': round(production_efficiency_pct, 2)
+        'production_efficiency_pct': round(production_efficiency_pct, 2),
+        'total_utilisation_hours': round(total_utilisation_hours, 2),
+        'capacity_utilisation_pct': round(capacity_utilisation_pct, 2)
     }
 
 

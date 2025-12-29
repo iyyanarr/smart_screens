@@ -8,23 +8,23 @@ let savedReportName = null; // Store the Daily OEE Report name after saving
 let existingReportInfo = null; // Store existing report information for resume mode
 
 // Initialize the page
-frappe.pages['oee-dashboard'].on_page_load = function(wrapper) {
+frappe.pages['oee-dashboard'].on_page_load = function (wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'OEE Report Generator',
         single_column: true
     });
-    
+
     page.main.html(frappe.render_template('oee_dashboard'));
-    
+
     // Check if date parameter was passed in URL (from OEE Report Review)
     // Parse query parameters from URL
     const urlParams = new URLSearchParams(window.location.search);
     const dateParam = urlParams.get('date');
-    
+
     console.log('🔍 URL Search Params:', window.location.search);
     console.log('🔍 Date Parameter from URL:', dateParam);
-    
+
     // Initialize date filters with default values (latest available) or URL parameter
     initializeDateFilters(dateParam).then(() => {
         // Initialize table sorting
@@ -64,11 +64,11 @@ function initializeDateFilters(dateFromUrl) {
                 }, 100);
                 return;
             }
-            
+
             // DISABLED: No longer automatically fetch latest production date
             // Users must manually select a date or come from drilled-down view
             console.log('📅 No date parameter provided - date field will remain empty');
-            
+
             // Set to empty string (or you can set to today's date if preferred)
             setTimeout(() => {
                 const el = document.getElementById('production_date');
@@ -78,7 +78,7 @@ function initializeDateFilters(dateFromUrl) {
                 }
                 resolve();
             }, 100);
-            
+
         } catch (e) {
             console.error('Error in initializeDateFilters:', e);
             const el = document.getElementById('production_date');
@@ -102,11 +102,11 @@ function hideLoading() {
 function loadProcessOptions() {
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_available_processes',
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 const processSelect = document.getElementById('process_filter');
                 processSelect.innerHTML = '';
-                
+
                 r.message.forEach(option => {
                     const optionElement = document.createElement('option');
                     optionElement.value = option.value;
@@ -121,18 +121,18 @@ function loadProcessOptions() {
 function loadShiftOptions() {
     const productionDate = document.getElementById('production_date').value;
     const processType = document.getElementById('process_filter').value;
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_shift_options',
         args: {
             production_date: productionDate,
             process_type: processType
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 const shiftSelect = document.getElementById('shift_filter');
                 shiftSelect.innerHTML = '';
-                
+
                 r.message.forEach(option => {
                     const optionElement = document.createElement('option');
                     optionElement.value = option.value;
@@ -146,7 +146,7 @@ function loadShiftOptions() {
 
 function loadData() {
     showLoading();
-    
+
     const productionDate = document.getElementById('production_date').value;
     const processType = document.getElementById('process_filter').value;
     const shiftFilter = document.getElementById('shift_filter').value;
@@ -154,7 +154,7 @@ function loadData() {
     // Lot and Item filters have been removed from UI
     const lotFilter = null;
     const itemFilter = null;
-    
+
     // ===== ENHANCED DEBUG LOGGING =====
     console.log('═══════════════════════════════════════════════════════');
     console.log('🔄 LOADING OEE DATA');
@@ -164,7 +164,7 @@ function loadData() {
     console.log('⏰ Shift Filter:', shiftFilter);
     console.log('🔧 Machine Filter:', machineFilter);
     console.log('═══════════════════════════════════════════════════════');
-    
+
     // Load main OEE data
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_data',
@@ -176,35 +176,35 @@ function loadData() {
             lot_filter: lotFilter,
             item_filter: itemFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 currentData = r.message;
                 sortedData = [...currentData];
-                
+
                 // ===== DETAILED RECORD LOGGING =====
                 console.log('═══════════════════════════════════════════════════════');
                 console.log('✅ OEE DATA RECEIVED - TOTAL RECORDS:', currentData.length);
                 console.log('═══════════════════════════════════════════════════════');
-                
+
                 // Log full data array (collapsed by default)
                 console.groupCollapsed('📦 Full Data Array (click to expand)');
                 console.table(currentData);
                 console.groupEnd();
-                
+
                 // Analyze lot numbers for duplicates
                 const lotCounts = {};
                 const lotDetails = {};
-                
+
                 currentData.forEach((record, index) => {
                     const lotNumber = record.lot_number || 'NO_LOT';
-                    
+
                     // Count occurrences
                     if (!lotCounts[lotNumber]) {
                         lotCounts[lotNumber] = 0;
                         lotDetails[lotNumber] = [];
                     }
                     lotCounts[lotNumber]++;
-                    
+
                     // Store details for duplicate analysis
                     lotDetails[lotNumber].push({
                         index: index,
@@ -217,18 +217,18 @@ function loadData() {
                         mould_ref: record.machine_reference
                     });
                 });
-                
+
                 // Identify and log duplicates
                 const duplicateLots = Object.keys(lotCounts).filter(lot => lotCounts[lot] > 1);
-                
+
                 if (duplicateLots.length > 0) {
                     console.log('⚠️ DUPLICATE LOT NUMBERS DETECTED:', duplicateLots.length);
                     console.log('═══════════════════════════════════════════════════════');
-                    
+
                     duplicateLots.forEach(lot => {
                         const count = lotCounts[lot];
                         const details = lotDetails[lot];
-                        
+
                         console.group(`🔴 DUPLICATE: Lot "${lot}" appears ${count} times`);
                         console.log('Details of each occurrence:');
                         details.forEach((detail, idx) => {
@@ -242,7 +242,7 @@ function loadData() {
                         });
                         console.groupEnd();
                     });
-                    
+
                     console.log('═══════════════════════════════════════════════════════');
                     console.log('📊 DUPLICATE SUMMARY:');
                     console.log('Total Records:', currentData.length);
@@ -253,7 +253,7 @@ function loadData() {
                     console.log('✅ NO DUPLICATES FOUND - All lot numbers are unique');
                     console.log('═══════════════════════════════════════════════════════');
                 }
-                
+
                 // Log individual records with detailed info
                 console.groupCollapsed(`📋 Individual Record Details (${currentData.length} records)`);
                 currentData.forEach((record, index) => {
@@ -277,17 +277,17 @@ function loadData() {
                     console.groupEnd();
                 });
                 console.groupEnd();
-                
+
                 updateTable(sortedData);
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('❌ ERROR loading OEE data:', err);
             frappe.msgprint('Error loading OEE data. Please try again.');
             hideLoading();
         }
     });
-    
+
     // Load summary statistics
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_summary',
@@ -299,13 +299,13 @@ function loadData() {
             lot_filter: lotFilter,
             item_filter: itemFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 updateSummaryCards(r.message);
                 hideLoading();
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error loading summary:', err);
             hideLoading();
         }
@@ -318,6 +318,8 @@ function updateSummaryCards(summary) {
     document.getElementById('avg-performance-inline').textContent = summary.avg_performance + '%';
     document.getElementById('avg-quality-inline').textContent = summary.avg_quality + '%';
     document.getElementById('avg-oee-inline').textContent = summary.avg_oee + '%';
+    document.getElementById('total-utilisation-hours-inline').textContent = summary.total_utilisation_hours;
+    document.getElementById('capacity-utilisation-pct-inline').textContent = summary.capacity_utilisation_pct + '%';
 }
 
 // Helper: simple status meta based on OEE and resolution_status
@@ -410,7 +412,7 @@ class ResolutionPanel {
         if (row.resolved_record) {
             // Fetch LIVE data from the CAR document
             console.log('🔄 Fetching live CAR data for:', row.resolved_record);
-            
+
             try {
                 const carData = await new Promise((resolve, reject) => {
                     frappe.call({
@@ -423,11 +425,11 @@ class ResolutionPanel {
                         error: reject
                     });
                 });
-                
+
                 if (carData && carData.message) {
                     const car = carData.message;
                     console.log('✅ Loaded live CAR data:', car);
-                    
+
                     // Prefill form with LIVE data from CAR document (single source of truth)
                     this.inputs.reason_code.value = car.reason_code || '';
                     this.inputs.problem_description.value = car.problem_description || '';
@@ -577,7 +579,7 @@ class ResolutionPanel {
                     indicator: 'red',
                     primary_action: {
                         label: 'Save Report Now',
-                        action: function() {
+                        action: function () {
                             saveReport();
                         }
                     }
@@ -590,7 +592,7 @@ class ResolutionPanel {
 
         try {
             showLoading();
-            
+
             // Prepare OEE metrics from the row
             const oee_metrics = {
                 oee_pct: row.oee_pct || 0,
@@ -615,18 +617,18 @@ class ResolutionPanel {
                     error: reject
                 });
             });
-            
+
             hideLoading();
-            
+
             if (r && r.message && r.message.success) {
                 // Update local row status to Resolved
-                const updated = { 
-                    ...row, 
-                    ...data, 
+                const updated = {
+                    ...row,
+                    ...data,
                     resolution_status: 'Resolved',
                     resolved_record: r.message.car_name
                 };
-                
+
                 // Update both currentData and sortedData
                 const updateByName = (arr) => {
                     const i = arr.findIndex(x => x.name === row.name);
@@ -634,10 +636,10 @@ class ResolutionPanel {
                 };
                 updateByName(currentData);
                 updateByName(sortedData);
-                
+
                 // Refresh table to show updated status
                 updateTable(sortedData);
-                
+
                 // Also refresh the saved report data to keep it in sync
                 if (reportData && reportData.data) {
                     const dataIndex = reportData.data.findIndex(x => x.name === row.name);
@@ -646,9 +648,9 @@ class ResolutionPanel {
                     }
                 }
 
-                frappe.show_alert({ 
-                    message: `CAR ${r.message.car_name} created successfully`, 
-                    indicator: 'green' 
+                frappe.show_alert({
+                    message: `CAR ${r.message.car_name} created successfully`,
+                    indicator: 'green'
                 });
 
                 if (goNext) {
@@ -694,7 +696,7 @@ function updateTable(data) {
         tableBody.innerHTML = '<tr><td colspan="13" class="text-center">No OEE data found for the selected criteria</td></tr>';
         return;
     }
-    
+
     // DEBUG: Log first record to see linked lot fields
     if (data.length > 0) {
         console.log('🔍 DEBUG - updateTable first record:', {
@@ -705,30 +707,30 @@ function updateTable(data) {
             lot_inspection_status: data[0].lot_inspection_status
         });
     }
-    
+
     data.forEach((row, index) => {
         const tr = document.createElement('tr');
         let oeeClass = row.oee_pct >= 90 ? 'oee-excellent' : 'oee-poor';
         const statusMeta = getStatusMeta(row);
-        
+
         // Check lot inspection status
         const lotInspectionStatus = row.lot_inspection_status || 'Not Found';
         const hasLotInspection = lotInspectionStatus !== 'Not Found';
-        
+
         // Check if CAR document exists
         const hasCAR = row.resolved_record ? true : false;
-        
+
         // Can only resolve if:
         // 1. OEE < 90% AND
         // 2. Not already resolved AND
         // 3. Lot inspection exists (Submitted or Pending)
-        const canResolve = (row.oee_pct || 0) < 90 && 
-                          (row.resolution_status || '').toLowerCase() !== 'resolved' &&
-                          hasLotInspection;
-        
+        const canResolve = (row.oee_pct || 0) < 90 &&
+            (row.resolution_status || '').toLowerCase() !== 'resolved' &&
+            hasLotInspection;
+
         let inspectionDisplay = '';
         let actionButton = '';
-        
+
         if (!hasLotInspection) {
             // No inspection found - show warning badge, no resolve button
             inspectionDisplay = '<div style="margin-bottom: 4px;"><span class="badge badge-danger" style="font-size: 10px;">✗ Lot Inspection Pending</span></div>';
@@ -747,15 +749,15 @@ function updateTable(data) {
                 actionButton = `<button class="btn btn-xs remarks-button" data-action="view" data-index="${index}" style="font-size: 11px; padding: 3px 10px;">Remarks</button>`;
             }
         }
-        
+
         // FIX: Build linked lot badge with CURRENT row data
         const isLinkedLot = row.is_linked_lot || false;
         const linkedLotCount = row.linked_lot_count || 0;
         const linkedLots = row.linked_lots || '';
-        const linkedLotBadge = isLinkedLot && linkedLotCount > 0 
-            ? `<br><span class="badge badge-warning" style="font-size: 9px; margin-top: 2px;" title="Linked with ${linkedLots}">🔗 Linked (${linkedLotCount})</span>` 
+        const linkedLotBadge = isLinkedLot && linkedLotCount > 0
+            ? `<br><span class="badge badge-warning" style="font-size: 9px; margin-top: 2px;" title="Linked with ${linkedLots}">🔗 Linked (${linkedLotCount})</span>`
             : '';
-        
+
         tr.innerHTML = `
             <td>${row.production_date_formatted || ''}</td>
             <td>${row.shift_type || ''}</td>
@@ -772,6 +774,8 @@ function updateTable(data) {
             <td class="text-right"><small>${row.availability_pct || 0}%</small></td>
             <td class="text-right"><small>${row.performance_pct || 0}%</small></td>
             <td class="text-right"><small>${row.quality_pct || 0}%</small></td>
+            <td class="text-right"><small>${row.utilisation_hours || 0}</small></td>
+            <td class="text-right"><small>${row.planned_time_minutes > 0 ? (row.utilisation_hours / (row.planned_time_minutes / 60) * 100).toFixed(2) : 0}%</small></td>
             <td class="text-right ${oeeClass} oee-clickable" onclick="showOEEDetails(event, ${index})"><strong>${row.oee_pct || 0}%</small></td>
             <td class="text-center" style="vertical-align: middle;">
                 <div style="display: flex; flex-direction: column; align-items: center;">
@@ -780,14 +784,14 @@ function updateTable(data) {
                 </div>
             </td>
         `;
-        
+
         // FIX: Store CURRENT row data (with updated linked lot fields)
         tr.dataset.rowData = JSON.stringify(row);
         tr.dataset.rowIndex = index;
-        
-        tr.addEventListener('mouseenter', function() { this.style.backgroundColor = '#f8f9fa'; });
-        tr.addEventListener('mouseleave', function() { this.style.backgroundColor = ''; });
-        
+
+        tr.addEventListener('mouseenter', function () { this.style.backgroundColor = '#f8f9fa'; });
+        tr.addEventListener('mouseleave', function () { this.style.backgroundColor = ''; });
+
         tableBody.appendChild(tr);
     });
 
@@ -806,24 +810,24 @@ function updateTable(data) {
 
 function showOEEDetails(event, rowIndex) {
     event.preventDefault();
-    
+
     // Get the row data
     const row = document.querySelectorAll('[data-row-index]')[rowIndex];
     const rowData = JSON.parse(row.dataset.rowData);
-    
+
     console.log('🔍 DEBUG - showOEEDetails rowData:', rowData);
-    
+
     // Clear any existing linked lot badge
     const modalLotElement = document.getElementById('modal-lot').parentElement;
     const existingBadge = modalLotElement.querySelector('.badge-warning');
     if (existingBadge) existingBadge.remove();
-    
+
     // Section 1: Populate basic info fields (will be displayed vertically)
     document.getElementById('modal-date').textContent = rowData.production_date_formatted || '';
     document.getElementById('modal-shift').textContent = rowData.shift_type || '';
     document.getElementById('modal-machine').textContent = rowData.machine_name || 'N/A';
     document.getElementById('modal-mold').textContent = rowData.machine_reference || '-';
-    
+
     // Show lot number with linked lot badge if applicable
     const lotNumberText = rowData.lot_number || '';
     if (rowData.is_linked_lot && rowData.linked_lot_count > 0) {
@@ -831,10 +835,10 @@ function showOEEDetails(event, rowIndex) {
     } else {
         document.getElementById('modal-lot').textContent = lotNumberText;
     }
-    
+
     document.getElementById('modal-item').textContent = rowData.item_code || '';
     document.getElementById('modal-operator').textContent = rowData.operator_name || '-';
-    
+
     // Extract data with defaults
     const plannedTime = rowData.planned_time_minutes || 450;
     const downtime = rowData.downtime_minutes || 0;
@@ -860,39 +864,39 @@ function showOEEDetails(event, rowIndex) {
     document.getElementById('modal-actual-performance').textContent = actualQty + ' lifts';
     document.getElementById('modal-performance-pct').textContent = performancePct.toFixed(2) + '%';
     document.getElementById('modal-performance-remark').textContent = 'Cycle Time: ' + cycleTime.toFixed(2) + 's';
-    
+
     // QUALITY COLUMN
     const noOfCavities = rowData.no_of_cavities || 1;
     const totalPiecesProduced = actualQty * noOfCavities;
     const goodPieces = Math.round(totalPiecesProduced * (1 - (lotRejectionPct / 100)));
-    
+
     document.getElementById('modal-required-quality').textContent = totalPiecesProduced + ' pcs';
     document.getElementById('modal-actual-quality').textContent = goodPieces + ' pcs';
     document.getElementById('modal-quality-pct').textContent = qualityPct.toFixed(2) + '%';
     document.getElementById('modal-quality-remark').textContent = 'Lot Rej: ' + lotRejectionPct.toFixed(2) + '%';
-    
+
     // OEE COLUMN
     document.getElementById('modal-oee-score').textContent = oeePct.toFixed(2) + '%';
     const oeeFormula = `Good Pcs = ${totalPiecesProduced} × (1 - ${lotRejectionPct.toFixed(2)}%) = ${goodPieces} pcs`;
     document.getElementById('modal-oee-formula').textContent = oeeFormula;
-    
+
     // Section 2: Show linked lot breakdown if applicable
     if (rowData.is_linked_lot && rowData.linked_lot_count > 0) {
         showLinkedLotBreakdown(rowData);
     } else {
         hideLinkedLotBreakdown();
     }
-    
+
     // Show the modal
     $('#oeeDetailModal').modal('show');
 }
 
 function initializeTableSorting() {
     document.querySelectorAll('.sortable').forEach(header => {
-        header.addEventListener('click', function() {
+        header.addEventListener('click', function () {
             const column = this.getAttribute('data-column');
             const type = this.getAttribute('data-type');
-            
+
             // Update sort direction
             if (currentSort.column === column) {
                 currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -900,12 +904,12 @@ function initializeTableSorting() {
                 currentSort.column = column;
                 currentSort.direction = 'asc';
             }
-            
+
             // Sort data
             sortedData = [...currentData].sort((a, b) => {
                 let aVal = a[column];
                 let bVal = b[column];
-                
+
                 if (type === 'number') {
                     aVal = parseFloat(aVal) || 0;
                     bVal = bVal || 0;
@@ -916,17 +920,17 @@ function initializeTableSorting() {
                     aVal = String(aVal).toLowerCase();
                     bVal = String(bVal).toLowerCase();
                 }
-                
+
                 if (currentSort.direction === 'asc') {
                     return aVal > bVal ? 1 : -1;
                 } else {
                     return aVal < bVal ? -1 : 1;
                 }
             });
-            
+
             // Update table
             updateTable(sortedData);
-            
+
             // Update sort indicators
             updateSortIndicators();
         });
@@ -938,7 +942,7 @@ function updateSortIndicators() {
     document.querySelectorAll('.sortable').forEach(header => {
         header.classList.remove('sort-asc', 'sort-desc');
     });
-    
+
     // Add indicator to current sorted column
     if (currentSort.column) {
         const header = document.querySelector(`.sortable[data-column="${currentSort.column}"]`);
@@ -956,9 +960,9 @@ function checkExistingReport() {
     const productionDate = document.getElementById('production_date').value;
     const shiftFilter = document.getElementById('shift_filter').value;
     const machineFilter = document.getElementById('machine_filter').value;
-    
+
     if (!productionDate) return;
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.check_existing_report',
         args: {
@@ -966,7 +970,7 @@ function checkExistingReport() {
             shift_filter: shiftFilter === 'all' ? '' : shiftFilter,
             machine_filter: machineFilter === 'all' ? '' : machineFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message && r.message.exists) {
                 existingReportInfo = r.message;
                 showExistingReportNotification(r.message);
@@ -975,7 +979,7 @@ function checkExistingReport() {
                 hideExistingReportNotification();
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error checking existing report:', err);
         }
     });
@@ -986,27 +990,27 @@ function showExistingReportNotification(reportInfo) {
      * Display notification banner when existing report is found
      */
     let notificationDiv = document.getElementById('existing-report-notification');
-    
+
     if (!notificationDiv) {
         // Create notification div if it doesn't exist
         const filterSection = document.querySelector('.filter-section');
-        
+
         // Check if filterSection exists before trying to insert notification
         if (!filterSection) {
             console.warn('Filter section not found, cannot display existing report notification');
             return;
         }
-        
+
         notificationDiv = document.createElement('div');
         notificationDiv.id = 'existing-report-notification';
         notificationDiv.className = 'alert alert-info';
         notificationDiv.style.marginTop = '15px';
         filterSection.parentElement.insertBefore(notificationDiv, filterSection.nextSibling);
     }
-    
+
     const isDraft = reportInfo.docstatus === 0;
     const isSubmitted = reportInfo.docstatus === 1;
-    
+
     if (isDraft) {
         // Draft report - show resume option
         notificationDiv.innerHTML = `
@@ -1047,7 +1051,7 @@ function showExistingReportNotification(reportInfo) {
         `;
         notificationDiv.className = 'alert alert-success';
     }
-    
+
     notificationDiv.style.display = 'block';
 }
 
@@ -1063,40 +1067,40 @@ function resumeExistingReport() {
         frappe.msgprint('No existing report information available');
         return;
     }
-    
+
     showLoading();
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
         args: {
             report_name: existingReportInfo.report_name
         },
-        callback: function(r) {
+        callback: function (r) {
             hideLoading();
-            
+
             if (r.message && r.message.success) {
                 // Load the saved report data
                 const savedData = r.message.data;
-                
+
                 // Set current data from saved report
                 currentData = savedData.production_records || [];
                 sortedData = [...currentData];
-                
+
                 // Update table with saved data
                 updateTable(sortedData);
-                
+
                 // Update summary from saved report
                 if (savedData.summary) {
                     updateSummaryCards(savedData.summary);
                 }
-                
+
                 // Store report metadata - CRITICAL: Set savedReportName immediately
                 reportGenerated = true;
                 savedReportName = existingReportInfo.report_name;
-                
+
                 // NEW: Show report name badge when resuming
                 showReportNameBadge(existingReportInfo.report_name);
-                
+
                 // Store report data for saving (use correct variable name)
                 reportData = {
                     filters: savedData.filters || {
@@ -1108,18 +1112,18 @@ function resumeExistingReport() {
                     summary: savedData.summary,
                     generated_at: savedData.generated_at || new Date().toISOString()
                 };
-                
+
                 // Show action buttons
                 showReportActionButtons();
-                
+
                 // Hide the notification banner since we're now in resume mode
                 hideExistingReportNotification();
-                
+
                 frappe.show_alert({
                     message: `Resumed report: ${existingReportInfo.report_name} with ${currentData.length} records`,
                     indicator: 'blue'
                 });
-                
+
                 console.log('✅ Report resumed successfully:', {
                     savedReportName: savedReportName,
                     recordCount: currentData.length,
@@ -1129,7 +1133,7 @@ function resumeExistingReport() {
                 frappe.msgprint('Error loading report data: ' + (r.message.error || 'Unknown error'));
             }
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error resuming report:', err);
             frappe.msgprint('Error loading existing report. Please try again.');
@@ -1158,13 +1162,13 @@ function calculateSummaryFromData(data) {
             avg_oee: 0
         };
     }
-    
+
     const total = data.length;
     const totalAvailability = data.reduce((sum, r) => sum + (r.availability_pct || 0), 0);
     const totalPerformance = data.reduce((sum, r) => sum + (r.performance_pct || 0), 0);
     const totalQuality = data.reduce((sum, r) => sum + (r.quality_pct || 0), 0);
     const totalOEE = data.reduce((sum, r) => sum + (r.oee_pct || 0), 0);
-    
+
     return {
         avg_availability: (totalAvailability / total).toFixed(2),
         avg_performance: (totalPerformance / total).toFixed(2),
@@ -1174,35 +1178,35 @@ function calculateSummaryFromData(data) {
 }
 
 // Event listeners for filter changes
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Check for existing report when date or filters change
     const productionDateEl = document.getElementById('production_date');
     const processFilterEl = document.getElementById('process_filter');
     const shiftFilterEl = document.getElementById('shift_filter');
     const machineFilterEl = document.getElementById('machine_filter');
-    
+
     if (productionDateEl) {
-        productionDateEl.addEventListener('change', function() {
+        productionDateEl.addEventListener('change', function () {
             loadShiftOptions();
             checkExistingReport(); // Check for existing report
         });
     }
-    
+
     if (processFilterEl) {
-        processFilterEl.addEventListener('change', function() {
+        processFilterEl.addEventListener('change', function () {
             loadShiftOptions();
             checkExistingReport(); // Check for existing report
         });
     }
-    
+
     if (shiftFilterEl) {
-        shiftFilterEl.addEventListener('change', function() {
+        shiftFilterEl.addEventListener('change', function () {
             checkExistingReport(); // Check for existing report
         });
     }
-    
+
     if (machineFilterEl) {
-        machineFilterEl.addEventListener('change', function() {
+        machineFilterEl.addEventListener('change', function () {
             checkExistingReport(); // Check for existing report
         });
     }
@@ -1219,14 +1223,14 @@ function generateReport() {
         frappe.msgprint('Please select a production date');
         return;
     }
-    
+
     // First, check if a report already exists for this date/filter combination
     const processType = document.getElementById('process_filter').value;
     const shiftFilter = document.getElementById('shift_filter').value;
     const machineFilter = document.getElementById('machine_filter').value;
-    
+
     showLoading();
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.check_existing_report',
         args: {
@@ -1234,14 +1238,14 @@ function generateReport() {
             shift_filter: shiftFilter === 'all' ? '' : shiftFilter,
             machine_filter: machineFilter === 'all' ? '' : machineFilter
         },
-        callback: function(check_r) {
+        callback: function (check_r) {
             if (check_r.message && check_r.message.exists) {
                 // Report already exists
                 existingReportInfo = check_r.message;
-                
+
                 const isDraft = check_r.message.docstatus === 0;
                 const isSubmitted = check_r.message.docstatus === 1;
-                
+
                 if (isSubmitted) {
                     // Already submitted - just view it
                     hideLoading();
@@ -1250,14 +1254,14 @@ function generateReport() {
                         message: `A report has already been submitted for this date/filter combination: <strong>${check_r.message.report_name}</strong>`,
                         primary_action: {
                             label: 'View Report',
-                            action: function() {
+                            action: function () {
                                 frappe.set_route('Form', 'Daily OEE Report', check_r.message.report_name);
                             }
                         }
                     });
                     return;
                 }
-                
+
                 if (isDraft) {
                     // NEW: Auto-resume draft without confirmation
                     console.log('📋 Auto-resuming existing draft report:', check_r.message.report_name);
@@ -1265,11 +1269,11 @@ function generateReport() {
                     return;
                 }
             }
-            
+
             // No existing report - proceed with generating fresh data
             generateFreshReport(productionDate, processType, shiftFilter, machineFilter);
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error checking existing report:', err);
             frappe.msgprint('Error checking for existing reports. Please try again.');
@@ -1279,7 +1283,7 @@ function generateReport() {
 
 function deleteAndRegenerateReport(oldReportName, productionDate, processType, shiftFilter, machineFilter) {
     showLoading();
-    
+
     // Delete the old draft report
     frappe.call({
         method: 'frappe.client.delete',
@@ -1287,25 +1291,25 @@ function deleteAndRegenerateReport(oldReportName, productionDate, processType, s
             doctype: 'Daily OEE Report',
             name: oldReportName
         },
-        callback: function(r) {
+        callback: function (r) {
             console.log('✅ Old report deleted:', oldReportName);
-            
+
             // Clear state
             savedReportName = null;
             existingReportInfo = null;
             reportGenerated = false;
             reportData = null;
             hideExistingReportNotification();
-            
+
             // Generate fresh report
             frappe.show_alert({
                 message: 'Old report deleted. Generating fresh data...',
                 indicator: 'orange'
             });
-            
+
             generateFreshReport(productionDate, processType, shiftFilter, machineFilter);
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error deleting old report:', err);
             frappe.msgprint('Error deleting old report. Please try again.');
@@ -1317,7 +1321,7 @@ function generateFreshReport(productionDate, processType, shiftFilter, machineFi
     // This function generates a fresh report from production data
     const lotFilter = null;
     const itemFilter = null;
-    
+
     // Load main OEE data
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_data',
@@ -1329,12 +1333,12 @@ function generateFreshReport(productionDate, processType, shiftFilter, machineFi
             lot_filter: lotFilter,
             item_filter: itemFilter
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message) {
                 currentData = r.message;
                 sortedData = [...currentData];
                 updateTable(sortedData);
-                
+
                 // Load summary statistics
                 frappe.call({
                     method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.get_oee_summary',
@@ -1346,12 +1350,12 @@ function generateFreshReport(productionDate, processType, shiftFilter, machineFi
                         lot_filter: lotFilter,
                         item_filter: itemFilter
                     },
-                    callback: function(summary_r) {
+                    callback: function (summary_r) {
                         hideLoading();
-                        
+
                         if (summary_r.message) {
                             updateSummaryCards(summary_r.message);
-                            
+
                             // Store report data
                             reportData = {
                                 filters: {
@@ -1366,20 +1370,20 @@ function generateFreshReport(productionDate, processType, shiftFilter, machineFi
                                 summary: summary_r.message,
                                 generated_at: new Date().toISOString()
                             };
-                            
+
                             // Mark report as generated and show action buttons
                             reportGenerated = true;
                             savedReportName = null; // Clear any previous saved report name
                             existingReportInfo = null; // Clear existing report info
                             showReportActionButtons();
-                            
+
                             frappe.show_alert({
                                 message: `Report generated successfully with ${currentData.length} records`,
                                 indicator: 'green'
                             });
                         }
                     },
-                    error: function(err) {
+                    error: function (err) {
                         console.error('Error loading summary:', err);
                         hideLoading();
                         frappe.msgprint('Error generating report summary. Please try again.');
@@ -1387,7 +1391,7 @@ function generateFreshReport(productionDate, processType, shiftFilter, machineFi
                 });
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error loading OEE data:', err);
             hideLoading();
             frappe.msgprint('Error generating report. Please try again.');
@@ -1414,12 +1418,12 @@ function submitReport() {
         frappe.msgprint('Please generate a report first');
         return;
     }
-    
+
     // Check if we already have a saved draft report
     if (savedReportName) {
         // Submit the existing draft report instead of creating a new one
         console.log('📝 Submitting existing draft report:', savedReportName);
-        
+
         // Show dialog to collect/update remarks fields before submission
         const dialog = new frappe.ui.Dialog({
             title: 'Submit Daily OEE Report',
@@ -1457,7 +1461,7 @@ function submitReport() {
             primary_action(values) {
                 dialog.hide();
                 showLoading();
-                
+
                 // First, fetch the latest version of the draft document
                 frappe.call({
                     method: 'frappe.client.get',
@@ -1465,52 +1469,52 @@ function submitReport() {
                         doctype: 'Daily OEE Report',
                         name: savedReportName
                     },
-                    callback: function(get_r) {
+                    callback: function (get_r) {
                         if (!get_r || !get_r.message) {
                             hideLoading();
                             frappe.msgprint('Error loading report. Please try again.');
                             return;
                         }
-                        
+
                         const doc = get_r.message;
-                        
+
                         // Update remarks fields
                         doc.general_remarks = values.general_remarks || '';
                         doc.suggestions_for_improvement = values.suggestions_for_improvement || '';
                         doc.safety_and_machinery = values.safety_and_machinery || '';
                         doc.mould_observation = values.mould_observation || '';
-                        
+
                         // Save the updated document first
                         frappe.call({
                             method: 'frappe.client.save',
                             args: {
                                 doc: doc
                             },
-                            callback: function(save_r) {
+                            callback: function (save_r) {
                                 if (!save_r || !save_r.message) {
                                     hideLoading();
                                     frappe.msgprint('Error updating remarks. Please try again.');
                                     return;
                                 }
-                                
+
                                 // Now submit the updated document
                                 const updated_doc = save_r.message;
                                 updated_doc.docstatus = 1; // Set to submitted
-                                
+
                                 frappe.call({
                                     method: 'frappe.client.submit',
                                     args: {
                                         doc: updated_doc
                                     },
-                                    callback: function(submit_r) {
+                                    callback: function (submit_r) {
                                         hideLoading();
-                                        
+
                                         if (submit_r && submit_r.message) {
                                             frappe.show_alert({
                                                 message: 'Report submitted successfully',
                                                 indicator: 'green'
                                             });
-                                            
+
                                             // Reset report state
                                             reportGenerated = false;
                                             reportData = null;
@@ -1518,35 +1522,35 @@ function submitReport() {
                                             savedReportName = null;
                                             hideReportActionButtons();
                                             hideReportNameBadge();
-                                            
+
                                             // Show success message with view option
                                             frappe.msgprint({
                                                 title: 'Report Submitted',
                                                 message: `Report "${submittedReportName}" has been submitted successfully.`,
                                                 primary_action: {
                                                     label: 'View Report',
-                                                    action: function() {
+                                                    action: function () {
                                                         frappe.set_route('Form', 'Daily OEE Report', submittedReportName);
                                                     }
                                                 }
                                             });
                                         }
                                     },
-                                    error: function(err) {
+                                    error: function (err) {
                                         hideLoading();
                                         console.error('Error submitting draft report:', err);
                                         frappe.msgprint('Error submitting report. Please check if all required fields are filled.');
                                     }
                                 });
                             },
-                            error: function(err) {
+                            error: function (err) {
                                 hideLoading();
                                 console.error('Error saving updated document:', err);
                                 frappe.msgprint('Error updating document before submission.');
                             }
                         });
                     },
-                    error: function(err) {
+                    error: function (err) {
                         hideLoading();
                         console.error('Error loading draft report:', err);
                         frappe.msgprint('Error loading report. Please refresh and try again.');
@@ -1554,14 +1558,14 @@ function submitReport() {
                 });
             }
         });
-        
+
         dialog.show();
         return;
     }
-    
+
     // No saved report yet - create and submit a new one
     console.log('📝 Creating and submitting new report');
-    
+
     // Show dialog to collect remarks fields before submission
     const dialog = new frappe.ui.Dialog({
         title: 'Submit Daily OEE Report',
@@ -1604,32 +1608,32 @@ function submitReport() {
                 safety_and_machinery: values.safety_and_machinery || '',
                 mould_observation: values.mould_observation || ''
             };
-            
+
             dialog.hide();
-            
+
             // Proceed with submission
             showLoading();
-            
+
             frappe.call({
                 method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.submit_oee_report',
                 args: {
                     report_data: reportData
                 },
-                callback: function(r) {
+                callback: function (r) {
                     hideLoading();
-                    
+
                     if (r.message && r.message.success) {
                         frappe.show_alert({
                             message: 'Report submitted successfully',
                             indicator: 'green'
                         });
-                        
+
                         // Reset report state
                         reportGenerated = false;
                         reportData = null;
                         savedReportName = null;
                         hideReportActionButtons();
-                        
+
                         // Optionally show the report document
                         if (r.message.report_name) {
                             frappe.msgprint({
@@ -1637,7 +1641,7 @@ function submitReport() {
                                 message: `Report "${r.message.report_name}" has been submitted successfully.`,
                                 primary_action: {
                                     label: 'View Report',
-                                    action: function() {
+                                    action: function () {
                                         frappe.set_route('Form', 'Daily OEE Report', r.message.report_name);
                                     }
                                 }
@@ -1648,7 +1652,7 @@ function submitReport() {
                         frappe.msgprint(error_msg);
                     }
                 },
-                error: function(err) {
+                error: function (err) {
                     hideLoading();
                     console.error('Error submitting report:', err);
                     frappe.msgprint('Error submitting report. Please try again.');
@@ -1656,7 +1660,7 @@ function submitReport() {
             });
         }
     });
-    
+
     dialog.show();
 }
 
@@ -1665,30 +1669,30 @@ function saveReport() {
         frappe.msgprint('Please generate a report first');
         return;
     }
-    
+
     // Save as draft
     showLoading();
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.page.oee_dashboard.oee_dashboard.save_oee_report',
         args: {
             report_data: reportData
         },
-        callback: function(r) {
+        callback: function (r) {
             hideLoading();
-            
+
             if (r.message && r.message.success) {
                 // Store the report name for later use
                 savedReportName = r.message.report_name;
-                
+
                 // NEW: Show report name badge in header
                 showReportNameBadge(r.message.report_name);
-                
+
                 frappe.show_alert({
                     message: 'Report saved successfully',
                     indicator: 'blue'
                 });
-                
+
                 // Show the report document
                 if (r.message.report_name) {
                     frappe.msgprint({
@@ -1696,7 +1700,7 @@ function saveReport() {
                         message: `Report "${r.message.report_name}" has been saved as draft. You can now generate CARs for low OEE records.`,
                         primary_action: {
                             label: 'View Report',
-                            action: function() {
+                            action: function () {
                                 frappe.set_route('Form', 'Daily OEE Report', r.message.report_name);
                             }
                         }
@@ -1707,7 +1711,7 @@ function saveReport() {
                 frappe.msgprint(error_msg);
             }
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error saving report:', err);
             frappe.msgprint('Error saving report. Please try again.');
@@ -1719,7 +1723,7 @@ function saveReport() {
 function showReportNameBadge(reportName) {
     const badgeDiv = document.getElementById('current-report-badge');
     const nameSpan = document.getElementById('current-report-name');
-    
+
     if (badgeDiv && nameSpan) {
         nameSpan.textContent = reportName;
         badgeDiv.style.display = 'block';
@@ -1747,7 +1751,7 @@ function refreshData() {
     // Check if we're in resume mode (i.e., working with a saved/resumed report)
     if (savedReportName) {
         console.log('🔄 In resume mode - show refresh options');
-        
+
         // Show a dialog with two refresh options
         const dialog = new frappe.ui.Dialog({
             title: 'Refresh Report Data',
@@ -1793,7 +1797,7 @@ function refreshData() {
             primary_action_label: 'Refresh',
             primary_action(values) {
                 dialog.hide();
-                
+
                 if (values.refresh_option === 'Refresh with Fresh Data') {
                     refreshWithFreshData();
                 } else {
@@ -1801,7 +1805,7 @@ function refreshData() {
                 }
             }
         });
-        
+
         dialog.show();
     } else {
         // Not in resume mode - reset report state and reload fresh data
@@ -1809,7 +1813,7 @@ function refreshData() {
         reportGenerated = false;
         reportData = null;
         hideReportActionButtons();
-        
+
         // Reload fresh data
         loadData();
     }
@@ -1822,48 +1826,48 @@ function refreshWithSavedSnapshots() {
      */
     console.log('🔄 Refreshing with saved snapshots:', savedReportName);
     showLoading();
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.get_report_data',
         args: {
             report_name: savedReportName
         },
-        callback: function(r) {
+        callback: function (r) {
             hideLoading();
-            
+
             if (r.message && r.message.success) {
                 // Reload the saved report data
                 const savedData = r.message.data;
-                
+
                 // Update current data from saved report
                 currentData = savedData.production_records || [];
                 sortedData = [...currentData];
-                
+
                 // Update table with refreshed data
                 updateTable(sortedData);
-                
+
                 // Update summary from saved report
                 if (savedData.summary) {
                     updateSummaryCards(savedData.summary);
                 }
-                
+
                 // Update report data (preserve existing reportData structure)
                 if (reportData) {
                     reportData.data = currentData;
                     reportData.summary = savedData.summary;
                 }
-                
+
                 frappe.show_alert({
                     message: `Report refreshed: ${currentData.length} records loaded`,
                     indicator: 'blue'
                 });
-                
+
                 console.log('✅ Report refreshed successfully (snapshots mode)');
             } else {
                 frappe.msgprint('Error refreshing report data: ' + (r.message.error || 'Unknown error'));
             }
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error refreshing report:', err);
             frappe.msgprint('Error refreshing report. Please try again.');
@@ -1881,43 +1885,43 @@ function refreshWithFreshData() {
      */
     console.log('🆕 Refreshing with FRESH data:', savedReportName);
     showLoading();
-    
+
     frappe.call({
         method: 'smart_screens.smart_screens.doctype.daily_oee_report.daily_oee_report.refresh_report_with_fresh_data',
         args: {
             report_name: savedReportName
         },
-        callback: function(r) {
+        callback: function (r) {
             hideLoading();
-            
+
             if (r.message && r.message.success) {
                 const freshData = r.message.data;
-                
+
                 // Update current data with fresh records
                 currentData = freshData.production_records || [];
                 sortedData = [...currentData];
-                
+
                 // Update table with fresh data
                 updateTable(sortedData);
-                
+
                 // Update summary
                 if (freshData.summary) {
                     updateSummaryCards(freshData.summary);
                 }
-                
+
                 // Update report data
                 if (reportData) {
                     reportData.data = currentData;
                     reportData.summary = freshData.summary;
                 }
-                
+
                 frappe.show_alert({
                     message: r.message.message || `Report refreshed with fresh data: ${currentData.length} records`,
                     indicator: 'green'
                 });
-                
+
                 console.log('✅ Report refreshed successfully with fresh data');
-                
+
                 // Show additional info if significant changes detected
                 frappe.msgprint({
                     title: 'Report Refreshed with Fresh Data',
@@ -1945,7 +1949,7 @@ function refreshWithFreshData() {
                 });
             }
         },
-        error: function(err) {
+        error: function (err) {
             hideLoading();
             console.error('Error refreshing with fresh data:', err);
             frappe.msgprint('Error refreshing report with fresh data. Please try again.');
@@ -1957,17 +1961,17 @@ function refreshWithFreshData() {
 function showLinkedLotBreakdown(rowData) {
     const modal = document.getElementById('oeeDetailModal');
     if (!modal) return;
-    
+
     // Check if breakdown section already exists
     let breakdownSection = document.getElementById('linked-lot-breakdown-section');
-    
+
     if (!breakdownSection) {
         // Create breakdown section
         breakdownSection = document.createElement('div');
         breakdownSection.id = 'linked-lot-breakdown-section';
         breakdownSection.className = 'alert alert-info';
         breakdownSection.style.marginTop = '15px';
-        
+
         // Insert after the production summary section
         const modalBody = modal.querySelector('.modal-body');
         const summarySection = modalBody.querySelector('.production-summary');
@@ -1977,7 +1981,7 @@ function showLinkedLotBreakdown(rowData) {
             modalBody.insertBefore(breakdownSection, modalBody.firstChild);
         }
     }
-    
+
     // Fetch detailed breakdown from server
     frappe.call({
         method: 'smart_screens.smart_screens.api.oee.lot_linking_helper.get_lot_breakdown_details',
@@ -1985,7 +1989,7 @@ function showLinkedLotBreakdown(rowData) {
             // FIX: Trim spaces from lot numbers when splitting
             linked_lots: rowData.linked_lots.split(',').map(lot => lot.trim())
         },
-        callback: function(r) {
+        callback: function (r) {
             if (r.message && r.message.length > 0) {
                 renderLinkedLotBreakdown(r.message, breakdownSection);
             } else {
@@ -1997,7 +2001,7 @@ function showLinkedLotBreakdown(rowData) {
                 `;
             }
         },
-        error: function(err) {
+        error: function (err) {
             console.error('Error fetching linked lot breakdown:', err);
             container.innerHTML = `
                 <div class="alert alert-danger" style="margin: 10px 0;">
@@ -2015,7 +2019,7 @@ function renderLinkedLotBreakdown(breakdown, container) {
     let totalPieces = 0;
     let totalInspected = 0;
     let totalRejected = 0;
-    
+
     breakdown.forEach(lot => {
         totalLifts += lot.lifts;
         totalWeight += lot.weight_kg;
@@ -2023,9 +2027,9 @@ function renderLinkedLotBreakdown(breakdown, container) {
         totalInspected += lot.inspected;
         totalRejected += lot.rejected;
     });
-    
+
     const aggregateRejectionPct = totalInspected > 0 ? (totalRejected / totalInspected * 100) : 0;
-    
+
     // Simple, clean table without extra cards
     let html = `
         <h6 style="font-weight: 600; margin-bottom: 10px; color: #495057;">
@@ -2046,7 +2050,7 @@ function renderLinkedLotBreakdown(breakdown, container) {
                 </thead>
                 <tbody>
     `;
-    
+
     breakdown.forEach(lot => {
         html += `
             <tr>
@@ -2060,7 +2064,7 @@ function renderLinkedLotBreakdown(breakdown, container) {
             </tr>
         `;
     });
-    
+
     html += `
                     <tr style="background-color: #e3f2fd; font-weight: bold;">
                         <td>TOTAL (Aggregated)</td>
@@ -2078,7 +2082,7 @@ function renderLinkedLotBreakdown(breakdown, container) {
             <i class="fa fa-info-circle"></i> OEE calculations use aggregated values from all linked lots.
         </p>
     `;
-    
+
     container.innerHTML = html;
 }
 
