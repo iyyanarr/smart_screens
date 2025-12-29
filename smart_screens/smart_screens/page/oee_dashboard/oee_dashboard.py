@@ -68,7 +68,7 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
     oee_results = []
     processed_linked_groups = set()  # Track already processed linked lot groups
     
-    for entry in production_data:
+    for idx, entry in enumerate(production_data):
         try:
             # Check if this lot is part of a linked lot group (auto-detect)
             # FIX: Use actual_moulding_date for linked lot detection instead of planned production_date
@@ -243,10 +243,11 @@ def get_oee_data(production_date=None, process_type='Moulding', shift_filter=Non
             result['linked_lots'] = ', '.join(linked_info.get('linked_lots', [])) if is_linked else ''
             result['linked_lot_count'] = len(linked_info.get('linked_lots', [])) if is_linked else 0
 
+
             oee_results.append(result)
             
         except Exception as e:
-            frappe.log_error(f"Error calculating OEE for entry: {str(e)}", "OEE Calculation Error")
+            frappe.log_error(title="OEE Calculation Error", message=f"Error calculating OEE for entry: {str(e)}")
             continue
     
     # MOVED: Create/Update OEE Lot Linking records AFTER OEE calculation is complete

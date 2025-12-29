@@ -1,289 +1,296 @@
 {
- "actions": [],
- "creation": "2025-10-25 16:00:00",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "production_entry",
-  "production_date",
-  "shift_type",
-  "operator_name",
-  "column_break_1",
-  "machine_reference",
-  "machine_name",
-  "item_code",
-  "lot_number",
-  "is_linked_lot",
-  "linked_lots",
-  "linked_lot_count",
-  "section_break_quantities",
-  "target_quantity",
-  "actual_quantity",
-  "number_of_products",
-  "variance_qty",
-  "column_break_2",
-  "oee_pct",
-  "production_efficiency_pct",
-  "rejection_percentage",
-  "section_break_oee_components",
-  "availability_pct",
-  "performance_pct",
-  "quality_pct",
-  "section_break_breakdown_details",
-  "planned_time_minutes",
-  "downtime_minutes",
-  "available_time_minutes",
-  "column_break_3",
-  "cycle_time_seconds",
-  "no_of_cavities",
-  "section_break_quality_details",
-  "total_inspected",
-  "good_pieces",
-  "rejected_pieces",
-  "section_break_resolution",
-  "resolution_status",
-  "resolved_record"
- ],
- "fields": [
-  {
-   "fieldname": "production_entry",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Production Entry",
-   "options": "Moulding Production Entry"
-  },
-  {
-   "fieldname": "production_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Production Date"
-  },
-  {
-   "fieldname": "shift_type",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Shift Type"
-  },
-  {
-   "fieldname": "operator_name",
-   "fieldtype": "Data",
-   "label": "Operator Name"
-  },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "machine_reference",
-   "fieldtype": "Data",
-   "label": "Machine/Press"
-  },
-  {
-   "fieldname": "machine_name",
-   "fieldtype": "Data",
-   "label": "Machine Name"
-  },
-  {
-   "fieldname": "item_code",
-   "fieldtype": "Link",
-   "label": "Item Code",
-   "options": "Item"
-  },
-  {
-   "fieldname": "lot_number",
-   "fieldtype": "Data",
-   "label": "Lot Number"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_linked_lot",
-   "fieldtype": "Check",
-   "label": "Is Linked Lot",
-   "description": "Indicates if this lot is part of a linked lot group"
-  },
-  {
-   "fieldname": "linked_lots",
-   "fieldtype": "Small Text",
-   "label": "Linked Lots",
-   "description": "Comma-separated list of all linked lot numbers"
-  },
-  {
-   "default": "0",
-   "fieldname": "linked_lot_count",
-   "fieldtype": "Int",
-   "label": "Linked Lot Count",
-   "description": "Number of lots in the linked group"
-  },
-  {
-   "fieldname": "section_break_quantities",
-   "fieldtype": "Section Break",
-   "label": "Quantities"
-  },
-  {
-   "fieldname": "target_quantity",
-   "fieldtype": "Float",
-   "label": "Target Quantity",
-   "precision": "2"
-  },
-  {
-   "fieldname": "actual_quantity",
-   "fieldtype": "Float",
-   "label": "Actual Quantity",
-   "precision": "2"
-  },
-  {
-   "fieldname": "number_of_products",
-   "fieldtype": "Int",
-   "label": "Number of Products (NoP)",
-   "description": "Calculated as Production Weight / Blank Weight"
-  },
-  {
-   "fieldname": "variance_qty",
-   "fieldtype": "Float",
-   "label": "Variance",
-   "precision": "2"
-  },
-  {
-   "fieldname": "column_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "oee_pct",
-   "fieldtype": "Percent",
-   "in_list_view": 1,
-   "label": "OEE %",
-   "precision": "2"
-  },
-  {
-   "fieldname": "production_efficiency_pct",
-   "fieldtype": "Percent",
-   "in_list_view": 1,
-   "label": "Production Efficiency %",
-   "precision": "2"
-  },
-  {
-   "fieldname": "rejection_percentage",
-   "fieldtype": "Percent",
-   "label": "Rejection %",
-   "precision": "2"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_break_oee_components",
-   "fieldtype": "Section Break",
-   "label": "OEE Components"
-  },
-  {
-   "fieldname": "availability_pct",
-   "fieldtype": "Percent",
-   "label": "Availability %",
-   "precision": "2"
-  },
-  {
-   "fieldname": "performance_pct",
-   "fieldtype": "Percent",
-   "label": "Performance %",
-   "precision": "2"
-  },
-  {
-   "fieldname": "quality_pct",
-   "fieldtype": "Percent",
-   "label": "Quality %",
-   "precision": "2"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_break_breakdown_details",
-   "fieldtype": "Section Break",
-   "label": "Time Breakdown"
-  },
-  {
-   "fieldname": "planned_time_minutes",
-   "fieldtype": "Float",
-   "label": "Planned Time (Minutes)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "downtime_minutes",
-   "fieldtype": "Float",
-   "label": "Downtime (Minutes)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "available_time_minutes",
-   "fieldtype": "Float",
-   "label": "Available Time (Minutes)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cycle_time_seconds",
-   "fieldtype": "Float",
-   "label": "Cycle Time (Seconds)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "no_of_cavities",
-   "fieldtype": "Int",
-   "label": "Number of Cavities"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_break_quality_details",
-   "fieldtype": "Section Break",
-   "label": "Quality Details"
-  },
-  {
-   "fieldname": "total_inspected",
-   "fieldtype": "Int",
-   "label": "Total Inspected"
-  },
-  {
-   "fieldname": "good_pieces",
-   "fieldtype": "Int",
-   "label": "Good Pieces"
-  },
-  {
-   "fieldname": "rejected_pieces",
-   "fieldtype": "Int",
-   "label": "Rejected Pieces"
-  },
-  {
-   "fieldname": "section_break_resolution",
-   "fieldtype": "Section Break",
-   "label": "Resolution Status"
-  },
-  {
-   "allow_on_submit": 1,
-   "default": "Pending",
-   "fieldname": "resolution_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Resolution Status",
-   "options": "Pending\nIn Progress\nResolved"
-  },
-  {
-   "fieldname": "resolved_record",
-   "fieldtype": "Link",
-   "label": "CAR Reference",
-   "options": "Corrective Action Resolved"
-  }
- ],
- "istable": 1,
- "links": [],
- "modified": "2025-11-12 00:00:00",
- "modified_by": "Administrator",
- "module": "Smart Screens",
- "name": "Unresolved Production Record",
- "owner": "Administrator",
- "permissions": [],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 1
+    "actions": [],
+    "creation": "2025-10-25 16:00:00",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "production_entry",
+        "production_date",
+        "shift_type",
+        "operator_name",
+        "column_break_1",
+        "machine_reference",
+        "machine_name",
+        "item_code",
+        "lot_number",
+        "is_linked_lot",
+        "linked_lots",
+        "linked_lot_count",
+        "section_break_quantities",
+        "target_quantity",
+        "actual_quantity",
+        "number_of_products",
+        "variance_qty",
+        "utilisation_hours",
+        "column_break_2",
+        "oee_pct",
+        "production_efficiency_pct",
+        "rejection_percentage",
+        "section_break_oee_components",
+        "availability_pct",
+        "performance_pct",
+        "quality_pct",
+        "section_break_breakdown_details",
+        "planned_time_minutes",
+        "downtime_minutes",
+        "available_time_minutes",
+        "column_break_3",
+        "cycle_time_seconds",
+        "no_of_cavities",
+        "section_break_quality_details",
+        "total_inspected",
+        "good_pieces",
+        "rejected_pieces",
+        "section_break_resolution",
+        "resolution_status",
+        "resolved_record"
+    ],
+    "fields": [
+        {
+            "fieldname": "production_entry",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Production Entry",
+            "options": "Moulding Production Entry"
+        },
+        {
+            "fieldname": "production_date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Production Date"
+        },
+        {
+            "fieldname": "shift_type",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Shift Type"
+        },
+        {
+            "fieldname": "operator_name",
+            "fieldtype": "Data",
+            "label": "Operator Name"
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "machine_reference",
+            "fieldtype": "Data",
+            "label": "Machine/Press"
+        },
+        {
+            "fieldname": "machine_name",
+            "fieldtype": "Data",
+            "label": "Machine Name"
+        },
+        {
+            "fieldname": "item_code",
+            "fieldtype": "Link",
+            "label": "Item Code",
+            "options": "Item"
+        },
+        {
+            "fieldname": "lot_number",
+            "fieldtype": "Data",
+            "label": "Lot Number"
+        },
+        {
+            "default": "0",
+            "fieldname": "is_linked_lot",
+            "fieldtype": "Check",
+            "label": "Is Linked Lot",
+            "description": "Indicates if this lot is part of a linked lot group"
+        },
+        {
+            "fieldname": "linked_lots",
+            "fieldtype": "Small Text",
+            "label": "Linked Lots",
+            "description": "Comma-separated list of all linked lot numbers"
+        },
+        {
+            "default": "0",
+            "fieldname": "linked_lot_count",
+            "fieldtype": "Int",
+            "label": "Linked Lot Count",
+            "description": "Number of lots in the linked group"
+        },
+        {
+            "fieldname": "section_break_quantities",
+            "fieldtype": "Section Break",
+            "label": "Quantities"
+        },
+        {
+            "fieldname": "target_quantity",
+            "fieldtype": "Float",
+            "label": "Target Quantity",
+            "precision": "2"
+        },
+        {
+            "fieldname": "actual_quantity",
+            "fieldtype": "Float",
+            "label": "Actual Quantity",
+            "precision": "2"
+        },
+        {
+            "fieldname": "number_of_products",
+            "fieldtype": "Int",
+            "label": "Number of Products (NoP)",
+            "description": "Calculated as Production Weight / Blank Weight"
+        },
+        {
+            "fieldname": "variance_qty",
+            "fieldtype": "Float",
+            "label": "Variance",
+            "precision": "2"
+        },
+        {
+            "fieldname": "utilisation_hours",
+            "fieldtype": "Float",
+            "label": "Utilisation (Hrs)",
+            "precision": "2"
+        },
+        {
+            "fieldname": "column_break_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "oee_pct",
+            "fieldtype": "Percent",
+            "in_list_view": 1,
+            "label": "OEE %",
+            "precision": "2"
+        },
+        {
+            "fieldname": "production_efficiency_pct",
+            "fieldtype": "Percent",
+            "in_list_view": 1,
+            "label": "Production Efficiency %",
+            "precision": "2"
+        },
+        {
+            "fieldname": "rejection_percentage",
+            "fieldtype": "Percent",
+            "label": "Rejection %",
+            "precision": "2"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_oee_components",
+            "fieldtype": "Section Break",
+            "label": "OEE Components"
+        },
+        {
+            "fieldname": "availability_pct",
+            "fieldtype": "Percent",
+            "label": "Availability %",
+            "precision": "2"
+        },
+        {
+            "fieldname": "performance_pct",
+            "fieldtype": "Percent",
+            "label": "Performance %",
+            "precision": "2"
+        },
+        {
+            "fieldname": "quality_pct",
+            "fieldtype": "Percent",
+            "label": "Quality %",
+            "precision": "2"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_breakdown_details",
+            "fieldtype": "Section Break",
+            "label": "Time Breakdown"
+        },
+        {
+            "fieldname": "planned_time_minutes",
+            "fieldtype": "Float",
+            "label": "Planned Time (Minutes)",
+            "precision": "2"
+        },
+        {
+            "fieldname": "downtime_minutes",
+            "fieldtype": "Float",
+            "label": "Downtime (Minutes)",
+            "precision": "2"
+        },
+        {
+            "fieldname": "available_time_minutes",
+            "fieldtype": "Float",
+            "label": "Available Time (Minutes)",
+            "precision": "2"
+        },
+        {
+            "fieldname": "column_break_3",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "cycle_time_seconds",
+            "fieldtype": "Float",
+            "label": "Cycle Time (Seconds)",
+            "precision": "2"
+        },
+        {
+            "fieldname": "no_of_cavities",
+            "fieldtype": "Int",
+            "label": "Number of Cavities"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "section_break_quality_details",
+            "fieldtype": "Section Break",
+            "label": "Quality Details"
+        },
+        {
+            "fieldname": "total_inspected",
+            "fieldtype": "Int",
+            "label": "Total Inspected"
+        },
+        {
+            "fieldname": "good_pieces",
+            "fieldtype": "Int",
+            "label": "Good Pieces"
+        },
+        {
+            "fieldname": "rejected_pieces",
+            "fieldtype": "Int",
+            "label": "Rejected Pieces"
+        },
+        {
+            "fieldname": "section_break_resolution",
+            "fieldtype": "Section Break",
+            "label": "Resolution Status"
+        },
+        {
+            "allow_on_submit": 1,
+            "default": "Pending",
+            "fieldname": "resolution_status",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Resolution Status",
+            "options": "Pending\nIn Progress\nResolved"
+        },
+        {
+            "fieldname": "resolved_record",
+            "fieldtype": "Link",
+            "label": "CAR Reference",
+            "options": "Corrective Action Resolved"
+        }
+    ],
+    "istable": 1,
+    "links": [],
+    "modified": "2025-12-29 00:00:00",
+    "modified_by": "Administrator",
+    "module": "Smart Screens",
+    "name": "Unresolved Production Record",
+    "owner": "Administrator",
+    "permissions": [],
+    "row_format": "Dynamic",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
 }

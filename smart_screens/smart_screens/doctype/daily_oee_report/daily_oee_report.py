@@ -47,6 +47,11 @@ class DailyOEEReport(Document):
         total_quality = sum(flt(row.quality_pct) for row in self.production_records)
         total_oee = sum(flt(row.oee_pct) for row in self.production_records)
         
+        # Calculate Utilisation totals
+        self.total_utilisation_hours = sum(flt(getattr(row, 'utilisation_hours', 0)) for row in self.production_records)
+        # Total press capacity = 19 presses * 24 hours = 456 press-hours
+        self.capacity_utilisation_pct = (self.total_utilisation_hours / 456 * 100) if self.total_utilisation_hours > 0 else 0
+        
         self.total_records = total
         self.avg_availability = (total_availability / total) if total > 0 else 0
         self.avg_performance = (total_performance / total) if total > 0 else 0
@@ -200,7 +205,7 @@ def check_existing_report(production_date, shift_filter='', machine_filter=''):
                 "resolution_status": ["!=", "Resolved"]
             })
     except Exception as e:
-        frappe.log_error(f"Error counting child records: {str(e)}", "check_existing_report")
+        frappe.log_error(title="check_existing_report", message=f"Error counting child records: {str(e)}")
         # Continue with zeros if table doesn't exist
         pass
     
@@ -302,6 +307,7 @@ def get_report_data(report_name):
                 'rejected_pieces': rejected_pieces,  # Conditionally set based on inspection status
                 'resolution_status': getattr(row, 'resolution_status', 'Pending'),
                 'resolved_record': getattr(row, 'resolved_record', ''),
+                'utilisation_hours': flt(getattr(row, 'utilisation_hours', 0), 2),
                 # Add lot inspection status (check if exists in production entry)
                 'lot_inspection_status': lot_inspection_status
             })
@@ -311,7 +317,9 @@ def get_report_data(report_name):
             'avg_availability': flt(report_doc.avg_availability, 2),
             'avg_performance': flt(report_doc.avg_performance, 2),
             'avg_quality': flt(report_doc.avg_quality, 2),
-            'avg_oee': flt(report_doc.avg_oee, 2)
+            'avg_oee': flt(report_doc.avg_oee, 2),
+            'total_utilisation_hours': flt(getattr(report_doc, 'total_utilisation_hours', 0), 2),
+            'capacity_utilisation_pct': flt(getattr(report_doc, 'capacity_utilisation_pct', 0), 2)
         }
         
         # Build filters
@@ -331,7 +339,7 @@ def get_report_data(report_name):
             }
         }
     except Exception as e:
-        frappe.log_error(f"Error loading report data: {frappe.get_traceback()}", "Get Report Data Error")
+        frappe.log_error(title="Get Report Data Error", message=f"Error loading report data: {frappe.get_traceback()}")
         return {
             'success': False,
             'error': str(e)
@@ -351,7 +359,7 @@ def get_lot_inspection_status(production_entry):
         try:
             prod_doc = frappe.get_doc('Moulding Production Entry', production_entry)
         except Exception:
-            frappe.log_error(f"Production entry {production_entry} not found", "Get Lot Inspection Status")
+            frappe.log_error(title="Get Lot Inspection Status", message=f"Production entry {production_entry} not found")
             return 'Not Found'
         
         lot_number = prod_doc.get('scan_lot_number')
@@ -379,7 +387,7 @@ def get_lot_inspection_status(production_entry):
         
         return 'Not Found'
     except Exception as e:
-        frappe.log_error(f"Error getting lot inspection status: {str(e)}\n{frappe.get_traceback()}", "Get Lot Inspection Status")
+        frappe.log_error(title="Get Lot Inspection Status", message=f"Error getting lot inspection status: {str(e)}\n{frappe.get_traceback()}")
         return 'Not Found'
 
 
@@ -510,6 +518,7 @@ def generate_daily_oee_report(filters):
                 "availability_pct": flt(record.get('availability_pct', 0)),
                 "performance_pct": flt(record.get('performance_pct', 0)),
                 "quality_pct": flt(record.get('quality_pct', 0)),
+                "utilisation_hours": flt(record.get('utilisation_hours', 0)),
                 # Preserve existing resolution data if available
                 "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
                 "resolved_record": existing_row.resolved_record if existing_row else ''
@@ -561,6 +570,7 @@ def generate_daily_oee_report(filters):
             "availability_pct": flt(record.get('availability_pct', 0)),
             "performance_pct": flt(record.get('performance_pct', 0)),
             "quality_pct": flt(record.get('quality_pct', 0)),
+            "utilisation_hours": flt(record.get('utilisation_hours', 0)),
             "resolution_status": record.get('resolution_status', 'Pending')
         })
     
@@ -677,6 +687,7 @@ def refresh_report_with_fresh_data(report_name):
                 "total_inspected": int(record.get('total_inspected', 0)),
                 "good_pieces": int(record.get('good_pieces', 0)),
                 "rejected_pieces": int(record.get('rejected_pieces', 0)),
+                "utilisation_hours": flt(record.get('utilisation_hours', 0)),
                 # Preserve existing resolution data if available
                 "resolution_status": existing_row.resolution_status if existing_row else 'Pending',
                 "resolved_record": existing_row.resolved_record if existing_row else ''
@@ -728,6 +739,7 @@ def refresh_report_with_fresh_data(report_name):
                 'rejected_pieces': int(getattr(row, 'rejected_pieces', 0)),
                 'resolution_status': getattr(row, 'resolution_status', 'Pending'),
                 'resolved_record': getattr(row, 'resolved_record', ''),
+                'utilisation_hours': flt(getattr(row, 'utilisation_hours', 0), 2),
                 'lot_inspection_status': lot_inspection_status
             })
         
@@ -735,7 +747,9 @@ def refresh_report_with_fresh_data(report_name):
             'avg_availability': flt(report_doc.avg_availability, 2),
             'avg_performance': flt(report_doc.avg_performance, 2),
             'avg_quality': flt(report_doc.avg_quality, 2),
-            'avg_oee': flt(report_doc.avg_oee, 2)
+            'avg_oee': flt(report_doc.avg_oee, 2),
+            'total_utilisation_hours': flt(getattr(report_doc, 'total_utilisation_hours', 0), 2),
+            'capacity_utilisation_pct': flt(getattr(report_doc, 'capacity_utilisation_pct', 0), 2)
         }
         
         return {
@@ -749,8 +763,8 @@ def refresh_report_with_fresh_data(report_name):
         
     except Exception as e:
         frappe.log_error(
-            f"Error refreshing report with fresh data: {frappe.get_traceback()}",
-            "Refresh Report Error"
+            title="Refresh Report Error",
+            message=f"Error refreshing report with fresh data: {frappe.get_traceback()}"
         )
         return {
             'success': False,

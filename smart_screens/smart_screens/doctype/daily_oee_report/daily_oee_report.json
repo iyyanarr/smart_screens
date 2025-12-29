@@ -1,214 +1,230 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "naming_series:",
- "creation": "2025-10-28 00:00:00",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "naming_series",
-  "report_info_section",
-  "report_date",
-  "production_date",
-  "column_break_filters",
-  "shift_filter",
-  "machine_filter",
-  "production_records_section",
-  "production_records",
-  "summary_section",
-  "total_records",
-  "avg_availability",
-  "avg_performance",
-  "column_break_summary",
-  "avg_quality",
-  "avg_oee",
-  "remarks_section",
-  "general_remarks",
-  "safety_and_machinery",
-  "mould_observation",
-  "suggestions_for_improvement",
-  "section_break_status",
-  "amended_from"
- ],
- "fields": [
-  {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "DAILY-OEE-.YYYY.-",
-   "reqd": 1,
-   "set_only_once": 1
-  },
-  {
-   "fieldname": "report_info_section",
-   "fieldtype": "Section Break",
-   "label": "Report Information"
-  },
-  {
-   "default": "Today",
-   "fieldname": "report_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Report Generated Date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "production_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Production Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_filters",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "shift_filter",
-   "fieldtype": "Data",
-   "label": "Shift Filter",
-   "read_only": 1
-  },
-  {
-   "fieldname": "machine_filter",
-   "fieldtype": "Data",
-   "label": "Machine Filter",
-   "read_only": 1
-  },
-  {
-   "fieldname": "production_records_section",
-   "fieldtype": "Section Break",
-   "label": "Production Records"
-  },
-  {
-   "fieldname": "production_records",
-   "fieldtype": "Table",
-   "label": "Production Records",
-   "options": "Unresolved Production Record",
-   "reqd": 1
-  },
-  {
-   "fieldname": "summary_section",
-   "fieldtype": "Section Break",
-   "label": "Summary"
-  },
-  {
-   "default": "0",
-   "fieldname": "total_records",
-   "fieldtype": "Int",
-   "label": "Total Records",
-   "read_only": 1
-  },
-  {
-   "fieldname": "avg_availability",
-   "fieldtype": "Percent",
-   "label": "Average Availability %",
-   "precision": "2",
-   "read_only": 1
-  },
-  {
-   "fieldname": "avg_performance",
-   "fieldtype": "Percent",
-   "label": "Average Performance %",
-   "precision": "2",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_summary",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "avg_quality",
-   "fieldtype": "Percent",
-   "label": "Average Quality %",
-   "precision": "2",
-   "read_only": 1
-  },
-  {
-   "fieldname": "avg_oee",
-   "fieldtype": "Percent",
-   "label": "Average OEE %",
-   "precision": "2",
-   "read_only": 1
-  },
-  {
-   "fieldname": "remarks_section",
-   "fieldtype": "Section Break",
-   "label": "Remarks & Observations"
-  },
-  {
-   "fieldname": "general_remarks",
-   "fieldtype": "Text Editor",
-   "label": "General Remarks"
-  },
-  {
-   "fieldname": "safety_and_machinery",
-   "fieldtype": "Text Editor",
-   "label": "Safety and Machinery"
-  },
-  {
-   "fieldname": "mould_observation",
-   "fieldtype": "Text Editor",
-   "label": "Mould Observation"
-  },
-  {
-   "fieldname": "suggestions_for_improvement",
-   "fieldtype": "Text Editor",
-   "label": "Suggestions for Improvement"
-  },
-  {
-   "fieldname": "section_break_status",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "options": "Daily OEE Report",
-   "read_only": 1
-  }
- ],
- "is_submittable": 1,
- "links": [],
- "modified": "2025-10-29 14:30:28.175605",
- "modified_by": "Administrator",
- "module": "Smart Screens",
- "name": "Daily OEE Report",
- "naming_rule": "By \"Naming Series\" field",
- "owner": "Administrator",
- "permissions": [
-  {
-   "amend": 1,
-   "cancel": 1,
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "submit": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "User",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 1
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "naming_series:",
+    "creation": "2025-10-28 00:00:00",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "report_info_section",
+        "report_date",
+        "production_date",
+        "column_break_filters",
+        "shift_filter",
+        "machine_filter",
+        "production_records_section",
+        "production_records",
+        "summary_section",
+        "total_records",
+        "avg_availability",
+        "avg_performance",
+        "column_break_summary",
+        "avg_quality",
+        "avg_oee",
+        "total_utilisation_hours",
+        "capacity_utilisation_pct",
+        "remarks_section",
+        "general_remarks",
+        "safety_and_machinery",
+        "mould_observation",
+        "suggestions_for_improvement",
+        "section_break_status",
+        "amended_from"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "DAILY-OEE-.YYYY.-",
+            "reqd": 1,
+            "set_only_once": 1
+        },
+        {
+            "fieldname": "report_info_section",
+            "fieldtype": "Section Break",
+            "label": "Report Information"
+        },
+        {
+            "default": "Today",
+            "fieldname": "report_date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Report Generated Date",
+            "read_only": 1
+        },
+        {
+            "fieldname": "production_date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "label": "Production Date",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_filters",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "shift_filter",
+            "fieldtype": "Data",
+            "label": "Shift Filter",
+            "read_only": 1
+        },
+        {
+            "fieldname": "machine_filter",
+            "fieldtype": "Data",
+            "label": "Machine Filter",
+            "read_only": 1
+        },
+        {
+            "fieldname": "production_records_section",
+            "fieldtype": "Section Break",
+            "label": "Production Records"
+        },
+        {
+            "fieldname": "production_records",
+            "fieldtype": "Table",
+            "label": "Production Records",
+            "options": "Unresolved Production Record",
+            "reqd": 1
+        },
+        {
+            "fieldname": "summary_section",
+            "fieldtype": "Section Break",
+            "label": "Summary"
+        },
+        {
+            "default": "0",
+            "fieldname": "total_records",
+            "fieldtype": "Int",
+            "label": "Total Records",
+            "read_only": 1
+        },
+        {
+            "fieldname": "avg_availability",
+            "fieldtype": "Percent",
+            "label": "Average Availability %",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "avg_performance",
+            "fieldtype": "Percent",
+            "label": "Average Performance %",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_summary",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "avg_quality",
+            "fieldtype": "Percent",
+            "label": "Average Quality %",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "avg_oee",
+            "fieldtype": "Percent",
+            "label": "Average OEE %",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "total_utilisation_hours",
+            "fieldtype": "Float",
+            "label": "Total Utilisation (Hrs)",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "capacity_utilisation_pct",
+            "fieldtype": "Percent",
+            "label": "Capacity Util %",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "remarks_section",
+            "fieldtype": "Section Break",
+            "label": "Remarks & Observations"
+        },
+        {
+            "fieldname": "general_remarks",
+            "fieldtype": "Text Editor",
+            "label": "General Remarks"
+        },
+        {
+            "fieldname": "safety_and_machinery",
+            "fieldtype": "Text Editor",
+            "label": "Safety and Machinery"
+        },
+        {
+            "fieldname": "mould_observation",
+            "fieldtype": "Text Editor",
+            "label": "Mould Observation"
+        },
+        {
+            "fieldname": "suggestions_for_improvement",
+            "fieldtype": "Text Editor",
+            "label": "Suggestions for Improvement"
+        },
+        {
+            "fieldname": "section_break_status",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "amended_from",
+            "fieldtype": "Link",
+            "label": "Amended From",
+            "options": "Daily OEE Report",
+            "read_only": 1
+        }
+    ],
+    "is_submittable": 1,
+    "links": [],
+    "modified": "2025-10-29 14:30:28.175605",
+    "modified_by": "Administrator",
+    "module": "Smart Screens",
+    "name": "Daily OEE Report",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "User",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "row_format": "Dynamic",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
 }

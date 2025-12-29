@@ -612,16 +612,23 @@ class MouldingAdapter(ProcessAdapter):
             # Calculate shift duration in minutes
             from datetime import datetime, timedelta
             
-            # Parse time strings (handle both time and datetime objects)
-            if isinstance(start_time, str):
-                start = datetime.strptime(str(start_time).split('.')[0], '%H:%M:%S')
-            else:
-                start = datetime.combine(datetime.today(), start_time)
+            # Parse time strings (handle time, timedelta, and string objects)
+            def to_time(t):
+                if isinstance(t, timedelta):
+                    # Convert timedelta to time
+                    seconds = int(t.total_seconds())
+                    return (datetime.min + timedelta(seconds=seconds)).time()
+                if isinstance(t, str):
+                    return datetime.strptime(t.split('.')[0], '%H:%M:%S').time()
+                if hasattr(t, "hour"): # datetime.time object
+                    return t
+                return t
+
+            start_t = to_time(start_time)
+            end_t = to_time(end_time)
             
-            if isinstance(end_time, str):
-                end = datetime.strptime(str(end_time).split('.')[0], '%H:%M:%S')
-            else:
-                end = datetime.combine(datetime.today(), end_time)
+            start = datetime.combine(datetime.today(), start_t)
+            end = datetime.combine(datetime.today(), end_t)
             
             # Handle overnight shifts (end_time < start_time)
             if end < start:
