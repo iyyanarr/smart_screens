@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Alphaworkz and contributors
 // For license information, please see license.txt
 
-frappe.pages['bin_check_out'].on_page_load = function(wrapper) {
+frappe.pages['bin_check_out'].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: 'Bin Check-Out',
@@ -12,7 +12,7 @@ frappe.pages['bin_check_out'].on_page_load = function(wrapper) {
 };
 
 // Add on_page_show to handle navigation back to this page
-frappe.pages['bin_check_out'].on_page_show = function(wrapper) {
+frappe.pages['bin_check_out'].on_page_show = function (wrapper) {
 	// Only reset the form if the instance already exists
 	// Don't reload HTML or rebind events
 	if (wrapper.page && wrapper.page.check_out_instance) {
@@ -21,7 +21,7 @@ frappe.pages['bin_check_out'].on_page_show = function(wrapper) {
 };
 
 // Add cleanup on page hide to prevent event conflicts
-frappe.pages['bin_check_out'].on_page_hide = function(wrapper) {
+frappe.pages['bin_check_out'].on_page_hide = function (wrapper) {
 	// Unbind all events to prevent conflicts when navigating away
 	if (wrapper.page && wrapper.page.check_out_instance) {
 		wrapper.page.check_out_instance.unbind_events();
@@ -39,7 +39,7 @@ class BinCheckOutPage {
 			batch_valid: false,
 			rack_valid: false
 		};
-		
+
 		this.init();
 	}
 
@@ -53,13 +53,13 @@ class BinCheckOutPage {
 	setup_page() {
 		// Hide the default page header
 		this.page.wrapper.find('.page-head').hide();
-		
+
 		// Remove all padding from parent containers
 		this.page.main.parent().css({
 			'padding': '0',
 			'margin': '0'
 		});
-		
+
 		this.page.main.css({
 			'padding': '0',
 			'margin': '0'
@@ -171,14 +171,14 @@ class BinCheckOutPage {
 				</div>
 			</div>
 		`;
-		
+
 		this.page.main.html(html);
 	}
 
 	add_custom_styles() {
 		// Remove any existing styles for this page
 		$('#bin-check-out-custom-styles').remove();
-		
+
 		const style = `
 			<style id="bin-check-out-custom-styles">
 				 /* Reset all Frappe containers for this page */
@@ -548,22 +548,22 @@ class BinCheckOutPage {
 
 	bind_events() {
 		const self = this;
-		
+
 		// Unbind any existing events first to prevent duplicates
 		this.unbind_events();
-		
+
 		// Back to dashboard button
 		this.page.main.find('#back-to-dashboard').on('click', () => {
 			frappe.set_route('bin_tracker_dashboard');
 		});
-		
+
 		// Auto-focus on batch barcode when page loads
 		setTimeout(() => {
 			this.page.main.find('#batch-barcode').focus();
 		}, 100);
-		
+
 		// Validate on blur or Enter key
-		this.page.main.find('#batch-barcode').on('blur keypress', function(e) {
+		this.page.main.find('#batch-barcode').on('blur keypress', function (e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
@@ -571,8 +571,8 @@ class BinCheckOutPage {
 			}
 			self.validate_inputs();
 		});
-		
-		this.page.main.find('#rack-barcode').on('blur keypress', function(e) {
+
+		this.page.main.find('#rack-barcode').on('blur keypress', function (e) {
 			if (e.type === 'keypress' && e.which !== 13) return;
 			if (e.type === 'keypress' && e.which === 13) {
 				e.preventDefault();
@@ -582,33 +582,33 @@ class BinCheckOutPage {
 			}
 			self.validate_inputs();
 		});
-		
+
 		// Clear validation when user starts typing
-		this.page.main.find('#batch-barcode, #rack-barcode').on('input', function() {
+		this.page.main.find('#batch-barcode, #rack-barcode').on('input', function () {
 			const field_type = $(this).attr('id') === 'batch-barcode' ? 'batch' : 'rack';
 			const icon = field_type === 'batch' ? self.page.main.find('#batch-validation-icon') : self.page.main.find('#rack-validation-icon');
-			
+
 			icon.removeClass('show valid invalid');
 			$(this).removeClass('valid invalid');
-			
+
 			// Reset validation state for this field
 			if (field_type === 'batch') {
 				self.validation_state.batch_valid = false;
 			} else {
 				self.validation_state.rack_valid = false;
 			}
-			
+
 			// Update submit button state
-			self.page.main.find('#submit-check-out').prop('disabled', 
+			self.page.main.find('#submit-check-out').prop('disabled',
 				!(self.validation_state.batch_valid && self.validation_state.rack_valid)
 			);
 		});
-		
+
 		// Submit button click
 		this.page.main.find('#submit-check-out').on('click', () => {
 			self.perform_check_out();
 		});
-		
+
 		// Reset button click
 		this.page.main.find('#reset-btn').on('click', () => {
 			self.reset_form();
@@ -636,15 +636,15 @@ class BinCheckOutPage {
 	validate_inputs() {
 		const batch = $('#batch-barcode').val().trim();
 		const rack = $('#rack-barcode').val().trim();
-		
+
 		// Don't validate if both fields are empty
 		if (!batch && !rack) return;
-		
+
 		// Extract warehouse from rack barcode if rack is entered
 		if (rack) {
 			this.warehouse = this.extract_warehouse_from_rack(rack);
 		}
-		
+
 		// Show validating state
 		if (batch) {
 			$('#batch-validation-icon').addClass('show validating').removeClass('valid invalid');
@@ -652,7 +652,7 @@ class BinCheckOutPage {
 		if (rack) {
 			$('#rack-validation-icon').addClass('show validating').removeClass('valid invalid');
 		}
-		
+
 		// Single API call to validate both fields
 		frappe.call({
 			method: 'smart_screens.smart_screens.api.bin_tracker.validate_check_out_inputs',
@@ -664,12 +664,12 @@ class BinCheckOutPage {
 			callback: (r) => {
 				if (r.message) {
 					const result = r.message;
-					
+
 					// Update batch validation
 					if (batch) {
 						const batch_icon = $('#batch-validation-icon');
 						const batch_input = $('#batch-barcode');
-						
+
 						batch_icon.removeClass('validating');
 						if (result.batch_valid) {
 							batch_icon.addClass('valid').html('✓');
@@ -681,7 +681,7 @@ class BinCheckOutPage {
 							batch_icon.addClass('invalid').html('✗');
 							batch_input.addClass('invalid').removeClass('valid');
 							this.validation_state.batch_valid = false;
-							
+
 							// Show error message
 							if (result.batch_message) {
 								frappe.show_alert({
@@ -691,12 +691,12 @@ class BinCheckOutPage {
 							}
 						}
 					}
-					
+
 					// Update rack validation
 					if (rack) {
 						const rack_icon = $('#rack-validation-icon');
 						const rack_input = $('#rack-barcode');
-						
+
 						rack_icon.removeClass('validating');
 						if (result.rack_valid) {
 							rack_icon.addClass('valid').html('✓');
@@ -707,7 +707,7 @@ class BinCheckOutPage {
 							rack_icon.addClass('invalid').html('✗');
 							rack_input.addClass('invalid').removeClass('valid');
 							this.validation_state.rack_valid = false;
-							
+
 							// Show error message
 							if (result.rack_message) {
 								frappe.show_alert({
@@ -717,7 +717,30 @@ class BinCheckOutPage {
 							}
 						}
 					}
-					
+
+					// Handle FIFO violation warning
+					if (result.fifo_violation) {
+						// Store FIFO info for use during checkout
+						this.fifo_info = {
+							fifo_batch: result.fifo_batch,
+							fifo_rack: result.fifo_rack,
+							fifo_rack_barcode: result.fifo_rack_barcode,
+							fifo_message: result.fifo_message
+						};
+
+						// Show FIFO warning section
+						$('#fifo-warning-message').html(
+							`<strong>Batch ${result.fifo_batch}</strong> in rack ` +
+							`<strong>${result.fifo_rack_barcode || result.fifo_rack}</strong> ` +
+							`was created earlier and should be checked out first.`
+						);
+						$('#fifo-warning-section').addClass('show').show();
+					} else {
+						// Clear FIFO info
+						this.fifo_info = null;
+						$('#fifo-warning-section').removeClass('show').hide();
+					}
+
 					// Enable submit button only if both are valid
 					$('#submit-check-out').prop('disabled', !result.can_submit);
 				}
@@ -739,73 +762,114 @@ class BinCheckOutPage {
 		});
 	}
 
-	perform_check_out() {
+	perform_check_out(force_fifo_override = false) {
 		const batch = $('#batch-barcode').val().trim();
 		const rack = $('#rack-barcode').val().trim();
-		
+
 		// Use the warehouse that was set during validation, or extract it as a fallback
 		const warehouse = this.warehouse || this.extract_warehouse_from_rack(rack);
-		
-		// Hide previous messages
-		$('#error-section, #success-section, #fifo-warning-section').removeClass('show').hide();
-		
+
+		// Hide previous messages (but keep FIFO warning if doing override)
+		$('#error-section, #success-section').removeClass('show').hide();
+		if (!force_fifo_override) {
+			$('#fifo-warning-section').removeClass('show').hide();
+		}
+
 		// Disable form during API call
 		$('#submit-check-out').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> CHECKING OUT...');
 		$('#batch-barcode, #rack-barcode').prop('disabled', true);
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.api.bin_tracker.check_out_batch',
 			args: {
 				batch: this.batch || batch,
 				rack_id: this.rack_id || rack,
-				warehouse: warehouse
+				force_fifo_override: force_fifo_override ? 1 : 0
 			},
 			callback: (r) => {
 				if (r.message && r.message.success) {
 					// Success - show details
 					const data = r.message;
-					
-					// Show FIFO warning if any
-					if (data.fifo_warning && data.remarks) {
-						$('#fifo-warning-message').text(data.remarks);
+
+					// Show FIFO override note if applicable
+					if (data.fifo_override_used) {
+						$('#fifo-warning-message').html(
+							'<strong>FIFO Override Applied:</strong> ' + data.remarks
+						);
 						$('#fifo-warning-section').addClass('show').show();
 					}
-					
+
 					// Show success message
 					$('#success-item').text(data.item_code || this.item_code);
 					$('#success-batch').text(batch);
 					$('#success-rack').text(rack);
 					$('#success-time').text(frappe.datetime.str_to_user(data.timestamp));
 					$('#success-section').addClass('show').show();
-					
+
 					frappe.show_alert({
 						message: `✅ CHECK-OUT SUCCESSFUL!`,
 						indicator: 'green'
 					}, 3);
-					
+
 					// Play success sound
 					frappe.utils.play_sound('submit');
-					
+
 					// Auto-reset form after 3 seconds
 					setTimeout(() => {
 						this.reset_form();
 					}, 3000);
-					
+
+				} else if (r.message && r.message.fifo_violation) {
+					// FIFO Violation - show confirmation dialog
+					const fifo_data = r.message;
+
+					// Show FIFO warning
+					$('#fifo-warning-message').html(
+						`<strong>Batch ${fifo_data.fifo_batch}</strong> in rack ` +
+						`<strong>${fifo_data.fifo_rack_barcode || fifo_data.fifo_rack}</strong> ` +
+						`was created earlier and should be checked out first.`
+					);
+					$('#fifo-warning-section').addClass('show').show();
+
+					// Show confirmation dialog
+					frappe.confirm(
+						`<div style="text-align: left;">
+							<p><strong>FIFO Violation Detected!</strong></p>
+							<p>You are trying to check out batch <strong>${fifo_data.scanned_batch}</strong>, 
+							but batch <strong>${fifo_data.fifo_batch}</strong> in rack 
+							<strong>${fifo_data.fifo_rack_barcode || fifo_data.fifo_rack}</strong> 
+							was created earlier and should be checked out first.</p>
+							<p>Do you want to proceed anyway?</p>
+						</div>`,
+						() => {
+							// Yes - proceed with FIFO override
+							this.perform_check_out(true);
+						},
+						() => {
+							// No - cancel and re-enable form
+							frappe.show_alert({
+								message: 'Check-out cancelled. Please check out the older batch first.',
+								indicator: 'orange'
+							}, 5);
+							this.enable_form();
+						}
+					);
+
 				} else {
-					// Error from API
+					// Other error from API
 					const error_msg = r.message ? r.message.message : 'Check-out failed';
-					
+
 					frappe.show_alert({
 						message: `❌ ${error_msg}`,
 						indicator: 'red'
 					}, 5);
-					
+
 					frappe.utils.play_sound('error');
-					
+
 					// Show error in the error section
 					$('#error-message').text(error_msg);
 					$('#error-section').addClass('show').show();
-					
+
 					// Re-enable form
 					this.enable_form();
 				}
@@ -813,18 +877,18 @@ class BinCheckOutPage {
 			error: (err) => {
 				// Network or server error
 				const error_details = err.message || 'Network error. Please try again.';
-				
+
 				frappe.show_alert({
 					message: `❌ ${error_details}`,
 					indicator: 'red'
 				}, 5);
-				
+
 				frappe.utils.play_sound('error');
-				
+
 				// Show detailed error in the error section
 				$('#error-message').html(`<strong>Error:</strong> ${error_details}`);
 				$('#error-section').addClass('show').show();
-				
+
 				this.enable_form();
 			}
 		});
@@ -836,30 +900,31 @@ class BinCheckOutPage {
 		this.rack_id = null;
 		this.item_code = null;
 		this.warehouse = null;
+		this.fifo_info = null;
 		this.validation_state = {
 			batch_valid: false,
 			rack_valid: false
 		};
-		
+
 		// Clear and enable inputs - remove all classes
 		$('#batch-barcode').val('').prop('disabled', false).removeClass('valid invalid');
 		$('#rack-barcode').val('').prop('disabled', false).removeClass('valid invalid');
 		$('#submit-check-out').prop('disabled', true).html('<i class="fa fa-sign-out"></i> CHECK OUT');
-		
+
 		// Hide and reset validation icons
 		$('#batch-validation-icon, #rack-validation-icon')
 			.removeClass('show valid invalid validating')
 			.html('');
-		
+
 		// Hide all message sections
 		$('#error-section, #success-section, #fifo-warning-section').removeClass('show').hide();
-		
+
 		// Auto-focus back to batch field
 		setTimeout(() => {
 			$('#batch-barcode').focus();
 		}, 100);
 	}
-	
+
 	enable_form() {
 		$('#batch-barcode, #rack-barcode').prop('disabled', false);
 		$('#submit-check-out').prop('disabled', false).html('<i class="fa fa-sign-out"></i> CHECK OUT');

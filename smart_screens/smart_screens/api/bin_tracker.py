@@ -154,21 +154,24 @@ def check_in_batch(batch, rack_id):
 
 
 @frappe.whitelist()
-def check_out_batch(batch, rack_id):
+def check_out_batch(batch, rack_id, force_fifo_override=False):
 	"""
 	API method to check out a batch from a rack location
 	Now accepts stripped batch numbers (mix_barcode) and converts to full batch
 	Warehouse is auto-detected from the rack
-	Uses Two-Level FIFO:
-	1. Level 1: Batch creation date (ERPNext FIFO)
-	2. Level 2: Check-in time (for bins of same batch)
+	
+	FIFO Enforcement:
+	- By default, blocks checkout if the scanned batch is not the oldest for this item
+	- Set force_fifo_override=True to proceed anyway (violation will be logged)
 
 	Args:
 		batch: Batch number (can be stripped like "25F14X13" or full like "P25F14X13")
 		rack_id: Rack Location Master name or barcode
+		force_fifo_override: If True, allows checkout even if FIFO is violated
 
 	Returns:
 		dict: Success status, message, item_code, timestamp, remarks, and doc_name
+		      If FIFO violation detected and force_fifo_override=False, returns fifo_violation=True
 	"""
 	try:
 		# Validate inputs
@@ -181,18 +184,81 @@ def check_out_batch(batch, rack_id):
 			frappe.throw(_(batch_result["message"]))
 		
 		full_batch = batch_result["batch_no"]
+		item_code = batch_result["item_code"]
 		
-			# Get rack and auto-detect warehouse from it
-		rack_doc = frappe.get_doc("Rack Location Master", rack_id)
+		# Get rack and auto-detect warehouse from it
+		# Try by barcode first, then by name
+		rack_doc = None
+		rack_by_barcode = frappe.db.get_value(
+			"Rack Location Master",
+			{"barcode": rack_id, "docstatus": 1},
+			["name", "warehouse_name", "barcode"],
+			as_dict=True
+		)
+		if rack_by_barcode:
+			rack_doc = frappe.get_doc("Rack Location Master", rack_by_barcode.name)
+		else:
+			rack_doc = frappe.get_doc("Rack Location Master", rack_id)
+		
 		if rack_doc.docstatus != 1:
 			frappe.throw(_("Rack {0} is not submitted. Please submit it first.").format(rack_id))
 		
 		# Auto-detect warehouse from rack
 		warehouse = rack_doc.warehouse_name
+		rack_name = rack_doc.name
 		
-		# Find the checked-in record (Two-Level FIFO)
-		# Level 1: Order by batch creation date (oldest batch first)
-		# Level 2: Order by check-in time (earliest check-in first for same batch)
+		# FIFO Check: Find the oldest batch for this item in the warehouse
+		oldest_batch = frappe.db.sql("""
+			SELECT 
+				bs.batch,
+				bs.rack_id,
+				bs.check_in_time,
+				b.creation as batch_creation,
+				rlm.barcode as rack_barcode
+			FROM `tabBin Storage Status` bs
+			INNER JOIN `tabBatch` b ON bs.batch = b.name
+			LEFT JOIN `tabRack Location Master` rlm ON bs.rack_id = rlm.name
+			WHERE 
+				bs.item_code = %s 
+				AND bs.warehouse = %s 
+				AND bs.status = 1
+			ORDER BY b.creation ASC, bs.check_in_time ASC
+			LIMIT 1
+		""", (item_code, warehouse), as_dict=1)
+		
+		fifo_violation = False
+		fifo_batch_info = None
+		
+		if oldest_batch:
+			oldest = oldest_batch[0]
+			if oldest.batch != full_batch:
+				fifo_violation = True
+				fifo_batch_info = {
+					"batch": oldest.batch,
+					"rack_id": oldest.rack_id,
+					"rack_barcode": oldest.rack_barcode,
+					"check_in_time": oldest.check_in_time,
+					"batch_creation": oldest.batch_creation
+				}
+				
+				# If FIFO override is not forced, return error
+				if not force_fifo_override:
+					return {
+						"success": False,
+						"fifo_violation": True,
+						"message": (
+							f"FIFO Violation: Batch {oldest.batch} in rack {oldest.rack_barcode or oldest.rack_id} "
+							f"was created earlier and should be checked out first."
+						),
+						"fifo_batch": oldest.batch,
+						"fifo_rack": oldest.rack_id,
+						"fifo_rack_barcode": oldest.rack_barcode,
+						"scanned_batch": full_batch,
+						"item_code": item_code,
+						"warehouse": warehouse
+					}
+		
+		# Find the checked-in record for the requested batch
 		records = frappe.db.sql("""
 			SELECT bs.name
 			FROM `tabBin Storage Status` bs
@@ -204,7 +270,7 @@ def check_out_batch(batch, rack_id):
 				AND bs.status = 1
 			ORDER BY b.creation ASC, bs.check_in_time ASC
 			LIMIT 1
-		""", (full_batch, rack_id, warehouse), as_dict=1)
+		""", (full_batch, rack_name, warehouse), as_dict=1)
 		
 		if not records:
 			frappe.throw(
@@ -215,6 +281,15 @@ def check_out_batch(batch, rack_id):
 		doc = frappe.get_doc("Bin Storage Status", records[0].name)
 		doc.status = 0
 		doc.check_out_time = now_datetime()
+		
+		# If FIFO was violated but override was forced, log it in remarks
+		if fifo_violation and force_fifo_override and fifo_batch_info:
+			fifo_remark = (
+				f"FIFO Override: Checked out {full_batch} instead of older batch "
+				f"{fifo_batch_info['batch']} (in rack {fifo_batch_info['rack_barcode'] or fifo_batch_info['rack_id']})"
+			)
+			doc.remarks = ((doc.remarks or "") + "\n" + fifo_remark).strip()
+		
 		doc.save()
 		frappe.db.commit()
 		
@@ -222,11 +297,12 @@ def check_out_batch(batch, rack_id):
 			"success": True,
 			"message": "Check-Out Complete",
 			"item_code": doc.item_code,
-				"warehouse": warehouse,
+			"warehouse": warehouse,
 			"timestamp": doc.check_out_time,
 			"remarks": doc.remarks or "",
 			"doc_name": doc.name,
-			"fifo_warning": "FIFO missed" in (doc.remarks or ""),
+			"fifo_warning": fifo_violation,
+			"fifo_override_used": fifo_violation and force_fifo_override,
 			"full_batch": full_batch,
 			"stripped_batch": batch
 		}
@@ -455,9 +531,15 @@ def validate_check_out_inputs(batch=None, rack_id=None):
 		"rack_message": "",
 		"item_code": None,
 		"rack_name": None,
-			"warehouse": None,
+		"warehouse": None,
 		"can_submit": False,
-		"full_batch": None
+		"full_batch": None,
+		# FIFO validation fields
+		"fifo_violation": False,
+		"fifo_batch": None,
+		"fifo_rack": None,
+		"fifo_rack_barcode": None,
+		"fifo_message": ""
 	}
 	
 	try:
@@ -571,7 +653,44 @@ def validate_check_out_inputs(batch=None, rack_id=None):
 				result["batch_message"] = f"Batch is in {result.get('expected_rack_barcode', 'another rack')}, not this rack"
 				result["rack_message"] = "Batch not stored in this rack"
 		
-		# Can submit only if both are valid
+		# FIFO Validation: Check if this is the oldest batch for this item
+		if result["batch_valid"] and result["rack_valid"] and result["item_code"]:
+			# Get the batch creation date for the current batch
+			current_batch_creation = frappe.db.get_value("Batch", result["full_batch"], "creation")
+			
+			# Find the oldest batch for this item that is still checked in
+			oldest_batch = frappe.db.sql("""
+				SELECT 
+					bs.batch,
+					bs.rack_id,
+					bs.check_in_time,
+					b.creation as batch_creation,
+					rlm.barcode as rack_barcode
+				FROM `tabBin Storage Status` bs
+				INNER JOIN `tabBatch` b ON bs.batch = b.name
+				LEFT JOIN `tabRack Location Master` rlm ON bs.rack_id = rlm.name
+				WHERE 
+					bs.item_code = %s 
+					AND bs.warehouse = %s 
+					AND bs.status = 1
+				ORDER BY b.creation ASC, bs.check_in_time ASC
+				LIMIT 1
+			""", (result["item_code"], result["warehouse"]), as_dict=1)
+			
+			if oldest_batch:
+				oldest = oldest_batch[0]
+				# Check if the current batch is NOT the oldest (FIFO violation)
+				if oldest.batch != result["full_batch"]:
+					result["fifo_violation"] = True
+					result["fifo_batch"] = oldest.batch
+					result["fifo_rack"] = oldest.rack_id
+					result["fifo_rack_barcode"] = oldest.rack_barcode
+					result["fifo_message"] = (
+						f"FIFO Warning: Batch {oldest.batch} in rack {oldest.rack_barcode or oldest.rack_id} "
+						f"was created earlier and should be checked out first."
+					)
+		
+		# Can submit only if both are valid (FIFO violation is a warning, not a blocker at validation stage)
 		result["can_submit"] = result["batch_valid"] and result["rack_valid"]
 		
 		return result
