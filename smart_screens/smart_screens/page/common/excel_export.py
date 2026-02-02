@@ -214,7 +214,7 @@ f"{report_title} - Export Error"
 			"error": str(e)
 		}
 
-
+@frappe.whitelist()
 def export_batch_details_to_excel(common_code, batches, filters, warehouse_filter='', item_groups=None):
 	"""
 Export batch details for a specific common code to Excel
