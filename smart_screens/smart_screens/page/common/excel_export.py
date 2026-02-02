@@ -233,7 +233,17 @@ dict: {success: bool, file_url: str, file_name: str} or {success: False, error: 
 	from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 	from openpyxl.utils import get_column_letter
 	
+	import json
+	
 	try:
+		# Handle stringified arguments from frappe.call
+		if isinstance(batches, str):
+			batches = json.loads(batches)
+		if isinstance(filters, str):
+			filters = json.loads(filters)
+		if isinstance(item_groups, str):
+			item_groups = json.loads(item_groups)
+			
 		# If item_groups not specified, get from batches keys
 		if not item_groups:
 			item_groups = list(batches.keys())
