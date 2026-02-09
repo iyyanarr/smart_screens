@@ -39,6 +39,7 @@ class BinCheckOutPage {
 			batch_valid: false,
 			rack_valid: false
 		};
+		this.last_spoken_rack = null; // Guard to prevent duplicate audio on blur/tab-switch
 
 		this.init();
 	}
@@ -596,6 +597,7 @@ class BinCheckOutPage {
 				self.validation_state.batch_valid = false;
 			} else {
 				self.validation_state.rack_valid = false;
+				self.last_spoken_rack = null; // Allow speaking again if user modifies input
 			}
 
 			// Update submit button state
@@ -724,9 +726,10 @@ class BinCheckOutPage {
 							this.validation_state.rack_valid = true;
 							this.rack_id = result.rack_name;
 
-							// Play rack name as audio
-							if (this.rack_id) {
+							// Play rack name as audio - only if it's a new rack scan
+							if (this.rack_id && this.rack_id !== this.last_spoken_rack) {
 								this.speak(`Rack ${this.rack_id}`);
+								this.last_spoken_rack = this.rack_id;
 							}
 						} else {
 							rack_icon.addClass('invalid').html('✗');
@@ -926,6 +929,7 @@ class BinCheckOutPage {
 		this.item_code = null;
 		this.warehouse = null;
 		this.fifo_info = null;
+		this.last_spoken_rack = null;
 		this.validation_state = {
 			batch_valid: false,
 			rack_valid: false

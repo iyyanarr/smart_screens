@@ -32,6 +32,7 @@ class BinCheckInPage {
 	constructor(page) {
 		this.page = page;
 		this.warehouse = null; // Will be auto-extracted from rack barcode
+		this.last_spoken_rack = null; // Guard to prevent duplicate audio on blur/tab-switch
 		this.init();
 	}
 
@@ -431,6 +432,7 @@ class BinCheckInPage {
 				self.validation_state.batch_valid = false;
 			} else {
 				self.validation_state.rack_valid = false;
+				self.last_spoken_rack = null; // Allow speaking again if user modifies input
 			}
 
 			// Update submit button state
@@ -541,9 +543,10 @@ class BinCheckInPage {
 							self.rack_name = result.rack_name;
 							self.warehouse = result.warehouse; // Get warehouse from API response
 
-							// Play rack name as audio
-							if (self.rack_name) {
+							// Play rack name as audio - only if it's a new rack scan
+							if (self.rack_name && self.rack_name !== self.last_spoken_rack) {
 								self.speak(`Rack ${self.rack_name}`);
+								self.last_spoken_rack = self.rack_name;
 							}
 						} else {
 							rack_icon.addClass('invalid').html('✗');
@@ -672,6 +675,8 @@ class BinCheckInPage {
 			batch_valid: false,
 			rack_valid: false
 		};
+
+		this.last_spoken_rack = null;
 
 		// Hide error message
 		this.page.main.find('#error-section').removeClass('show');
