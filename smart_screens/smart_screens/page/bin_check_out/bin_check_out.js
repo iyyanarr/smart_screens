@@ -624,6 +624,26 @@ class BinCheckOutPage {
 		this.page.main.find('#reset-btn').off('click');
 	}
 
+	speak(text) {
+		if ('speechSynthesis' in window) {
+			// Cancel any ongoing speech
+			window.speechSynthesis.cancel();
+
+			// Play chime sound before speaking using direct Audio object
+			const chime = new Audio('/assets/frappe/sounds/chime.mp3');
+			chime.play().catch(e => console.log('Chime play failed:', e));
+
+			const utterance = new SpeechSynthesisUtterance(text);
+			utterance.rate = 0.9;
+			utterance.pitch = 1;
+
+			// Small delay to let chime play a bit before speaking
+			setTimeout(() => {
+				window.speechSynthesis.speak(utterance);
+			}, 500);
+		}
+	}
+
 	extract_warehouse_from_rack(rack_barcode) {
 		// Rack barcode format: {Warehouse}-{Rack ID}
 		const lastHyphenIndex = rack_barcode.lastIndexOf('-');
@@ -703,6 +723,11 @@ class BinCheckOutPage {
 							rack_input.addClass('valid').removeClass('invalid');
 							this.validation_state.rack_valid = true;
 							this.rack_id = result.rack_name;
+
+							// Play rack name as audio
+							if (this.rack_id) {
+								this.speak(`Rack ${this.rack_id}`);
+							}
 						} else {
 							rack_icon.addClass('invalid').html('✗');
 							rack_input.addClass('invalid').removeClass('valid');
