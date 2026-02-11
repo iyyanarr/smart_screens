@@ -3,7 +3,8 @@ SPP Aggregated Report - Streamlined version using modular architecture
 Aggregates Mat, Products, and Finished Product items across SPP warehouses
 """
 import frappe
-from frappe import _, flt
+from frappe import _
+from frappe.utils import flt
 import json
 import time
 
