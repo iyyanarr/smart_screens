@@ -406,3 +406,99 @@ f"Error exporting batch details: {str(e)}\n{frappe.get_traceback()}",
 			"success": False,
 			"error": str(e)
 		}
+def export_rm_data_to_excel(data, grand_total, report_title, filters, warehouse_filter=''):
+	"""
+	Export Raw Material aggregated report data to Excel with RM-specific columns
+	"""
+	import openpyxl
+	from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+	from openpyxl.utils import get_column_letter
+	
+	try:
+		if not data:
+			return {"success": False, "error": "No data available"}
+		
+		wb = openpyxl.Workbook()
+		ws = wb.active
+		ws.title = "RM Report"
+		
+		# Styling
+		header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+		header_font = Font(bold=True, color="FFFFFF", size=11)
+		total_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+		border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+		center_align = Alignment(horizontal='center', vertical='center')
+		right_align = Alignment(horizontal='right', vertical='center')
+		
+		# Headers
+		headers = ["Item Code", "Item Name", "UOM", "Group", "Opening", "In", "Out", "Balance", "Last Rate", "Valuation"]
+		for col_num, header in enumerate(headers, 1):
+			cell = ws.cell(row=1, column=col_num)
+			cell.value = header
+			cell.fill = header_fill
+			cell.font = header_font
+			cell.alignment = center_align
+			cell.border = border
+
+		current_row = 2
+		for row in data:
+			ws.cell(row=current_row, column=1, value=row.get('item_code')).border = border
+			ws.cell(row=current_row, column=2, value=row.get('item_name')).border = border
+			ws.cell(row=current_row, column=3, value=row.get('stock_uom')).border = border
+			ws.cell(row=current_row, column=4, value=row.get('item_group')).border = border
+			
+			qty_cols = [
+				row.get('opening_qty', 0), row.get('in_qty', 0), row.get('out_qty', 0), 
+				row.get('balance_qty', 0), row.get('last_purchase_rate', 0), row.get('balance_value', 0)
+			]
+			for i, val in enumerate(qty_cols, 5):
+				cell = ws.cell(row=current_row, column=i, value=float(val))
+				cell.border = border
+				cell.number_format = '#,##0.00'
+				cell.alignment = right_align
+			current_row += 1
+
+		# Grand Total
+		ws.cell(row=current_row, column=1, value="Grand Total").font = Font(bold=True)
+		ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+		
+		total_keys = ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']
+		for i, key in enumerate(total_keys, 5):
+			cell = ws.cell(row=current_row, column=i, value=float(grand_total.get(key, 0)))
+			cell.font = Font(bold=True)
+			cell.fill = total_fill
+			cell.border = border
+			cell.number_format = '#,##0.00'
+			cell.alignment = right_align
+			
+		# Skip Last Rate for grand total
+		ws.cell(row=current_row, column=9).fill = total_fill
+		ws.cell(row=current_row, column=9).border = border
+		
+		# Valuation total
+		cell = ws.cell(row=current_row, column=10, value=float(grand_total.get('balance_value', 0)))
+		cell.font = Font(bold=True)
+		cell.fill = total_fill
+		cell.border = border
+		cell.number_format = '#,##0.00'
+		cell.alignment = right_align
+		
+		# Widths
+		ws.column_dimensions['A'].width = 20
+		ws.column_dimensions['B'].width = 30
+		for char in 'EFGHJ':
+			ws.column_dimensions[char].width = 15
+
+		file_data = BytesIO()
+		wb.save(file_data)
+		file_data.seek(0)
+		
+		filename = f"RM_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+		file_doc = frappe.get_doc({"doctype": "File", "file_name": filename, "is_private": 0, "content": file_data.getvalue()})
+		file_doc.save(ignore_permissions=True)
+		
+		return {"success": True, "file_url": file_doc.file_url, "file_name": filename}
+		
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "RM Export Error")
+		return {"success": False, "error": str(e)}

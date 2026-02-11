@@ -60,3 +60,29 @@ class BatComReportConfig(ReportConfig):
 		]
 		item_groups = ["Batch", "Master Batch", "Compound"]
 		super().__init__("BatCom Aggregated Report", warehouses, item_groups)
+
+
+class RMReportConfig(ReportConfig):
+	"""Configuration for Raw Material Aggregated Report"""
+	
+	def __init__(self):
+		# Specific warehouses provided by user
+		warehouses = [
+			"Incoming Store - SPP INDIA"
+		]
+		
+		# Find all Fchem Bin warehouses
+		try:
+			fchem_bins = frappe.get_all("Warehouse", filters={"name": ["like", "Fchem Bin%"]}, pluck="name")
+			warehouses.extend(fchem_bins)
+		except Exception:
+			# Fallback if query fails during init
+			pass
+			
+		# Item Groups: Children of Raw Material except Batch
+		item_groups = [
+			"Addittive", "Bulk Material", "Carbon", "Chemical", 
+			"Chemicals", "Fine Chemical", "Plastisizer", "Rubber"
+		]
+		
+		super().__init__("Raw Material Aggregated Report", warehouses, item_groups)
