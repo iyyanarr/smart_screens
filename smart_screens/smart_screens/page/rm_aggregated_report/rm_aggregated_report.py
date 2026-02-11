@@ -20,6 +20,7 @@ from smart_screens.smart_screens.page.common.excel_export import (
 	export_aggregated_data_to_excel,
 	export_batch_details_to_excel
 )
+from smart_screens.smart_screens.page.common.valuation_engine import get_bulk_valuation_rates
 
 # Initialize configuration
 config = RMReportConfig()
@@ -185,9 +186,12 @@ def aggregate_by_item_code_rm(data):
 		'balance_qty': 'sum'
 	}).reset_index()
 	
-	# Fetch Last Purchase Rates for all unique items
-	item_codes = aggregated['item'].unique().tolist()
-	purchase_rates = get_last_purchase_rates(item_codes)
+	# Fetch Valuation Rates using Central Engine
+	items_metadata = [
+		{'item_code': row['item'], 'item_group': row['item_group']} 
+		for _, row in aggregated.iterrows()
+	]
+	valuation_rates = get_bulk_valuation_rates(items_metadata)
 	
 	result = []
 	grand_total = {
@@ -198,8 +202,8 @@ def aggregate_by_item_code_rm(data):
 		item_code = row['item']
 		balance_qty = float(row['balance_qty'])
 		
-		# Use Last Purchase Rate for valuation
-		last_rate = float(purchase_rates.get(item_code, 0))
+		# Use Central Engine for valuation
+		last_rate = float(valuation_rates.get(item_code, 0))
 		valuation = balance_qty * last_rate
 		
 		item_row = {
@@ -232,42 +236,6 @@ def aggregate_by_item_code_rm(data):
 		"grand_total": grand_total
 	}
 
-def get_last_purchase_rates(item_codes):
-	"""Fetch the most recent purchase rate for a list of items across PR and PI"""
-	if not item_codes:
-		return {}
-	
-	rates = {}
-	
-	# 1. Check Purchase Receipt Items (more authoritative for stock)
-	pr_items = frappe.db.sql("""
-		SELECT pri.item_code, pri.base_rate as rate
-		FROM `tabPurchase Receipt Item` pri
-		JOIN `tabPurchase Receipt` pr ON pri.parent = pr.name
-		WHERE pri.item_code IN %s AND pr.docstatus = 1
-		ORDER BY pr.posting_date DESC, pr.posting_time DESC
-	""", (tuple(item_codes),), as_dict=True)
-	
-	for row in pr_items:
-		if row.item_code not in rates:
-			rates[row.item_code] = row.rate
-			
-	# 2. Check Purchase Invoice Items for remaining items
-	remaining = [code for code in item_codes if code not in rates]
-	if remaining:
-		pi_items = frappe.db.sql("""
-			SELECT pii.item_code, pii.base_rate as rate
-			FROM `tabPurchase Invoice Item` pii
-			JOIN `tabPurchase Invoice` pi ON pii.parent = pi.name
-			WHERE pii.item_code IN %s AND pi.docstatus = 1
-			ORDER BY pi.posting_date DESC, pi.posting_time DESC
-		""", (tuple(remaining),), as_dict=True)
-		
-		for row in pi_items:
-			if row.item_code not in rates:
-				rates[row.item_code] = row.rate
-				
-	return rates
 
 @frappe.whitelist()
 def get_batch_details_by_item_code(item_code, filters=None, warehouse=''):

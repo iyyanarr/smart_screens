@@ -1,10 +1,10 @@
-frappe.pages['spp-aggregated-report'].on_page_load = function(wrapper) {
+frappe.pages['spp-aggregated-report'].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: 'SPP Aggregated Report',
 		single_column: true
 	});
-	
+
 	new SPPAggregatedReport(page);
 }
 
@@ -15,7 +15,7 @@ class SPPAggregatedReport {
 		this.add_buttons();
 		this.show_empty_state();
 	}
-	
+
 	make_filters() {
 		this.filters = new frappe.ui.FieldGroup({
 			fields: [
@@ -66,22 +66,22 @@ class SPPAggregatedReport {
 			],
 			body: this.page.body
 		});
-		
+
 		this.filters.make();
 	}
-	
+
 	add_buttons() {
 		this.page.set_primary_action(__('Generate Report'), () => this.load_report(), 'octicon octicon-sync');
-		
+
 		// Add Export to Excel button
 		this.page.add_inner_button(__('Export to Excel'), () => this.export_to_excel(), __('Export'));
-		
+
 		// Add button to manage excluded batches
 		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
 			frappe.set_route('List', 'Excluded Stock Batch');
 		}, __('Tools'));
 	}
-	
+
 	load_report() {
 		const filter_values = {
 			company: this.filters.get_value('company'),
@@ -89,27 +89,27 @@ class SPPAggregatedReport {
 			to_date: this.filters.get_value('to_date'),
 			item_group: this.filters.get_value('item_group')
 		};
-		
+
 		// Store filter values for later use (e.g., when showing batch details)
 		this.current_filters = filter_values;
-		
+
 		this.show_loading_with_progress();
-		
+
 		// Subscribe to real-time progress updates
 		frappe.realtime.on('spp_aggregated_progress', (data) => {
 			this.update_progress(data);
 		});
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_spp_batch_balance_data',
 			args: { filters: filter_values },
 			callback: (r) => {
 				// Unsubscribe from progress updates
 				frappe.realtime.off('spp_aggregated_progress');
-				
+
 				if (r.message && r.message.success) {
 					this.render_report(r.message);
-					
+
 					// Show performance summary if available
 					if (r.message.performance) {
 						this.show_performance_summary(r.message.performance);
@@ -127,7 +127,7 @@ class SPPAggregatedReport {
 			error: (err) => {
 				// Unsubscribe from progress updates
 				frappe.realtime.off('spp_aggregated_progress');
-				
+
 				frappe.msgprint({
 					title: __('Error'),
 					indicator: 'red',
@@ -138,16 +138,16 @@ class SPPAggregatedReport {
 			}
 		});
 	}
-	
+
 	render_report(response) {
 		const data = response.data || [];
 		const grand_total = response.grand_total || {};
-		
+
 		if (!data || data.length === 0) {
 			this.show_empty_state('No data found for the selected filters');
 			return;
 		}
-		
+
 		// Store original data for filtering and sorting
 		this.report_data = data;
 		this.grand_total = grand_total;
@@ -155,7 +155,7 @@ class SPPAggregatedReport {
 		this.filtered_data = [...data]; // Copy for filtering
 		this.current_sort = { column: 'common_code', order: 'asc' }; // Default sort
 		this.current_warehouse = ''; // NEW: Track current warehouse filter
-		
+
 		// Create aggregated table HTML
 		let html = `
 			<div class="spp-aggregated-container">
@@ -171,9 +171,9 @@ class SPPAggregatedReport {
 							<label for="warehouse-filter" class="filter-label">Warehouse:</label>
 							<select class="form-control warehouse-filter" id="warehouse-filter">
 								<option value="">All Warehouses</option>
-								${(response.warehouses_used || []).map(wh => 
-									`<option value="${wh}">${wh.replace(' - SPP INDIA', '')}</option>`
-								).join('')}
+								${(response.warehouses_used || []).map(wh =>
+			`<option value="${wh}">${wh.replace(' - SPP INDIA', '')}</option>`
+		).join('')}
 							</select>
 						</div>
 						<div class="search-box">
@@ -196,11 +196,14 @@ class SPPAggregatedReport {
 								<th rowspan="2" class="item-header sortable-header" data-column="common_code" data-type="string">
 									Item Code <i class="fa fa-sort sort-icon"></i>
 								</th>
-								<th colspan="4" class="mat-header">Mat (Nos)</th>
-								<th colspan="4" class="products-header">Products</th>
-								<th colspan="4" class="finished-header">Finished Product</th>
+								<th colspan="6" class="mat-header">Mat (Nos)</th>
+								<th colspan="6" class="products-header">Products</th>
+								<th colspan="6" class="finished-header">Finished Product</th>
 								<th rowspan="2" class="total-header sortable-header" data-column="Total.balance_qty" data-type="number">
 									Total <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th rowspan="2" class="total-header sortable-header" data-column="Total.balance_value" data-type="number">
+									Total Value <i class="fa fa-sort sort-icon"></i>
 								</th>
 								<th rowspan="2" class="action-header">Actions</th>
 							</tr>
@@ -218,6 +221,8 @@ class SPPAggregatedReport {
 								<th class="mat-subheader sortable-header" data-column="Mat.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="mat-subheader">Rate</th>
+								<th class="mat-subheader">Value</th>
 								<!-- Products columns -->
 								<th class="products-subheader sortable-header" data-column="Products.opening_qty" data-type="number">
 									Opening <i class="fa fa-sort sort-icon"></i>
@@ -231,6 +236,8 @@ class SPPAggregatedReport {
 								<th class="products-subheader sortable-header" data-column="Products.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="products-subheader">Rate</th>
+								<th class="products-subheader">Value</th>
 								<!-- Finished Product columns -->
 								<th class="finished-subheader sortable-header" data-column="Finished Product.opening_qty" data-type="number">
 									Opening <i class="fa fa-sort sort-icon"></i>
@@ -244,6 +251,8 @@ class SPPAggregatedReport {
 								<th class="finished-subheader sortable-header" data-column="Finished Product.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="finished-subheader">Rate</th>
+								<th class="finished-subheader">Value</th>
 							</tr>
 						</thead>
 						<tbody id="table-body">
@@ -255,16 +264,16 @@ class SPPAggregatedReport {
 				</div>
 			</div>
 		`;
-		
+
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
 		this.$container.html(html);
-		
+
 		this.apply_styles();
 		this.render_table_rows(this.filtered_data);
 		this.bind_search_and_sort();
 	}
-	
+
 	// NEW: Function to re-aggregate data by warehouse
 	aggregate_by_warehouse(warehouse) {
 		if (!warehouse || warehouse === '') {
@@ -274,36 +283,36 @@ class SPPAggregatedReport {
 				grand_total: this.grand_total
 			};
 		}
-		
+
 		// Filter raw data by warehouse
 		const warehouse_data = this.raw_filtered_data.filter(row => {
 			return row.warehouse === warehouse;
 		});
-		
+
 		if (warehouse_data.length === 0) {
 			return {
 				data: [],
 				grand_total: {
-					"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+					"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 				}
 			};
 		}
-		
+
 		// Re-aggregate by common_code
 		const aggregated = {};
 		const grand_total = {
-			"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+			"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 		};
-		
+
 		warehouse_data.forEach(row => {
 			const item = row.item || '';
-			
+
 			// Extract common_code
 			let common_code;
 			if (item.startsWith('t.')) {
@@ -311,74 +320,74 @@ class SPPAggregatedReport {
 			} else {
 				common_code = item.substring(1, 5);
 			}
-			
+
 			if (!common_code) return;
-			
+
 			// Initialize aggregated row
 			if (!aggregated[common_code]) {
 				aggregated[common_code] = {
 					common_code: common_code,
 					warehouses: [warehouse],
-					"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+					"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 				};
 			}
-			
+
 			// Normalize item_group
 			let item_group = row.item_group || '';
 			if (item_group === 'Finished Products') {
 				item_group = 'Finished Product';
 			}
-			
+
 			if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
 				return;
 			}
-			
+
 			// Add quantities
 			const opening = parseFloat(row.opening_qty) || 0;
 			const in_qty = parseFloat(row.in_qty) || 0;
 			const out_qty = parseFloat(row.out_qty) || 0;
 			const balance = parseFloat(row.balance_qty) || 0;
-			
+
 			aggregated[common_code][item_group].opening_qty += opening;
 			aggregated[common_code][item_group].in_qty += in_qty;
 			aggregated[common_code][item_group].out_qty += out_qty;
 			aggregated[common_code][item_group].balance_qty += balance;
-			
+
 			aggregated[common_code].Total.opening_qty += opening;
 			aggregated[common_code].Total.in_qty += in_qty;
 			aggregated[common_code].Total.out_qty += out_qty;
 			aggregated[common_code].Total.balance_qty += balance;
-			
+
 			// Update grand totals
 			grand_total[item_group].opening_qty += opening;
 			grand_total[item_group].in_qty += in_qty;
 			grand_total[item_group].out_qty += out_qty;
 			grand_total[item_group].balance_qty += balance;
-			
+
 			grand_total.Total.opening_qty += opening;
 			grand_total.Total.in_qty += in_qty;
 			grand_total.Total.out_qty += out_qty;
 			grand_total.Total.balance_qty += balance;
 		});
-		
+
 		// Convert to array and sort
-		const result = Object.values(aggregated).sort((a, b) => 
+		const result = Object.values(aggregated).sort((a, b) =>
 			a.common_code.localeCompare(b.common_code)
 		);
-		
+
 		return {
 			data: result,
 			grand_total: grand_total
 		};
 	}
-	
+
 	render_table_rows(data) {
 		const $tbody = $('#table-body');
 		$tbody.empty();
-		
+
 		// Add data rows
 		data.forEach(row => {
 			const rowHtml = `
@@ -389,18 +398,25 @@ class SPPAggregatedReport {
 					<td class="qty-cell in-qty">${this.format_number(row.Mat.in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row.Mat.out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row.Mat.balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row.Mat.valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row.Mat.balance_value)}</strong></td>
 					<!-- Products -->
 					<td class="qty-cell">${this.format_number(row.Products.opening_qty)}</td>
 					<td class="qty-cell in-qty">${this.format_number(row.Products.in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row.Products.out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row.Products.balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row.Products.valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row.Products.balance_value)}</strong></td>
 					<!-- Finished Product -->
 					<td class="qty-cell">${this.format_number(row['Finished Product'].opening_qty)}</td>
 					<td class="qty-cell in-qty">${this.format_number(row['Finished Product'].in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row['Finished Product'].out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row['Finished Product'].balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row['Finished Product'].valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row['Finished Product'].balance_value)}</strong></td>
 					<!-- Total -->
 					<td class="qty-cell total-cell"><strong>${this.format_number(row.Total.balance_qty)}</strong></td>
+					<td class="qty-cell total-value-cell"><strong>${this.format_currency(row.Total.balance_value)}</strong></td>
 					<!-- Actions -->
 					<td class="action-cell">
 						<button class="btn btn-xs btn-primary btn-batches" data-common-code="${row.common_code}">
@@ -410,7 +426,7 @@ class SPPAggregatedReport {
 				</tr>`;
 			$tbody.append(rowHtml);
 		});
-		
+
 		// Add grand total row
 		const grandTotalHtml = `
 			<tr class="grand-total-row">
@@ -420,59 +436,66 @@ class SPPAggregatedReport {
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Mat.balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total.Mat.balance_value)}</strong></td>
 				<!-- Products -->
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.opening_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Products.balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total.Products.balance_value)}</strong></td>
 				<!-- Finished Product -->
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].opening_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total['Finished Product'].balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total['Finished Product'].balance_value)}</strong></td>
 				<!-- Total -->
 				<td class="qty-cell total-cell"><strong>${this.format_number(this.grand_total.Total.balance_qty)}</strong></td>
+				<td class="qty-cell total-value-cell"><strong>${this.format_currency(this.grand_total.Total.balance_value)}</strong></td>
 				<td class="action-cell"></td>
 			</tr>`;
 		$tbody.append(grandTotalHtml);
-		
+
 		// Bind batch buttons after rendering
 		this.bind_batch_buttons();
-		
+
 		// Update search results count
 		$('#search-results').text(`Showing: ${data.length} items`);
 		$('#total-items').text(data.length);
 	}
-	
+
 	bind_search_and_sort() {
 		const me = this;
-		
+
 		// Warehouse filter functionality - RE-AGGREGATES data with child warehouse expansion
-		$('#warehouse-filter').on('change', function() {
+		$('#warehouse-filter').on('change', function () {
 			const selectedWarehouse = $(this).val();
-			
+
 			if (!selectedWarehouse) {
 				// No warehouse selected - show all data
 				me.current_warehouse = '';
 				me.filtered_data = me.report_data;
 				me.grand_total = me.grand_total_original || me.grand_total;
-				
+
 				// Clear search box when warehouse changes
 				$('#common-code-filter').val('');
 				$('.clear-search').hide();
-				
+
 				// Re-apply current sort
 				me.sort_data(me.current_sort.column, me.current_sort.order, false);
 				me.render_table_rows(me.filtered_data);
 				return;
 			}
-			
+
 			// Show loading indicator
 			frappe.show_alert({
 				message: __('Filtering by warehouse...'),
 				indicator: 'blue'
 			}, 2);
-			
+
 			// Call server to expand parent warehouse to child warehouses
 			frappe.call({
 				method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_child_warehouses',
@@ -480,39 +503,39 @@ class SPPAggregatedReport {
 				callback: (r) => {
 					if (r.message && r.message.length > 0) {
 						const warehouses = r.message;
-						
+
 						console.log(`Warehouse '${selectedWarehouse}' expanded to:`, warehouses);
-						
+
 						// Store expanded warehouses
 						me.current_warehouse_list = warehouses;
 						me.current_warehouse = selectedWarehouse;
-						
+
 						// Filter raw data by expanded warehouse list and re-aggregate
 						const warehouse_data = me.raw_filtered_data.filter(row => {
 							return warehouses.includes(row.warehouse);
 						});
-						
+
 						if (warehouse_data.length === 0) {
 							me.filtered_data = [];
 							me.grand_total = {
-								"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+								"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 							};
 						} else {
 							// Re-aggregate the filtered data
 							const aggregated = {};
 							const grand_total = {
-								"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+								"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 							};
-							
+
 							warehouse_data.forEach(row => {
 								const item = row.item || '';
-								
+
 								// Extract common_code
 								let common_code;
 								if (item.startsWith('t.')) {
@@ -520,74 +543,74 @@ class SPPAggregatedReport {
 								} else {
 									common_code = item.substring(1, 5);
 								}
-								
+
 								if (!common_code) return;
-								
+
 								// Initialize aggregated row
 								if (!aggregated[common_code]) {
 									aggregated[common_code] = {
 										common_code: common_code,
 										warehouses: warehouses,
-										"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+										"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 									};
 								}
-								
+
 								// Normalize item_group
 								let item_group = row.item_group || '';
 								if (item_group === 'Finished Products') {
 									item_group = 'Finished Product';
 								}
-								
+
 								if (!['Mat', 'Products', 'Finished Product'].includes(item_group)) {
 									return;
 								}
-								
+
 								// Add quantities
 								const opening = parseFloat(row.opening_qty) || 0;
 								const in_qty = parseFloat(row.in_qty) || 0;
 								const out_qty = parseFloat(row.out_qty) || 0;
 								const balance = parseFloat(row.balance_qty) || 0;
-								
+
 								aggregated[common_code][item_group].opening_qty += opening;
 								aggregated[common_code][item_group].in_qty += in_qty;
 								aggregated[common_code][item_group].out_qty += out_qty;
 								aggregated[common_code][item_group].balance_qty += balance;
-								
+
 								aggregated[common_code].Total.opening_qty += opening;
 								aggregated[common_code].Total.in_qty += in_qty;
 								aggregated[common_code].Total.out_qty += out_qty;
 								aggregated[common_code].Total.balance_qty += balance;
-								
+
 								// Update grand totals
 								grand_total[item_group].opening_qty += opening;
 								grand_total[item_group].in_qty += in_qty;
 								grand_total[item_group].out_qty += out_qty;
 								grand_total[item_group].balance_qty += balance;
-								
+
 								grand_total.Total.opening_qty += opening;
 								grand_total.Total.in_qty += in_qty;
 								grand_total.Total.out_qty += out_qty;
 								grand_total.Total.balance_qty += balance;
 							});
-							
+
 							// Convert to array and sort
-							me.filtered_data = Object.values(aggregated).sort((a, b) => 
+							me.filtered_data = Object.values(aggregated).sort((a, b) =>
 								a.common_code.localeCompare(b.common_code)
 							);
 							me.grand_total = grand_total;
 						}
-						
+
 						// Clear search box when warehouse changes
 						$('#common-code-filter').val('');
 						$('.clear-search').hide();
-						
+
 						// Re-apply current sort
 						me.sort_data(me.current_sort.column, me.current_sort.order, false);
 						me.render_table_rows(me.filtered_data);
-						
+
 						frappe.show_alert({
 							message: __('Filtered by {0} ({1} child warehouses)', [selectedWarehouse, warehouses.length]),
 							indicator: 'green'
@@ -606,16 +629,16 @@ class SPPAggregatedReport {
 				}
 			});
 		});
-		
+
 		// Search functionality - FIXED: Now correctly filters from current warehouse-filtered data
-		$('#common-code-filter').on('input', function() {
+		$('#common-code-filter').on('input', function () {
 			const searchText = $(this).val().toLowerCase().trim();
-			
+
 			// Get the base data after warehouse filter has been applied
 			const selectedWarehouse = $('#warehouse-filter').val();
 			const aggregated_result = me.aggregate_by_warehouse(selectedWarehouse);
 			let baseData = aggregated_result.data;
-			
+
 			if (searchText === '') {
 				// No search - show all data from current warehouse filter
 				me.filtered_data = baseData;
@@ -623,149 +646,149 @@ class SPPAggregatedReport {
 				$('.clear-search').hide();
 			} else {
 				// Apply search on top of warehouse-filtered data
-				me.filtered_data = baseData.filter(row => 
+				me.filtered_data = baseData.filter(row =>
 					row.common_code.toLowerCase().includes(searchText)
-					);
-				
+				);
+
 				// FIXED: Recalculate grand total for filtered data only
 				me.grand_total = me.calculate_grand_total(me.filtered_data);
-				
+
 				$('.clear-search').show();
 			}
-			
+
 			// Re-apply current sort
 			me.sort_data(me.current_sort.column, me.current_sort.order, false);
 			me.render_table_rows(me.filtered_data);
 		});
-		
+
 		// Clear search button
-		$('.clear-search').on('click', function() {
+		$('.clear-search').on('click', function () {
 			$('#common-code-filter').val('').trigger('input');
 		});
-		
+
 		// Sortable column headers
-		$('.sortable-header').on('click', function() {
+		$('.sortable-header').on('click', function () {
 			const column = $(this).data('column');
 			const dataType = $(this).data('type');
-			
+
 			// Toggle sort order
 			let order = 'asc';
 			if (me.current_sort.column === column && me.current_sort.order === 'asc') {
 				order = 'desc';
 			}
-			
+
 			me.sort_data(column, order, true);
 		});
 	}
-	
+
 	// Helper function to calculate grand total from filtered data
 	calculate_grand_total(data) {
 		const grand_total = {
-			"Mat": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Products": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Finished Product": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+			"Mat": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Products": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Finished Product": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 		};
-		
+
 		data.forEach(row => {
 			// Add Mat quantities
 			grand_total.Mat.opening_qty += parseFloat(row.Mat.opening_qty) || 0;
 			grand_total.Mat.in_qty += parseFloat(row.Mat.in_qty) || 0;
 			grand_total.Mat.out_qty += parseFloat(row.Mat.out_qty) || 0;
 			grand_total.Mat.balance_qty += parseFloat(row.Mat.balance_qty) || 0;
-			
+
 			// Add Products quantities
 			grand_total.Products.opening_qty += parseFloat(row.Products.opening_qty) || 0;
 			grand_total.Products.in_qty += parseFloat(row.Products.in_qty) || 0;
 			grand_total.Products.out_qty += parseFloat(row.Products.out_qty) || 0;
 			grand_total.Products.balance_qty += parseFloat(row.Products.balance_qty) || 0;
-			
+
 			// Add Finished Product quantities
 			grand_total['Finished Product'].opening_qty += parseFloat(row['Finished Product'].opening_qty) || 0;
 			grand_total['Finished Product'].in_qty += parseFloat(row['Finished Product'].in_qty) || 0;
 			grand_total['Finished Product'].out_qty += parseFloat(row['Finished Product'].out_qty) || 0;
 			grand_total['Finished Product'].balance_qty += parseFloat(row['Finished Product'].balance_qty) || 0;
-			
+
 			// Add to Total
 			grand_total.Total.opening_qty += parseFloat(row.Total.opening_qty) || 0;
 			grand_total.Total.in_qty += parseFloat(row.Total.in_qty) || 0;
 			grand_total.Total.out_qty += parseFloat(row.Total.out_qty) || 0;
 			grand_total.Total.balance_qty += parseFloat(row.Total.balance_qty) || 0;
 		});
-		
+
 		return grand_total;
 	}
-	
+
 	sort_data(column, order, updateUI = true) {
 		const me = this;
 		me.current_sort = { column, order };
-		
+
 		// Helper function to get nested property value
 		const getNestedValue = (obj, path) => {
 			return path.split('.').reduce((current, prop) => current?.[prop], obj);
 		};
-		
+
 		// Sort the filtered data
 		me.filtered_data.sort((a, b) => {
 			let aVal = getNestedValue(a, column);
 			let bVal = getNestedValue(b, column);
-			
+
 			// Handle null/undefined values
 			if (aVal === null || aVal === undefined) aVal = 0;
 			if (bVal === null || bVal === undefined) bVal = 0;
-			
+
 			// String comparison for common_code
 			if (column === 'common_code') {
 				aVal = String(aVal).toLowerCase();
 				bVal = String(bVal).toLowerCase();
-				return order === 'asc' 
-					? aVal.localeCompare(bVal) 
+				return order === 'asc'
+					? aVal.localeCompare(bVal)
 					: bVal.localeCompare(aVal);
 			}
-			
+
 			// Numeric comparison for quantities
 			aVal = parseFloat(aVal) || 0;
 			bVal = parseFloat(bVal) || 0;
-			
+
 			return order === 'asc' ? aVal - bVal : bVal - aVal;
 		});
-		
+
 		if (updateUI) {
 			// Update sort icons
 			$('.sortable-header .sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
 			$('.sortable-header').removeClass('sorted-asc sorted-desc');
-			
+
 			const $header = $(`.sortable-header[data-column="${column}"]`);
 			$header.addClass(order === 'asc' ? 'sorted-asc' : 'sorted-desc');
 			$header.find('.sort-icon')
 				.removeClass('fa-sort')
 				.addClass(order === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-			
+
 			// Re-render table
 			me.render_table_rows(me.filtered_data);
 		}
 	}
-	
+
 	bind_batch_buttons() {
 		const me = this;
-		this.$container.find('.btn-batches').on('click', function() {
+		this.$container.find('.btn-batches').on('click', function () {
 			const common_code = $(this).data('common-code');
 			me.show_batch_details(common_code);
 		});
 	}
-	
+
 	show_batch_details(common_code) {
 		const me = this;
-		
+
 		// Show loading indicator in frappe interface
 		frappe.show_alert({
 			message: __('Preparing batch data...'),
 			indicator: 'blue'
 		}, 3);
-		
+
 		// Also show a progress indicator
 		frappe.show_progress(__('Loading Batches'), 30, 100, __('Fetching data from server...'));
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.get_batch_details_by_common_code',
 			args: {
@@ -795,22 +818,22 @@ class SPPAggregatedReport {
 			}
 		});
 	}
-	
+
 	export_to_excel() {
 		const filter_values = this.current_filters;
-		
+
 		if (!filter_values) {
 			frappe.msgprint(__('Please generate the report first before exporting.'));
 			return;
 		}
-		
+
 		frappe.show_alert({
 			message: __('Preparing Excel export...'),
 			indicator: 'blue'
 		}, 3);
-		
+
 		const warehouse = this.current_warehouse || '';
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.export_to_excel',
 			args: {
@@ -843,14 +866,14 @@ class SPPAggregatedReport {
 			}
 		});
 	}
-	
+
 	render_batch_modal(data) {
 		const common_code = data.common_code;
 		const batches = data.batches;
 		const mat_count = data.mat_count || 0;
 		const products_count = data.products_count || 0;
 		const finished_count = data.finished_count || 0;
-		
+
 		// Create dialog with Export to Excel button
 		const d = new frappe.ui.Dialog({
 			title: `Batch Details for Item ${common_code}`,
@@ -866,7 +889,7 @@ class SPPAggregatedReport {
 				this.export_batch_details_to_excel(common_code, batches);
 			}
 		});
-		
+
 		// Build tabbed interface HTML - Use BUTTON elements instead of anchor tags
 		let html = `
 			<div class="batch-details-container">
@@ -894,34 +917,34 @@ class SPPAggregatedReport {
 				</div>
 			</div>
 		`;
-		
+
 		d.fields_dict.batch_details_html.$wrapper.html(html);
-		
+
 		// Bind tab click events to BUTTON elements
-		d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').on('click', function(e) {
+		d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').on('click', function (e) {
 			e.preventDefault();
 			e.stopPropagation();
-			
+
 			const targetTab = $(this).data('tab');
-			
+
 			// Remove active class from all tabs and tab content
 			d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').removeClass('active');
 			d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-pane').removeClass('active');
-			
+
 			// Add active class to clicked tab and corresponding content
 			$(this).addClass('active');
 			d.fields_dict.batch_details_html.$wrapper.find(`#${targetTab}`).addClass('active');
 		});
-		
+
 		d.show();
 		this.bind_batch_table_features(d);
 	}
-	
+
 	build_batch_table(batches, item_group) {
 		if (!batches || batches.length === 0) {
 			return `<div class="text-muted text-center p-4">No batches found for ${item_group}</div>`;
 		}
-		
+
 		// Calculate totals for this item group
 		let totals = {
 			opening_qty: 0,
@@ -929,17 +952,17 @@ class SPPAggregatedReport {
 			out_qty: 0,
 			balance_qty: 0
 		};
-		
+
 		batches.forEach(batch => {
 			totals.opening_qty += parseFloat(batch.opening_qty || 0);
 			totals.in_qty += parseFloat(batch.in_qty || 0);
 			totals.out_qty += parseFloat(batch.out_qty || 0);
 			totals.balance_qty += parseFloat(batch.balance_qty || 0);
 		});
-		
+
 		// Store batches for this item group for filtering/sorting
 		const tableId = `batch-table-${item_group.toLowerCase().replace(/\s+/g, '-')}`;
-		
+
 		let html = `
 			<div class="batch-table-controls mb-3">
 				<div class="row">
@@ -969,7 +992,7 @@ class SPPAggregatedReport {
 						</tr>
 					</thead>
 					<tbody>`;
-		
+
 		batches.forEach(batch => {
 			// Escape HTML in data attributes to handle special characters
 			const escapeHtml = (str) => {
@@ -985,7 +1008,7 @@ class SPPAggregatedReport {
 					return escapeMap[match];
 				});
 			};
-			
+
 			html += `
 				<tr data-item="${escapeHtml(batch.item)}" 
 				    data-batch="${escapeHtml(batch.batch)}" 
@@ -1006,7 +1029,7 @@ class SPPAggregatedReport {
 					<td>${batch.uom || '-'}</td>
 				</tr>`;
 		});
-		
+
 		// Add total row
 		html += `
 				<tr class="batch-total-row">
@@ -1017,35 +1040,35 @@ class SPPAggregatedReport {
 					<td class="text-right"><strong>${this.format_number(totals.balance_qty)}</strong></td>
 					<td></td>
 				</tr>`;
-		
+
 		html += `
 					</tbody>
 				</table>
 			</div>`;
-		
+
 		return html;
 	}
-	
+
 	bind_batch_table_features(dialog) {
 		const me = this;
-		
+
 		// Bind search functionality
-		dialog.fields_dict.batch_details_html.$wrapper.find('.batch-search-input').on('input', function() {
+		dialog.fields_dict.batch_details_html.$wrapper.find('.batch-search-input').on('input', function () {
 			const searchText = $(this).val().toLowerCase();
 			const tableId = $(this).data('table');
 			const $table = $(`#${tableId}`);
-			
+
 			let visibleCount = 0;
-			$table.find('tbody tr').each(function() {
+			$table.find('tbody tr').each(function () {
 				// Skip the total row - it should always be visible
 				if ($(this).hasClass('batch-total-row')) {
 					return; // Continue to next iteration
 				}
-				
+
 				const item = $(this).data('item').toString().toLowerCase();
 				const batch = $(this).data('batch').toString().toLowerCase();
 				const warehouse = $(this).data('warehouse').toString().toLowerCase();
-				
+
 				if (item.includes(searchText) || batch.includes(searchText) || warehouse.includes(searchText)) {
 					$(this).show();
 					visibleCount++;
@@ -1053,36 +1076,36 @@ class SPPAggregatedReport {
 					$(this).hide();
 				}
 			});
-			
+
 			// Update count badge (excluding the total row from count)
 			$(this).closest('.batch-tab-pane').find('.batch-count').text(visibleCount);
 		});
-		
+
 		// Bind sorting functionality
-		dialog.fields_dict.batch_details_html.$wrapper.find('.sortable').on('click', function() {
+		dialog.fields_dict.batch_details_html.$wrapper.find('.sortable').on('click', function () {
 			const column = $(this).data('column');
 			const $table = $(this).closest('table');
 			const $tbody = $table.find('tbody');
-			
+
 			// Get all rows except the total row
 			const $dataRows = $tbody.find('tr:not(.batch-total-row)').toArray();
 			const $totalRow = $tbody.find('tr.batch-total-row');
-			
+
 			// Determine sort order
 			const isAscending = $(this).hasClass('sort-asc');
 			const newOrder = isAscending ? 'desc' : 'asc';
-			
+
 			// Update sort icons
 			$table.find('.sortable').removeClass('sort-asc sort-desc');
 			$table.find('.sortable i').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
-			
+
 			$(this).addClass(`sort-${newOrder}`);
 			$(this).find('i').removeClass('fa-sort').addClass(newOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-			
+
 			// Sort data rows only
 			$dataRows.sort((a, b) => {
 				let aVal, bVal;
-				
+
 				if (['opening_qty', 'in_qty', 'out_qty', 'balance_qty'].includes(column)) {
 					// Numeric sort
 					aVal = parseFloat($(a).data(column.replace('_qty', ''))) || 0;
@@ -1092,24 +1115,29 @@ class SPPAggregatedReport {
 					aVal = $(a).data(column).toString().toLowerCase();
 					bVal = $(b).data(column).toString().toLowerCase();
 				}
-				
+
 				if (newOrder === 'asc') {
 					return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
 				} else {
 					return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
 				}
 			});
-			
+
 			// Re-append sorted data rows, then append total row at the end
 			$tbody.empty().append($dataRows).append($totalRow);
 		});
 	}
-	
+
+	format_currency(val) {
+		if (val === undefined || val === null || isNaN(val)) return '₹0';
+		return '₹' + this.format_number(val);
+	}
+
 	format_number(value) {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return '0';
 		const abs = Math.abs(n);
-		
+
 		if (abs >= 10000000) {
 			return (n / 10000000).toFixed(2) + ' Cr';
 		} else if (abs >= 100000) {
@@ -1120,7 +1148,7 @@ class SPPAggregatedReport {
 			return n.toFixed(2);
 		}
 	}
-	
+
 	show_loading() {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
@@ -1131,7 +1159,7 @@ class SPPAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	show_empty_state(message = null) {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
@@ -1145,7 +1173,7 @@ class SPPAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	show_loading_with_progress() {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container progress-container">').appendTo(this.page.main);
@@ -1209,25 +1237,25 @@ class SPPAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	update_progress(data) {
 		const { step, total, message, percent } = data;
-		
+
 		// Update progress bar
 		const $progressBar = $('#spp-progress-bar');
 		$progressBar.css('width', percent + '%');
 		$progressBar.find('.progress-text').text(percent + '%');
-		
+
 		// Update current step
 		const $currentStep = $(`.step-item[data-step="${step}"]`);
 		$currentStep.addClass('active');
 		$currentStep.find('.step-message').text(message);
-		
+
 		// Mark previous steps as completed
 		for (let i = 1; i < step; i++) {
 			$(`.step-item[data-step="${i}"]`).addClass('completed').removeClass('active');
 		}
-		
+
 		// Add animation to progress bar color based on progress
 		if (percent >= 100) {
 			$progressBar.removeClass('progress-bar-animated').addClass('bg-success');
@@ -1235,23 +1263,23 @@ class SPPAggregatedReport {
 			$progressBar.addClass('bg-info');
 		}
 	}
-	
+
 	show_performance_summary(performance) {
 		const total = performance.total_time || 0;
-		
+
 		// Show subtle toast notification with performance summary
 		frappe.show_alert({
 			message: `Report generated in ${total}s (Fetch: ${performance.spp_report_fetch}s, Process: ${(total - performance.spp_report_fetch).toFixed(2)}s)`,
 			indicator: 'green'
 		}, 5);
-		
+
 		// Log detailed performance to console for developers
 		console.log('📊 SPP Aggregated Report Performance:', performance);
 	}
-	
+
 	apply_styles() {
 		if ($('#spp-aggregated-report-styles').length) return;
-		
+
 		$("<style id='spp-aggregated-report-styles'>")
 			.prop("type", "text/css")
 			.html(`
@@ -1707,45 +1735,45 @@ class SPPAggregatedReport {
 			`)
 			.appendTo("head");
 	}
-export_batch_details_to_excel(common_code, batches) {
-frappe.show_alert({
-message: __('Preparing Excel export for batch details...'),
-indicator: 'blue'
-}, 3);
+	export_batch_details_to_excel(common_code, batches) {
+		frappe.show_alert({
+			message: __('Preparing Excel export for batch details...'),
+			indicator: 'blue'
+		}, 3);
 
-frappe.call({
-method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.export_batch_details_to_excel',
-args: {
-common_code: common_code,
-batches: batches,
-filters: this.current_filters,
-warehouse_filter: this.current_warehouse || ''
-},
-callback: (r) => {
-if (r.message && r.message.success) {
-// Download the file
-window.open(r.message.file_url, '_blank');
-frappe.show_alert({
-message: __('Batch details exported successfully!'),
-indicator: 'green'
-}, 5);
-} else {
-frappe.msgprint({
-title: __('Export Failed'),
-indicator: 'red',
-message: r.message?.error || 'Failed to generate Excel file'
-});
-}
-},
-error: (err) => {
-frappe.msgprint({
-title: __('Error'),
-indicator: 'red',
-message: __('An error occurred while exporting batch details')
-});
-console.error('Batch export error:', err);
-}
-});
-}
+		frappe.call({
+			method: 'smart_screens.smart_screens.page.spp_aggregated_report.spp_aggregated_report.export_batch_details_to_excel',
+			args: {
+				common_code: common_code,
+				batches: batches,
+				filters: this.current_filters,
+				warehouse_filter: this.current_warehouse || ''
+			},
+			callback: (r) => {
+				if (r.message && r.message.success) {
+					// Download the file
+					window.open(r.message.file_url, '_blank');
+					frappe.show_alert({
+						message: __('Batch details exported successfully!'),
+						indicator: 'green'
+					}, 5);
+				} else {
+					frappe.msgprint({
+						title: __('Export Failed'),
+						indicator: 'red',
+						message: r.message?.error || 'Failed to generate Excel file'
+					});
+				}
+			},
+			error: (err) => {
+				frappe.msgprint({
+					title: __('Error'),
+					indicator: 'red',
+					message: __('An error occurred while exporting batch details')
+				});
+				console.error('Batch export error:', err);
+			}
+		});
+	}
 
 }

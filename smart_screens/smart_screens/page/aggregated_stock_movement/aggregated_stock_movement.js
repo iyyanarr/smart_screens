@@ -1,10 +1,10 @@
-frappe.pages['aggregated-stock-movement'].on_page_load = function(wrapper) {
+frappe.pages['aggregated-stock-movement'].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: 'Aggregated Stock Movement',
 		single_column: true
 	});
-	
+
 	// Initialize page
 	new AggregatedStockMovement(page);
 }
@@ -14,21 +14,21 @@ class AggregatedStockMovement {
 		this.page = page;
 		this.make_form();
 		this.add_filters();
-		
+
 		// Set default date filters
 		const today = frappe.datetime.get_today();
 		const last_month = frappe.datetime.add_months(today, -1);
 		this.filters.from_date.set_value(last_month);
 		this.filters.to_date.set_value(today);
-		
+
 		// Initialize sorting state: default to Total (closing) DESC
 		this.sort_by = 'total';
 		this.sort_order = 'desc';
-		
+
 		// Show empty state with instructions
 		this.show_empty_state();
 	}
-	
+
 	make_form() {
 		this.form = new frappe.ui.FieldGroup({
 			fields: [
@@ -95,35 +95,35 @@ class AggregatedStockMovement {
 			],
 			body: this.page.body
 		});
-		
+
 		this.form.make();
 		this.filters = this.form.fields_dict;
 	}
-	
+
 	add_filters() {
 		// Add Generate Report button as PRIMARY action
 		this.page.set_primary_action(__('Generate Report'), () => this.make_report(), 'octicon octicon-sync');
-		
+
 		this.page.add_inner_button(__('Refresh'), () => this.make_report());
 		this.page.add_inner_button(__('Validate Data'), () => this.validate_data());
 		this.page.add_inner_button(__('Export CSV'), () => this.export_to_csv());
-		
-		 // Add Manage Excluded Batches button
+
+		// Add Manage Excluded Batches button
 		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
 			frappe.set_route('List', 'Excluded Stock Batch');
 		});
-		
-		 // Add Performance Optimization buttons
+
+		// Add Performance Optimization buttons
 		this.page.add_inner_button(__('Optimize Database'), () => this.optimize_database());
 		this.page.add_inner_button(__('Analyze Performance'), () => this.analyze_performance());
 		this.page.add_inner_button(__('Benchmark Queries'), () => this.benchmark_queries());
-		
+
 		// Only keep the item code search filter (doesn't trigger report generation)
-		this.filters.item_code_filter.$input.on('input', 
+		this.filters.item_code_filter.$input.on('input',
 			frappe.utils.debounce(() => this.apply_filters(), 300)
 		);
 	}
-	
+
 	validate_data() {
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.validate_aggregation_accuracy',
@@ -145,7 +145,7 @@ class AggregatedStockMovement {
 			}
 		});
 	}
-	
+
 	make_report() {
 		const filters = {
 			from_date: this.filters.from_date.get_value(),
@@ -154,10 +154,10 @@ class AggregatedStockMovement {
 			warehouse_type: this.filters.warehouse_type.get_value(),
 			exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
 		};
-		
+
 		// Clear any previous report
 		this.page.main.find('.report-container').remove();
-		
+
 		// Add container for the report
 		this.$report_container = $('<div class="report-container">').appendTo(this.page.main);
 		this.show_loading();
@@ -183,27 +183,27 @@ class AggregatedStockMovement {
 			}
 		});
 	}
-	
+
 	apply_filters() {
 		const item_code_filter = this.filters.item_code_filter.get_value();
-		
+
 		if (item_code_filter) {
-			this.filtered_data = this.original_data.filter(item => 
+			this.filtered_data = this.original_data.filter(item =>
 				item.common_code.toLowerCase().includes(item_code_filter.toLowerCase())
 			);
 		} else {
 			this.filtered_data = [...this.original_data];
 		}
-		
+
 		this.sort_data();
 		this.render_report();
 	}
-	
+
 	sort_data() {
 		// Sort the filtered data based on current sort settings
 		this.filtered_data.sort((a, b) => {
 			let val_a, val_b;
-			
+
 			if (this.sort_by === 'common_code') {
 				val_a = a.common_code;
 				val_b = b.common_code;
@@ -221,7 +221,7 @@ class AggregatedStockMovement {
 					val_b = 0;
 				}
 			}
-			
+
 			if (typeof val_a === 'string') {
 				const comparison = val_a.localeCompare(val_b);
 				return this.sort_order === 'asc' ? comparison : -comparison;
@@ -231,26 +231,26 @@ class AggregatedStockMovement {
 			}
 		});
 	}
-	
+
 	get_sort_icon(field) {
 		if (this.sort_by === field) {
 			return this.sort_order === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
 		}
 		return 'fa-sort';
 	}
-	
+
 	render_report() {
 		const data = this.filtered_data;
 		const grand_total = this.grand_total;
-		
+
 		if (!data || data.length === 0) {
 			this.$report_container.html(`<div class="text-muted">No data found</div>`);
 			return;
 		}
-		
+
 		// Calculate value ranges for color coding
 		this.value_ranges = this.calculate_value_ranges(data);
-		
+
 		let html = `
 			<div class="stock-movement-report">
 				<div class="table-container">
@@ -260,10 +260,10 @@ class AggregatedStockMovement {
 								<th rowspan="2" class="common-code-header sortable sticky-column" data-sort="common_code">
 									Item Name <i class="sort-icon fa ${this.get_sort_icon('common_code')}"></i>
 								</th>
-								<th colspan="4" class="mat-header">Mat (Nos)</th>
-								<th colspan="4" class="products-header">Products</th>
-								<th colspan="4" class="finished-product-header">Finished Product</th>
-								<th rowspan="2" class="grand-total-header sortable" data-sort="total">Total <i class="sort-icon fa ${this.get_sort_icon('total')}"></i></th>
+								<th colspan="5" class="mat-header">Mat (Nos)</th>
+								<th colspan="5" class="products-header">Products</th>
+								<th colspan="5" class="finished-product-header">Finished Product</th>
+								<th colspan="2" class="grand-total-header">Total</th>
 								<th rowspan="2" class="actions-header">Actions</th>
 							</tr>
 							<tr>
@@ -279,6 +279,7 @@ class AggregatedStockMovement {
 								<th class="mat-subheader sortable" data-sort="Mat_closing">
 									End Stock <i class="sort-icon fa ${this.get_sort_icon('Mat_closing')}"></i>
 								</th>
+								<th class="mat-subheader">Value</th>
 								
 								<th class="products-subheader sortable" data-sort="Products_opening">
 									Opening <i class="sort-icon fa ${this.get_sort_icon('Products_opening')}"></i>
@@ -292,6 +293,7 @@ class AggregatedStockMovement {
 								<th class="products-subheader sortable" data-sort="Products_closing">
 									End Stock <i class="sort-icon fa ${this.get_sort_icon('Products_closing')}"></i>
 								</th>
+								<th class="products-subheader">Value</th>
 								
 								<th class="finished-product-subheader sortable" data-sort="Finished Product_opening">
 									Opening <i class="sort-icon fa ${this.get_sort_icon('Finished Product_opening')}"></i>
@@ -305,10 +307,14 @@ class AggregatedStockMovement {
 								<th class="finished-product-subheader sortable" data-sort="Finished Product_closing">
 									End Stock <i class="sort-icon fa ${this.get_sort_icon('Finished Product_closing')}"></i>
 								</th>
+								<th class="finished-product-subheader">Value</th>
+								
+								<th class="grand-total-subheader sortable" data-sort="total">Qty <i class="sort-icon fa ${this.get_sort_icon('total')}"></i></th>
+								<th class="grand-total-subheader">Value</th>
 							</tr>
 						</thead>
 						<tbody>`;
-		
+
 		// Add rows for each item
 		data.forEach(item => {
 			html += `
@@ -319,18 +325,22 @@ class AggregatedStockMovement {
 					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].incoming_qty, this.value_ranges.mat.incoming.min, this.value_ranges.mat.incoming.max, 'mat')}">${this.format_number(item["Mat"].incoming_qty)}</td>
 					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].outgoing_qty, this.value_ranges.mat.outgoing.min, this.value_ranges.mat.outgoing.max, 'mat')}">${this.format_number(item["Mat"].outgoing_qty)}</td>
 					<td class="mat-cell" style="background-color: ${this.get_color_intensity(item["Mat"].closing_qty, this.value_ranges.mat.closing.min, this.value_ranges.mat.closing.max, 'mat')}">${this.format_number(item["Mat"].closing_qty)}</td>
+					<td class="mat-cell"><strong>${this.format_currency(item["Mat"].balance_value)}</strong></td>
 					
 					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].opening_qty, this.value_ranges.products.opening.min, this.value_ranges.products.opening.max, 'products')}">${this.format_number(item["Products"].opening_qty)}</td>
 					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].incoming_qty, this.value_ranges.products.incoming.min, this.value_ranges.products.incoming.max, 'products')}">${this.format_number(item["Products"].incoming_qty)}</td>
 					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].outgoing_qty, this.value_ranges.products.outgoing.min, this.value_ranges.products.outgoing.max, 'products')}">${this.format_number(item["Products"].outgoing_qty)}</td>
 					<td class="products-cell" style="background-color: ${this.get_color_intensity(item["Products"].closing_qty, this.value_ranges.products.closing.min, this.value_ranges.products.closing.max, 'products')}">${this.format_number(item["Products"].closing_qty)}</td>
+					<td class="products-cell"><strong>${this.format_currency(item["Products"].balance_value)}</strong></td>
 					
 					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].opening_qty, this.value_ranges.finished_product.opening.min, this.value_ranges.finished_product.opening.max, 'finished_product')}">${this.format_number(item["Finished Product"].opening_qty)}</td>
 					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].incoming_qty, this.value_ranges.finished_product.incoming.min, this.value_ranges.finished_product.incoming.max, 'finished_product')}">${this.format_number(item["Finished Product"].incoming_qty)}</td>
 					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].outgoing_qty, this.value_ranges.finished_product.outgoing.min, this.value_ranges.finished_product.outgoing.max, 'finished_product')}">${this.format_number(item["Finished Product"].outgoing_qty)}</td>
 					<td class="finished-product-cell" style="background-color: ${this.get_color_intensity(item["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}">${this.format_number(item["Finished Product"].closing_qty)}</td>
+					<td class="finished-product-cell"><strong>${this.format_currency(item["Finished Product"].balance_value)}</strong></td>
 					
 					<td class="grand-total-cell" style="background-color: ${this.get_color_intensity(item["total"].closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}">${this.format_number(item["total"].closing_qty)}</td>
+					<td class="grand-total-cell"><strong>${this.format_currency(item["total"].balance_value)}</strong></td>
 					
 					<td class="actions-cell">
 						<button class="btn btn-xs btn-default view-batches-btn" data-code="${item.common_code}" title="View Batch Details">
@@ -339,7 +349,7 @@ class AggregatedStockMovement {
 					</td>
 				</tr>`;
 		});
-		
+
 		// Add grand total row
 		html += `
 			<tr class="grand-total-row">
@@ -359,12 +369,14 @@ class AggregatedStockMovement {
 				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].incoming_qty, this.value_ranges.finished_product.incoming.min, this.value_ranges.finished_product.incoming.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].incoming_qty)}</strong></td>
 				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].outgoing_qty, this.value_ranges.finished_product.outgoing.min, this.value_ranges.finished_product.outgoing.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].outgoing_qty)}</strong></td>
 				<td class="finished-product-total" style="background-color: ${this.get_color_intensity(grand_total["Finished Product"].closing_qty, this.value_ranges.finished_product.closing.min, this.value_ranges.finished_product.closing.max, 'finished_product')}"><strong>${this.format_number(grand_total["Finished Product"].closing_qty)}</strong></td>
+				<td class="finished-product-total"><strong>${this.format_currency(grand_total["Finished Product"].balance_value)}</strong></td>
 				
 				<td class="grand-total-total" style="background-color: ${this.get_color_intensity(grand_total.closing_qty, this.value_ranges.total.closing.min, this.value_ranges.total.closing.max, 'total')}"><strong>${this.format_number(grand_total.closing_qty)}</strong></td>
+				<td class="grand-total-total"><strong>${this.format_currency(grand_total.balance_value)}</strong></td>
 				
 				<td></td>
 			</tr>`;
-		
+
 		html += `
 					</tbody>
 				</table>
@@ -377,18 +389,18 @@ class AggregatedStockMovement {
 				</div>
 			</div>
 		`;
-		
+
 		this.$report_container.html(html);
 		this.apply_styles();
 		this.enhance_sticky_column();
 		this.bind_events();
 	}
-	
+
 	bind_events() {
 		// Bind sorting events
 		this.$report_container.find('.sortable').on('click', (e) => {
 			const sort_field = $(e.currentTarget).data('sort');
-			
+
 			// Toggle sort order if same field clicked again
 			if (this.sort_by === sort_field) {
 				this.sort_order = this.sort_order === 'asc' ? 'desc' : 'asc';
@@ -396,7 +408,7 @@ class AggregatedStockMovement {
 				this.sort_by = sort_field;
 				this.sort_order = 'asc';
 			}
-			
+
 			this.sort_data();
 			this.render_report();
 		});
@@ -406,13 +418,13 @@ class AggregatedStockMovement {
 			e.preventDefault();
 			const code = $(e.currentTarget).data('code');
 			this.show_common_code_details(code);
-		 });
+		});
 
 		// **FIXED: Bind batch details button click - Navigate to batch details page**
 		this.$report_container.on('click', '.view-batches-btn', (e) => {
 			e.preventDefault();
 			const code = $(e.currentTarget).data('code');
-			
+
 			// Store filters in localStorage for persistence
 			const filters = {
 				from_date: this.filters.from_date.get_value(),
@@ -422,7 +434,7 @@ class AggregatedStockMovement {
 				exclude_problematic_batches: this.filters.exclude_problematic_batches.get_value()
 			};
 			localStorage.setItem('batch_details_filters', JSON.stringify(filters));
-			
+
 			// Navigate to batch details page with common_code in URL
 			frappe.set_route('batch-wise-stock-details', code);
 		});
@@ -521,60 +533,60 @@ class AggregatedStockMovement {
 	// Calculate min/max values for each column to determine color intensity ranges
 	calculate_value_ranges(data) {
 		const ranges = {
-			mat: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
-			products: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
-			finished_product: { opening: {min: 0, max: 0}, incoming: {min: 0, max: 0}, outgoing: {min: 0, max: 0}, closing: {min: 0, max: 0} },
-			total: { closing: {min: 0, max: 0} }
+			mat: { opening: { min: 0, max: 0 }, incoming: { min: 0, max: 0 }, outgoing: { min: 0, max: 0 }, closing: { min: 0, max: 0 } },
+			products: { opening: { min: 0, max: 0 }, incoming: { min: 0, max: 0 }, outgoing: { min: 0, max: 0 }, closing: { min: 0, max: 0 } },
+			finished_product: { opening: { min: 0, max: 0 }, incoming: { min: 0, max: 0 }, outgoing: { min: 0, max: 0 }, closing: { min: 0, max: 0 } },
+			total: { closing: { min: 0, max: 0 } }
 		};
-		
+
 		if (!data || data.length === 0) return ranges;
-		
+
 		// Extract all values for each column
 		const mat_opening = data.map(item => item["Mat"].opening_qty || 0);
 		const mat_incoming = data.map(item => item["Mat"].incoming_qty || 0);
 		const mat_outgoing = data.map(item => item["Mat"].outgoing_qty || 0);
 		const mat_closing = data.map(item => item["Mat"].closing_qty || 0);
-		
+
 		const products_opening = data.map(item => item["Products"].opening_qty || 0);
 		const products_incoming = data.map(item => item["Products"].incoming_qty || 0);
 		const products_outgoing = data.map(item => item["Products"].outgoing_qty || 0);
 		const products_closing = data.map(item => item["Products"].closing_qty || 0);
-		
+
 		const fp_opening = data.map(item => item["Finished Product"].opening_qty || 0);
 		const fp_incoming = data.map(item => item["Finished Product"].incoming_qty || 0);
 		const fp_outgoing = data.map(item => item["Finished Product"].outgoing_qty || 0);
 		const fp_closing = data.map(item => item["Finished Product"].closing_qty || 0);
-		
+
 		const total_closing = data.map(item => item["total"].closing_qty || 0);
-		
+
 		// Calculate min/max for each column
 		ranges.mat.opening = { min: Math.min(...mat_opening), max: Math.max(...mat_opening) };
 		ranges.mat.incoming = { min: Math.min(...mat_incoming), max: Math.max(...mat_incoming) };
 		ranges.mat.outgoing = { min: Math.min(...mat_outgoing), max: Math.max(...mat_outgoing) };
 		ranges.mat.closing = { min: Math.min(...mat_closing), max: Math.max(...mat_closing) };
-		
+
 		ranges.products.opening = { min: Math.min(...products_opening), max: Math.max(...products_opening) };
 		ranges.products.incoming = { min: Math.min(...products_incoming), max: Math.max(...products_incoming) };
 		ranges.products.outgoing = { min: Math.min(...products_outgoing), max: Math.max(...products_outgoing) };
 		ranges.products.closing = { min: Math.min(...products_closing), max: Math.max(...products_closing) };
-		
+
 		ranges.finished_product.opening = { min: Math.min(...fp_opening), max: Math.max(...fp_opening) };
 		ranges.finished_product.incoming = { min: Math.min(...fp_incoming), max: Math.max(...fp_incoming) };
 		ranges.finished_product.outgoing = { min: Math.min(...fp_outgoing), max: Math.max(...fp_outgoing) };
 		ranges.finished_product.closing = { min: Math.min(...fp_closing), max: Math.max(...fp_closing) };
-		
+
 		ranges.total.closing = { min: Math.min(...total_closing), max: Math.max(...total_closing) };
-		
+
 		return ranges;
 	}
 
 	// Generate background color intensity based on value and range
 	get_color_intensity(value, min_val, max_val, base_color) {
 		if (max_val === min_val) return 'rgba(248, 249, 250, 0.3)'; // Default light color if no range
-		
+
 		// Normalize value to 0-1 range
 		const normalized = Math.max(0, Math.min(1, (value - min_val) / (max_val - min_val)));
-		
+
 		// Define color intensities based on column type
 		const color_configs = {
 			mat: { r: 96, g: 125, b: 139 },        // Blue-gray for Mat
@@ -582,13 +594,18 @@ class AggregatedStockMovement {
 			finished_product: { r: 69, g: 90, b: 100 }, // Darker blue-gray for Finished Product
 			total: { r: 44, g: 62, b: 80 }         // Darkest blue-gray for Total
 		};
-		
+
 		const config = color_configs[base_color] || color_configs.mat;
-		
+
 		// Calculate opacity based on normalized value (0.1 to 0.8 range)
 		const opacity = 0.1 + (normalized * 0.7);
-		
+
 		return `rgba(${config.r}, ${config.g}, ${config.b}, ${opacity})`;
+	}
+
+	format_currency(val) {
+		if (val === undefined || val === null || isNaN(val)) return '₹0';
+		return '₹' + this.format_number(val);
 	}
 
 	// Utility: numeric formatting with smart decimals and lakh separators - ROUNDED TO WHOLE NUMBERS
@@ -596,7 +613,7 @@ class AggregatedStockMovement {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return '0';
 		const abs = Math.abs(n);
-		
+
 		// Format in Indian number system (lakhs/crores) - ALL ROUNDED TO WHOLE NUMBERS
 		if (abs >= 10000000) { // 1 crore
 			return Math.round(n / 10000000) + ' Cr';
@@ -626,7 +643,7 @@ class AggregatedStockMovement {
 			$firstCol.css('min-width', w).css('max-width', w);
 		}
 	}
-	
+
 	apply_styles() {
 		// Add modern, professional styles with improved readability
 		$("<style>")
@@ -921,7 +938,7 @@ class AggregatedStockMovement {
 			`)
 			.appendTo("head");
 	}
-	
+
 	show_empty_state() {
 		const html = `
 			<div class="empty-state-container" style="
@@ -946,10 +963,10 @@ class AggregatedStockMovement {
 				</button>
 			</div>
 		`;
-		
+
 		this.$report_container = $('<div class="report-container">').appendTo(this.page.main);
 		this.$report_container.html(html);
-		
+
 		// Bind click event for the generate button
 		this.$report_container.on('click', '.generate-report-btn', () => {
 			this.make_report();
@@ -1016,7 +1033,7 @@ class AggregatedStockMovement {
 		frappe.confirm(
 			'This will create database indexes to improve query performance. Continue?',
 			() => {
-				frappe.show_alert({message: __('Creating indexes...'), indicator: 'blue'});
+				frappe.show_alert({ message: __('Creating indexes...'), indicator: 'blue' });
 				frappe.call({
 					method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.optimize_stock_ledger_indexes',
 					callback: (r) => {
@@ -1038,10 +1055,10 @@ class AggregatedStockMovement {
 			}
 		);
 	}
-	
+
 	// Analyze query performance
 	analyze_performance() {
-		frappe.show_alert({message: __('Analyzing performance...'), indicator: 'blue'});
+		frappe.show_alert({ message: __('Analyzing performance...'), indicator: 'blue' });
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.analyze_query_performance',
 			callback: (r) => {
@@ -1061,10 +1078,10 @@ class AggregatedStockMovement {
 			}
 		});
 	}
-	
+
 	// Benchmark query performance
 	benchmark_queries() {
-		frappe.show_alert({message: __('Benchmarking queries...'), indicator: 'blue'});
+		frappe.show_alert({ message: __('Benchmarking queries...'), indicator: 'blue' });
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.aggregated_stock_movement.aggregated_stock_movement.benchmark_query_performance',
 			args: {

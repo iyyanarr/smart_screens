@@ -25,6 +25,7 @@ from smart_screens.smart_screens.page.common.excel_export import (
 	export_aggregated_data_to_excel,
 	export_batch_details_to_excel
 )
+from smart_screens.smart_screens.page.common.valuation_engine import get_bulk_valuation_rates
 
 # Initialize configuration
 config = SPPReportConfig()
@@ -133,6 +134,22 @@ user=frappe.session.user
 		t5 = time.time()
 		item_groups = config.get_item_groups()
 		filtered_data = filter_by_item_groups_pandas(all_data, item_groups)
+		
+		# STEP 3.2: Calculate Valuation for raw data using Central Engine
+		if filtered_data:
+			# Bulk fetch valuation rates
+			items_metadata = [
+				{'item_code': row.get('item'), 'item_group': row.get('item_group')} 
+				for row in filtered_data
+			]
+			valuation_rates = get_bulk_valuation_rates(items_metadata)
+			
+			for row in filtered_data:
+				rate = valuation_rates.get(row.get('item'), 0)
+				row['balance_value'] = flt(row.get('balance_qty', 0)) * rate
+				# Also store rate for visibility in details
+				row['valuation_rate'] = rate
+
 		t6 = time.time()
 		performance_log['item_group_filtering'] = round(t6 - t5, 2)
 		

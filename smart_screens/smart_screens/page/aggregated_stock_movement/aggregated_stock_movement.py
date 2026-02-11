@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, flt, add_to_date, get_datetime
 import json
+from smart_screens.smart_screens.page.common.valuation_engine import get_bulk_valuation_rates
 
 @frappe.whitelist()
 def optimize_stock_ledger_indexes():
@@ -660,6 +661,44 @@ def get_aggregated_stock_data(filters=None):
         grand_total["outgoing_qty"] += outgoing_qty
         grand_total["closing_qty"] += closing_qty
     
+    # **NEW: Calculate Valuation using Central Engine**
+    items_metadata = []
+    # Collect items that represent each common_code per group to get their rates
+    for key, qty_dict in iwb_map.items():
+        items_metadata.append({'item_code': qty_dict.item_code, 'item_group': qty_dict.item_group})
+    
+    valuation_rates = get_bulk_valuation_rates(items_metadata)
+    
+    # Apply valuation to aggregated data
+    for common_code, data in aggregated_data.items():
+        for group in ["Products", "Finished Product", "Mat"]:
+            # We need to find a representative item for this common_code and group to get its rate
+            # In Stock Movement, multiple items (P/F/T) might belong to the same common_code
+            # The valuation rule applies based on the item group.
+            
+            # Since aggregated_data[common_code][group] might have sum of multiple batches,
+            # we need the rate for an item in that group.
+            # Representative logic: Find any item in iwb_map for this code and group
+            item_code_rep = next((qty_dict.item_code for key, qty_dict in iwb_map.items() 
+                                  if qty_dict.common_code == common_code and 
+                                  (qty_dict.item_group == group or (group == "Finished Product" and qty_dict.item_group == "Finished Products"))), None)
+            
+            if item_code_rep:
+                rate = valuation_rates.get(item_code_rep, 0)
+                data[group]["valuation_rate"] = rate
+                data[group]["balance_value"] = data[group]["closing_qty"] * rate
+                
+                # Update totals for this common_code
+                if "balance_value" not in data["total"]: data["total"]["balance_value"] = 0
+                data["total"]["balance_value"] += data[group]["balance_value"]
+                
+                # Update grand totals
+                if "balance_value" not in grand_total[group]: grand_total[group]["balance_value"] = 0
+                grand_total[group]["balance_value"] += data[group]["balance_value"]
+                
+                if "balance_value" not in grand_total: grand_total["balance_value"] = 0
+                grand_total["balance_value"] += data[group]["balance_value"]
+
     # Convert to list for frontend
     result = []
     for code, data in aggregated_data.items():

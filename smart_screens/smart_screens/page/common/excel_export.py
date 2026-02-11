@@ -57,7 +57,7 @@ bottom=Side(style='thin')
 		
 		# Report Title
 		current_row = 1
-		total_cols = 1 + (len(item_groups) * 4) + 4  # Common Code + (each group * 4 cols) + Total cols
+		total_cols = 1 + (len(item_groups) * 6) + 5  # Common Code + (each group * 6 cols) + Total cols (Qty + Value)
 		ws.merge_cells(f'A{current_row}:{get_column_letter(total_cols)}{current_row}')
 		title_cell = ws[f'A{current_row}']
 		title_cell.value = f"{report_title} - Common Code Summary"
@@ -85,9 +85,11 @@ bottom=Side(style='thin')
 f"{item_group} Opening",
 f"{item_group} In",
 f"{item_group} Out",
-f"{item_group} Balance"
+f"{item_group} Balance",
+f"{item_group} Rate",
+f"{item_group} Value"
 ])
-		headers.extend(["Total Opening", "Total In", "Total Out", "Total Balance"])
+		headers.extend(["Total Opening", "Total In", "Total Out", "Total Balance", "Total Value"])
 		
 		for col_num, header in enumerate(headers, 1):
 			cell = ws.cell(row=current_row, column=col_num)
@@ -113,7 +115,7 @@ f"{item_group} Balance"
 			# Item group columns
 			for item_group in item_groups:
 				group_data = row_data.get(item_group, {})
-				for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+				for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'valuation_rate', 'balance_value']:
 					cell = ws.cell(row=current_row, column=col_num)
 					cell.value = group_data.get(key, 0)
 					cell.alignment = right_align
@@ -123,7 +125,7 @@ f"{item_group} Balance"
 			
 			# Total columns
 			total = row_data.get('Total', {})
-			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'balance_value']:
 				cell = ws.cell(row=current_row, column=col_num)
 				cell.value = total.get(key, 0)
 				cell.alignment = right_align
@@ -147,9 +149,13 @@ f"{item_group} Balance"
 		# Add grand total values
 		for item_group in item_groups:
 			group_data = grand_total.get(item_group, {})
-			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+			for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'valuation_rate', 'balance_value']:
 				cell = ws.cell(row=current_row, column=col_num)
-				cell.value = group_data.get(key, 0)
+				# Rate doesn't make sense for grand total
+				if key == 'valuation_rate':
+					cell.value = ""
+				else:
+					cell.value = group_data.get(key, 0)
 				cell.fill = total_fill
 				cell.font = total_font
 				cell.alignment = right_align
@@ -159,7 +165,7 @@ f"{item_group} Balance"
 		
 		# Total grand total
 		total_data = grand_total.get('Total', {})
-		for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty']:
+		for key in ['opening_qty', 'in_qty', 'out_qty', 'balance_qty', 'balance_value']:
 			cell = ws.cell(row=current_row, column=col_num)
 			cell.value = total_data.get(key, 0)
 			cell.fill = total_fill

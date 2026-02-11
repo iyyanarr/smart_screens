@@ -1,10 +1,10 @@
-frappe.pages['batcom-aggregated-report'].on_page_load = function(wrapper) {
+frappe.pages['batcom-aggregated-report'].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: 'Batch & Compound Aggregated Report',
 		single_column: true
 	});
-	
+
 	new BatComAggregatedReport(page);
 }
 
@@ -15,7 +15,7 @@ class BatComAggregatedReport {
 		this.add_buttons();
 		this.show_empty_state();
 	}
-	
+
 	make_filters() {
 		this.filters = new frappe.ui.FieldGroup({
 			fields: [
@@ -66,22 +66,22 @@ class BatComAggregatedReport {
 			],
 			body: this.page.body
 		});
-		
+
 		this.filters.make();
 	}
-	
+
 	add_buttons() {
 		this.page.set_primary_action(__('Generate Report'), () => this.load_report(), 'octicon octicon-sync');
-		
+
 		// Add Export to Excel button
 		this.page.add_inner_button(__('Export to Excel'), () => this.export_to_excel(), __('Export'));
-		
+
 		// Add button to manage excluded batches
 		this.page.add_inner_button(__('Manage Excluded Batches'), () => {
 			frappe.set_route('List', 'Excluded Stock Batch');
 		}, __('Tools'));
 	}
-	
+
 	load_report() {
 		const filter_values = {
 			company: this.filters.get_value('company'),
@@ -89,27 +89,27 @@ class BatComAggregatedReport {
 			to_date: this.filters.get_value('to_date'),
 			item_group: this.filters.get_value('item_group')
 		};
-		
+
 		// Store filter values for later use (e.g., when showing batch details)
 		this.current_filters = filter_values;
-		
+
 		this.show_loading_with_progress();
-		
+
 		// Subscribe to real-time progress updates
 		frappe.realtime.on('batcom_aggregated_progress', (data) => {
 			this.update_progress(data);
 		});
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.get_batcom_batch_balance_data',
 			args: { filters: filter_values },
 			callback: (r) => {
 				// Unsubscribe from progress updates
 				frappe.realtime.off('batcom_aggregated_progress');
-				
+
 				if (r.message && r.message.success) {
 					this.render_report(r.message);
-					
+
 					// Show performance summary if available
 					if (r.message.performance) {
 						this.show_performance_summary(r.message.performance);
@@ -127,7 +127,7 @@ class BatComAggregatedReport {
 			error: (err) => {
 				// Unsubscribe from progress updates
 				frappe.realtime.off('batcom_aggregated_progress');
-				
+
 				frappe.msgprint({
 					title: __('Error'),
 					indicator: 'red',
@@ -138,16 +138,16 @@ class BatComAggregatedReport {
 			}
 		});
 	}
-	
+
 	render_report(response) {
 		const data = response.data || [];
 		const grand_total = response.grand_total || {};
-		
+
 		if (!data || data.length === 0) {
 			this.show_empty_state('No data found for the selected filters');
 			return;
 		}
-		
+
 		// Store original data for filtering and sorting
 		this.report_data = data;
 		this.grand_total = grand_total;
@@ -156,7 +156,7 @@ class BatComAggregatedReport {
 		this.filtered_data = [...data]; // Copy for filtering
 		this.current_sort = { column: 'common_code', order: 'asc' }; // Default sort
 		this.current_warehouse = ''; // Track current warehouse filter
-		
+
 		// Create aggregated table HTML
 		let html = `
 			<div class="spp-aggregated-container">
@@ -172,9 +172,9 @@ class BatComAggregatedReport {
 							<label for="warehouse-filter" class="filter-label">Warehouse:</label>
 							<select class="form-control warehouse-filter" id="warehouse-filter">
 								<option value="">All Warehouses</option>
-								${(response.warehouses_used || []).map(wh => 
-									`<option value="${wh}">${wh.replace(' - SPP INDIA', '')}</option>`
-								).join('')}
+								${(response.warehouses_used || []).map(wh =>
+			`<option value="${wh}">${wh.replace(' - SPP INDIA', '')}</option>`
+		).join('')}
 							</select>
 						</div>
 						<div class="search-box">
@@ -197,11 +197,14 @@ class BatComAggregatedReport {
 								<th rowspan="2" class="item-header sortable-header" data-column="common_code" data-type="string">
 									Item Code <i class="fa fa-sort sort-icon"></i>
 								</th>
-								<th colspan="4" class="batch-header">Batch</th>
-								<th colspan="4" class="master-batch-header">Master Batch</th>
-								<th colspan="4" class="compound-header">Compound</th>
+								<th colspan="6" class="batch-header">Batch</th>
+								<th colspan="6" class="master-batch-header">Master Batch</th>
+								<th colspan="6" class="compound-header">Compound</th>
 								<th rowspan="2" class="total-header sortable-header" data-column="Total.balance_qty" data-type="number">
 									Total <i class="fa fa-sort sort-icon"></i>
+								</th>
+								<th rowspan="2" class="total-header sortable-header" data-column="Total.balance_value" data-type="number">
+									Total Value <i class="fa fa-sort sort-icon"></i>
 								</th>
 								<th rowspan="2" class="action-header">Actions</th>
 							</tr>
@@ -219,6 +222,8 @@ class BatComAggregatedReport {
 								<th class="batch-subheader sortable-header" data-column="Batch.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="batch-subheader">Rate</th>
+								<th class="batch-subheader">Value</th>
 								<!-- Master Batch columns -->
 								<th class="master-batch-subheader sortable-header" data-column="Master Batch.opening_qty" data-type="number">
 									Opening <i class="fa fa-sort sort-icon"></i>
@@ -232,6 +237,8 @@ class BatComAggregatedReport {
 								<th class="master-batch-subheader sortable-header" data-column="Master Batch.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="master-batch-subheader">Rate</th>
+								<th class="master-batch-subheader">Value</th>
 								<!-- Compound columns -->
 								<th class="compound-subheader sortable-header" data-column="Compound.opening_qty" data-type="number">
 									Opening <i class="fa fa-sort sort-icon"></i>
@@ -245,6 +252,8 @@ class BatComAggregatedReport {
 								<th class="compound-subheader sortable-header" data-column="Compound.balance_qty" data-type="number">
 									Balance <i class="fa fa-sort sort-icon"></i>
 								</th>
+								<th class="compound-subheader">Rate</th>
+								<th class="compound-subheader">Value</th>
 							</tr>
 						</thead>
 						<tbody id="table-body">
@@ -256,55 +265,55 @@ class BatComAggregatedReport {
 				</div>
 			</div>
 		`;
-		
+
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
 		this.$container.html(html);
-		
+
 		this.apply_styles();
 		this.render_table_rows(this.filtered_data);
 		this.bind_search_and_sort();
 	}
-	
+
 	// BatCom-specific common code extraction
 	// Patterns: B_4910 → 4910, MB_60103v5 → 60103, C_50EP02v3 → 50EP02, CMB_7025 → 7025
 	extract_batcom_common_code(item_code) {
 		if (!item_code) return null;
-		
+
 		item_code = String(item_code).trim();
-		
+
 		// Remove prefix (order matters - check longer prefixes first)
 		const prefixes = ['CMB_D', 'CMB_', 'MB_', 'B_', 'C_', 'BC_'];
 		let code_part = item_code;
-		
+
 		for (const prefix of prefixes) {
 			if (item_code.toUpperCase().startsWith(prefix.toUpperCase())) {
 				code_part = item_code.substring(prefix.length);
 				break;
 			}
 		}
-		
+
 		if (!code_part) return null;
-		
+
 		// Handle special cases with space (e.g., "6025 A" → "6025")
 		if (code_part.includes(' ')) {
 			code_part = code_part.split(' ')[0];
 		}
-		
+
 		// Remove trailing 'L' for CMB_D items (e.g., "7025L" → "7025")
 		if (code_part.endsWith('L') && code_part.length > 1 && /\d/.test(code_part[code_part.length - 2])) {
 			code_part = code_part.slice(0, -1);
 		}
-		
+
 		// Remove version suffix (v0, v1, v23, V24, etc.) - case insensitive
 		const versionMatch = code_part.match(/[vV]\d+$/);
 		if (versionMatch) {
 			code_part = code_part.substring(0, versionMatch.index);
 		}
-		
+
 		return code_part.trim() || null;
 	}
-	
+
 	// NEW: Function to re-aggregate data by warehouse
 	aggregate_by_warehouse(warehouse) {
 		if (!warehouse || warehouse === '') {
@@ -314,104 +323,104 @@ class BatComAggregatedReport {
 				grand_total: this.grand_total_original || this.grand_total
 			};
 		}
-		
+
 		// Filter raw data by warehouse
 		const warehouse_data = this.raw_filtered_data.filter(row => {
 			return row.warehouse === warehouse;
 		});
-		
+
 		if (warehouse_data.length === 0) {
 			return {
 				data: [],
 				grand_total: {
-					"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 				}
 			};
 		}
-		
+
 		// Re-aggregate by common_code using BatCom extraction
 		const aggregated = {};
 		const grand_total = {
-			"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-			"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+			"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+			"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 		};
-		
+
 		warehouse_data.forEach(row => {
 			const item = row.item || '';
-			
-				// Use BatCom-specific common code extraction
+
+			// Use BatCom-specific common code extraction
 			const common_code = this.extract_batcom_common_code(item);
-			
+
 			if (!common_code) return;
-			
+
 			// Initialize aggregated row
 			if (!aggregated[common_code]) {
 				aggregated[common_code] = {
 					common_code: common_code,
 					warehouses: [warehouse],
-					"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-					"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 				};
 			}
-			
-				// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
+
+			// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
 			let item_group = row.item_group || '';
-			
+
 			// Only process BatCom item groups
 			if (!['Batch', 'Master Batch', 'Compound'].includes(item_group)) {
 				return;
 			}
-			
+
 			// Add quantities
 			const opening = parseFloat(row.opening_qty) || 0;
 			const in_qty = parseFloat(row.in_qty) || 0;
 			const out_qty = parseFloat(row.out_qty) || 0;
 			const balance = parseFloat(row.balance_qty) || 0;
-			
+
 			aggregated[common_code][item_group].opening_qty += opening;
 			aggregated[common_code][item_group].in_qty += in_qty;
 			aggregated[common_code][item_group].out_qty += out_qty;
 			aggregated[common_code][item_group].balance_qty += balance;
-			
+
 			aggregated[common_code].Total.opening_qty += opening;
 			aggregated[common_code].Total.in_qty += in_qty;
 			aggregated[common_code].Total.out_qty += out_qty;
 			aggregated[common_code].Total.balance_qty += balance;
-			
+
 			// Update grand totals
 			grand_total[item_group].opening_qty += opening;
 			grand_total[item_group].in_qty += in_qty;
 			grand_total[item_group].out_qty += out_qty;
 			grand_total[item_group].balance_qty += balance;
-			
+
 			grand_total.Total.opening_qty += opening;
 			grand_total.Total.in_qty += in_qty;
 			grand_total.Total.out_qty += out_qty;
 			grand_total.Total.balance_qty += balance;
 		});
-		
+
 		// Convert to array and sort
-		const result = Object.values(aggregated).sort((a, b) => 
+		const result = Object.values(aggregated).sort((a, b) =>
 			a.common_code.localeCompare(b.common_code)
 		);
-		
+
 		return {
 			data: result,
 			grand_total: grand_total
 		};
 	}
-	
+
 	render_table_rows(data) {
 		const $tbody = $('#table-body');
 		$tbody.empty();
-		
+
 		// Add data rows
 		data.forEach(row => {
 			const rowHtml = `
@@ -422,18 +431,25 @@ class BatComAggregatedReport {
 					<td class="qty-cell in-qty">${this.format_number(row.Batch.in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row.Batch.out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row.Batch.balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row.Batch.valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row.Batch.balance_value)}</strong></td>
 					<!-- Products -->
 					<td class="qty-cell">${this.format_number(row["Master Batch"].opening_qty)}</td>
 					<td class="qty-cell in-qty">${this.format_number(row["Master Batch"].in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row["Master Batch"].out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row["Master Batch"].balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row["Master Batch"].valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row["Master Batch"].balance_value)}</strong></td>
 					<!-- Finished Product -->
 					<td class="qty-cell">${this.format_number(row.Compound.opening_qty)}</td>
 					<td class="qty-cell in-qty">${this.format_number(row.Compound.in_qty)}</td>
 					<td class="qty-cell out-qty">${this.format_number(row.Compound.out_qty)}</td>
 					<td class="qty-cell balance-qty"><strong>${this.format_number(row.Compound.balance_qty)}</strong></td>
+					<td class="qty-cell text-muted">${this.format_currency(row.Compound.valuation_rate)}</td>
+					<td class="qty-cell valuation-cell"><strong>${this.format_currency(row.Compound.balance_value)}</strong></td>
 					<!-- Total -->
 					<td class="qty-cell total-cell"><strong>${this.format_number(row.Total.balance_qty)}</strong></td>
+					<td class="qty-cell total-value-cell"><strong>${this.format_currency(row.Total.balance_value)}</strong></td>
 					<!-- Actions -->
 					<td class="action-cell">
 						<button class="btn btn-xs btn-primary btn-batches" data-common-code="${row.common_code}">
@@ -443,7 +459,7 @@ class BatComAggregatedReport {
 				</tr>`;
 			$tbody.append(rowHtml);
 		});
-		
+
 		// Add grand total row
 		const grandTotalHtml = `
 			<tr class="grand-total-row">
@@ -453,59 +469,66 @@ class BatComAggregatedReport {
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Batch.in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Batch.out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Batch.balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total.Batch.balance_value)}</strong></td>
 				<!-- Products -->
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total["Master Batch"].opening_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total["Master Batch"].in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total["Master Batch"].out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total["Master Batch"].balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total["Master Batch"].balance_value)}</strong></td>
 				<!-- Finished Product -->
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Compound.opening_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Compound.in_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Compound.out_qty)}</strong></td>
 				<td class="qty-cell"><strong>${this.format_number(this.grand_total.Compound.balance_qty)}</strong></td>
+				<td class="qty-cell"></td>
+				<td class="qty-cell valuation-cell"><strong>${this.format_currency(this.grand_total.Compound.balance_value)}</strong></td>
 				<!-- Total -->
 				<td class="qty-cell total-cell"><strong>${this.format_number(this.grand_total.Total.balance_qty)}</strong></td>
+				<td class="qty-cell total-value-cell"><strong>${this.format_currency(this.grand_total.Total.balance_value)}</strong></td>
 				<td class="action-cell"></td>
 			</tr>`;
 		$tbody.append(grandTotalHtml);
-		
+
 		// Bind batch buttons after rendering
 		this.bind_batch_buttons();
-		
+
 		// Update search results count
 		$('#search-results').text(`Showing: ${data.length} items`);
 		$('#total-items').text(data.length);
 	}
-	
+
 	bind_search_and_sort() {
 		const me = this;
-		
+
 		// Warehouse filter functionality - RE-AGGREGATES data with child warehouse expansion
-		$('#warehouse-filter').on('change', function() {
+		$('#warehouse-filter').on('change', function () {
 			const selectedWarehouse = $(this).val();
-			
+
 			if (!selectedWarehouse) {
 				// No warehouse selected - show all data
 				me.current_warehouse = '';
 				me.filtered_data = [...me.report_data];
 				me.grand_total = JSON.parse(JSON.stringify(me.grand_total_original));
-				
+
 				// Clear search box when warehouse changes
 				$('#common-code-filter').val('');
 				$('.clear-search').hide();
-				
+
 				// Re-apply current sort
 				me.sort_data(me.current_sort.column, me.current_sort.order, false);
 				me.render_table_rows(me.filtered_data);
 				return;
 			}
-			
+
 			// Show loading indicator
 			frappe.show_alert({
 				message: __('Filtering by warehouse...'),
 				indicator: 'blue'
 			}, 2);
-			
+
 			// Call server to expand parent warehouse to child warehouses
 			frappe.call({
 				method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.get_child_warehouses_api',
@@ -513,107 +536,107 @@ class BatComAggregatedReport {
 				callback: (r) => {
 					if (r.message && r.message.length > 0) {
 						const warehouses = r.message;
-						
+
 						console.log(`Warehouse '${selectedWarehouse}' expanded to:`, warehouses);
-						
+
 						// Store expanded warehouses
 						me.current_warehouse_list = warehouses;
 						me.current_warehouse = selectedWarehouse;
-						
+
 						// Filter raw data by expanded warehouse list and re-aggregate
 						const warehouse_data = me.raw_filtered_data.filter(row => {
 							return warehouses.includes(row.warehouse);
 						});
-						
+
 						if (warehouse_data.length === 0) {
 							me.filtered_data = [];
 							me.grand_total = {
-								"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+								"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 							};
 						} else {
 							// Re-aggregate the filtered data using BatCom extraction
 							const aggregated = {};
 							const grand_total = {
-								"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-								"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+								"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+								"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 							};
-							
+
 							warehouse_data.forEach(row => {
 								const item = row.item || '';
-								
-									// Use BatCom-specific common code extraction
+
+								// Use BatCom-specific common code extraction
 								const common_code = me.extract_batcom_common_code(item);
-								
+
 								if (!common_code) return;
-								
+
 								// Initialize aggregated row
 								if (!aggregated[common_code]) {
 									aggregated[common_code] = {
 										common_code: common_code,
 										warehouses: warehouses,
-										"Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Master Batch": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Compound": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0},
-										"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+										"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
+										"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
 									};
 								}
-								
-									// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
+
+								// Get item_group - use BatCom groups (Batch, Master Batch, Compound)
 								let item_group = row.item_group || '';
-								
+
 								// Only process BatCom item groups
 								if (!['Batch', 'Master Batch', 'Compound'].includes(item_group)) {
 									return;
 								}
-								
+
 								// Add quantities
 								const opening = parseFloat(row.opening_qty) || 0;
 								const in_qty = parseFloat(row.in_qty) || 0;
 								const out_qty = parseFloat(row.out_qty) || 0;
 								const balance = parseFloat(row.balance_qty) || 0;
-								
+
 								aggregated[common_code][item_group].opening_qty += opening;
 								aggregated[common_code][item_group].in_qty += in_qty;
 								aggregated[common_code][item_group].out_qty += out_qty;
 								aggregated[common_code][item_group].balance_qty += balance;
-								
+
 								aggregated[common_code].Total.opening_qty += opening;
 								aggregated[common_code].Total.in_qty += in_qty;
 								aggregated[common_code].Total.out_qty += out_qty;
 								aggregated[common_code].Total.balance_qty += balance;
-								
+
 								// Update grand totals
 								grand_total[item_group].opening_qty += opening;
 								grand_total[item_group].in_qty += in_qty;
 								grand_total[item_group].out_qty += out_qty;
 								grand_total[item_group].balance_qty += balance;
-								
+
 								grand_total.Total.opening_qty += opening;
 								grand_total.Total.in_qty += in_qty;
 								grand_total.Total.out_qty += out_qty;
 								grand_total.Total.balance_qty += balance;
 							});
-							
+
 							// Convert to array and sort
-							me.filtered_data = Object.values(aggregated).sort((a, b) => 
+							me.filtered_data = Object.values(aggregated).sort((a, b) =>
 								a.common_code.localeCompare(b.common_code)
 							);
 							me.grand_total = grand_total;
 						}
-						
+
 						// Clear search box when warehouse changes
 						$('#common-code-filter').val('');
 						$('.clear-search').hide();
-						
+
 						// Re-apply current sort
 						me.sort_data(me.current_sort.column, me.current_sort.order, false);
 						me.render_table_rows(me.filtered_data);
-						
+
 						frappe.show_alert({
 							message: __('Filtered by {0} ({1} child warehouses)', [selectedWarehouse, warehouses.length]),
 							indicator: 'green'
@@ -632,16 +655,16 @@ class BatComAggregatedReport {
 				}
 			});
 		});
-		
+
 		// Search functionality - FIXED: Now correctly filters from current warehouse-filtered data
-		$('#common-code-filter').on('input', function() {
+		$('#common-code-filter').on('input', function () {
 			const searchText = $(this).val().toLowerCase().trim();
-			
+
 			// Get the base data after warehouse filter has been applied
 			const selectedWarehouse = $('#warehouse-filter').val();
 			const aggregated_result = me.aggregate_by_warehouse(selectedWarehouse);
 			let baseData = aggregated_result.data;
-			
+
 			if (searchText === '') {
 				// No search - show all data from current warehouse filter
 				me.filtered_data = baseData;
@@ -649,109 +672,109 @@ class BatComAggregatedReport {
 				$('.clear-search').hide();
 			} else {
 				// Apply search on top of warehouse-filtered data
-				me.filtered_data = baseData.filter(row => 
+				me.filtered_data = baseData.filter(row =>
 					row.common_code.toLowerCase().includes(searchText)
 				);
 				// Keep the same grand total (warehouse-filtered)
 				me.grand_total = aggregated_result.grand_total;
 				$('.clear-search').show();
 			}
-			
+
 			// Re-apply current sort
 			me.sort_data(me.current_sort.column, me.current_sort.order, false);
 			me.render_table_rows(me.filtered_data);
 		});
-		
+
 		// Clear search button
-		$('.clear-search').on('click', function() {
+		$('.clear-search').on('click', function () {
 			$('#common-code-filter').val('').trigger('input');
 		});
-		
+
 		// Sortable column headers
-		$('.sortable-header').on('click', function() {
+		$('.sortable-header').on('click', function () {
 			const column = $(this).data('column');
 			const dataType = $(this).data('type');
-			
+
 			// Toggle sort order
 			let order = 'asc';
 			if (me.current_sort.column === column && me.current_sort.order === 'asc') {
 				order = 'desc';
 			}
-			
+
 			me.sort_data(column, order, true);
 		});
 	}
-	
+
 	sort_data(column, order, updateUI = true) {
 		const me = this;
 		me.current_sort = { column, order };
-		
+
 		// Helper function to get nested property value
 		const getNestedValue = (obj, path) => {
 			return path.split('.').reduce((current, prop) => current?.[prop], obj);
 		};
-		
+
 		// Sort the filtered data
 		me.filtered_data.sort((a, b) => {
 			let aVal = getNestedValue(a, column);
 			let bVal = getNestedValue(b, column);
-			
+
 			// Handle null/undefined values
 			if (aVal === null || aVal === undefined) aVal = 0;
 			if (bVal === null || bVal === undefined) bVal = 0;
-			
+
 			// String comparison for common_code
 			if (column === 'common_code') {
 				aVal = String(aVal).toLowerCase();
 				bVal = String(bVal).toLowerCase();
-				return order === 'asc' 
-					? aVal.localeCompare(bVal) 
+				return order === 'asc'
+					? aVal.localeCompare(bVal)
 					: bVal.localeCompare(aVal);
 			}
-			
+
 			// Numeric comparison for quantities
 			aVal = parseFloat(aVal) || 0;
 			bVal = parseFloat(bVal) || 0;
-			
+
 			return order === 'asc' ? aVal - bVal : bVal - aVal;
 		});
-		
+
 		if (updateUI) {
 			// Update sort icons
 			$('.sortable-header .sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
 			$('.sortable-header').removeClass('sorted-asc sorted-desc');
-			
+
 			const $header = $(`.sortable-header[data-column="${column}"]`);
 			$header.addClass(order === 'asc' ? 'sorted-asc' : 'sorted-desc');
 			$header.find('.sort-icon')
 				.removeClass('fa-sort')
 				.addClass(order === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-			
+
 			// Re-render table
 			me.render_table_rows(me.filtered_data);
 		}
 	}
-	
+
 	bind_batch_buttons() {
 		const me = this;
-		this.$container.find('.btn-batches').on('click', function() {
+		this.$container.find('.btn-batches').on('click', function () {
 			const common_code = $(this).data('common-code');
 			me.show_batch_details(common_code);
 		});
 	}
-	
+
 	show_batch_details(common_code) {
 		const me = this;
-		
+
 		// Show loading indicator in frappe interface
 		frappe.show_alert({
 			message: __('Preparing batch data...'),
 			indicator: 'blue'
 		}, 3);
-		
+
 		// Also show a progress indicator
 		frappe.show_progress(__('Loading Batches'), 30, 100, __('Fetching data from server...'));
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.get_batch_details_by_common_code',
 			args: {
@@ -781,22 +804,22 @@ class BatComAggregatedReport {
 			}
 		});
 	}
-	
+
 	export_to_excel() {
 		const filter_values = this.current_filters;
-		
+
 		if (!filter_values) {
 			frappe.msgprint(__('Please generate the report first before exporting.'));
 			return;
 		}
-		
+
 		frappe.show_alert({
 			message: __('Preparing Excel export...'),
 			indicator: 'blue'
 		}, 3);
-		
+
 		const warehouse = this.current_warehouse || '';
-		
+
 		frappe.call({
 			method: 'smart_screens.smart_screens.page.batcom_aggregated_report.batcom_aggregated_report.export_to_excel',
 			args: {
@@ -829,14 +852,14 @@ class BatComAggregatedReport {
 			}
 		});
 	}
-	
+
 	render_batch_modal(data) {
 		const common_code = data.common_code;
 		const batches = data.batches;
 		const batch_count = data.batch_count || 0;
 		const master_batch_count = data.master_batch_count || 0;
 		const compound_count = data.compound_count || 0;
-		
+
 		// Create dialog with Export to Excel button
 		const d = new frappe.ui.Dialog({
 			title: `Batch Details for Item ${common_code}`,
@@ -852,7 +875,7 @@ class BatComAggregatedReport {
 				this.export_batch_details_to_excel(common_code, batches);
 			}
 		});
-		
+
 		// Build tabbed interface HTML - Use BUTTON elements instead of anchor tags
 		let html = `
 			<div class="batch-details-container">
@@ -880,34 +903,34 @@ class BatComAggregatedReport {
 				</div>
 			</div>
 		`;
-		
+
 		d.fields_dict.batch_details_html.$wrapper.html(html);
-		
+
 		// Bind tab click events to BUTTON elements
-		d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').on('click', function(e) {
+		d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').on('click', function (e) {
 			e.preventDefault();
 			e.stopPropagation();
-			
+
 			const targetTab = $(this).data('tab');
-			
+
 			// Remove active class from all tabs and tab content
 			d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-btn').removeClass('active');
 			d.fields_dict.batch_details_html.$wrapper.find('.batch-tab-pane').removeClass('active');
-			
+
 			// Add active class to clicked tab and corresponding content
 			$(this).addClass('active');
 			d.fields_dict.batch_details_html.$wrapper.find(`#${targetTab}`).addClass('active');
 		});
-		
+
 		d.show();
 		this.bind_batch_table_features(d);
 	}
-	
+
 	build_batch_table(batches, item_group) {
 		if (!batches || batches.length === 0) {
 			return `<div class="text-muted text-center p-4">No batches found for ${item_group}</div>`;
 		}
-		
+
 		// Calculate totals for this item group
 		let totals = {
 			opening_qty: 0,
@@ -915,17 +938,17 @@ class BatComAggregatedReport {
 			out_qty: 0,
 			balance_qty: 0
 		};
-		
+
 		batches.forEach(batch => {
 			totals.opening_qty += parseFloat(batch.opening_qty || 0);
 			totals.in_qty += parseFloat(batch.in_qty || 0);
 			totals.out_qty += parseFloat(batch.out_qty || 0);
 			totals.balance_qty += parseFloat(batch.balance_qty || 0);
 		});
-		
+
 		// Store batches for this item group for filtering/sorting
 		const tableId = `batch-table-${item_group.toLowerCase().replace(/\s+/g, '-')}`;
-		
+
 		let html = `
 			<div class="batch-table-controls mb-3">
 				<div class="row">
@@ -955,7 +978,7 @@ class BatComAggregatedReport {
 						</tr>
 					</thead>
 					<tbody>`;
-		
+
 		batches.forEach(batch => {
 			// Escape HTML in data attributes to handle special characters
 			const escapeHtml = (str) => {
@@ -971,7 +994,7 @@ class BatComAggregatedReport {
 					return escapeMap[match];
 				});
 			};
-			
+
 			html += `
 				<tr data-item="${escapeHtml(batch.item)}" 
 				    data-batch="${escapeHtml(batch.batch)}" 
@@ -992,7 +1015,7 @@ class BatComAggregatedReport {
 					<td>${batch.uom || '-'}</td>
 				</tr>`;
 		});
-		
+
 		// Add total row
 		html += `
 				<tr class="batch-total-row">
@@ -1003,35 +1026,35 @@ class BatComAggregatedReport {
 					<td class="text-right"><strong>${this.format_number(totals.balance_qty)}</strong></td>
 					<td></td>
 				</tr>`;
-		
+
 		html += `
 					</tbody>
 				</table>
 			</div>`;
-		
+
 		return html;
 	}
-	
+
 	bind_batch_table_features(dialog) {
 		const me = this;
-		
+
 		// Bind search functionality
-		dialog.fields_dict.batch_details_html.$wrapper.find('.batch-search-input').on('input', function() {
+		dialog.fields_dict.batch_details_html.$wrapper.find('.batch-search-input').on('input', function () {
 			const searchText = $(this).val().toLowerCase();
 			const tableId = $(this).data('table');
 			const $table = $(`#${tableId}`);
-			
+
 			let visibleCount = 0;
-			$table.find('tbody tr').each(function() {
+			$table.find('tbody tr').each(function () {
 				// Skip the total row - it should always be visible
 				if ($(this).hasClass('batch-total-row')) {
 					return; // Continue to next iteration
 				}
-				
+
 				const item = $(this).data('item').toString().toLowerCase();
 				const batch = $(this).data('batch').toString().toLowerCase();
 				const warehouse = $(this).data('warehouse').toString().toLowerCase();
-				
+
 				if (item.includes(searchText) || batch.includes(searchText) || warehouse.includes(searchText)) {
 					$(this).show();
 					visibleCount++;
@@ -1039,36 +1062,36 @@ class BatComAggregatedReport {
 					$(this).hide();
 				}
 			});
-			
+
 			// Update count badge (excluding the total row from count)
 			$(this).closest('.batch-tab-pane').find('.batch-count').text(visibleCount);
 		});
-		
+
 		// Bind sorting functionality
-		dialog.fields_dict.batch_details_html.$wrapper.find('.sortable').on('click', function() {
+		dialog.fields_dict.batch_details_html.$wrapper.find('.sortable').on('click', function () {
 			const column = $(this).data('column');
 			const $table = $(this).closest('table');
 			const $tbody = $table.find('tbody');
-			
+
 			// Get all rows except the total row
 			const $dataRows = $tbody.find('tr:not(.batch-total-row)').toArray();
 			const $totalRow = $tbody.find('tr.batch-total-row');
-			
+
 			// Determine sort order
 			const isAscending = $(this).hasClass('sort-asc');
 			const newOrder = isAscending ? 'desc' : 'asc';
-			
+
 			// Update sort icons
 			$table.find('.sortable').removeClass('sort-asc sort-desc');
 			$table.find('.sortable i').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
-			
+
 			$(this).addClass(`sort-${newOrder}`);
 			$(this).find('i').removeClass('fa-sort').addClass(newOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-			
+
 			// Sort data rows only
 			$dataRows.sort((a, b) => {
 				let aVal, bVal;
-				
+
 				if (['opening_qty', 'in_qty', 'out_qty', 'balance_qty'].includes(column)) {
 					// Numeric sort
 					aVal = parseFloat($(a).data(column.replace('_qty', ''))) || 0;
@@ -1078,24 +1101,29 @@ class BatComAggregatedReport {
 					aVal = $(a).data(column).toString().toLowerCase();
 					bVal = $(b).data(column).toString().toLowerCase();
 				}
-				
+
 				if (newOrder === 'asc') {
 					return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
 				} else {
 					return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
 				}
 			});
-			
+
 			// Re-append sorted data rows, then append total row at the end
 			$tbody.empty().append($dataRows).append($totalRow);
 		});
 	}
-	
+
+	format_currency(val) {
+		if (val === undefined || val === null || isNaN(val)) return '₹0';
+		return '₹' + this.format_number(val);
+	}
+
 	format_number(value) {
 		const n = Number(value || 0);
 		if (!isFinite(n)) return '0';
 		const abs = Math.abs(n);
-		
+
 		if (abs >= 10000000) {
 			return (n / 10000000).toFixed(2) + ' Cr';
 		} else if (abs >= 100000) {
@@ -1106,7 +1134,7 @@ class BatComAggregatedReport {
 			return n.toFixed(2);
 		}
 	}
-	
+
 	show_loading() {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
@@ -1117,7 +1145,7 @@ class BatComAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	show_empty_state(message = null) {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container">').appendTo(this.page.main);
@@ -1131,7 +1159,7 @@ class BatComAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	show_loading_with_progress() {
 		this.page.main.find('.report-container').remove();
 		this.$container = $('<div class="report-container progress-container">').appendTo(this.page.main);
@@ -1195,25 +1223,25 @@ class BatComAggregatedReport {
 			</div>
 		`);
 	}
-	
+
 	update_progress(data) {
 		const { step, total, message, percent } = data;
-		
+
 		// Update progress bar
 		const $progressBar = $('#spp-progress-bar');
 		$progressBar.css('width', percent + '%');
 		$progressBar.find('.progress-text').text(percent + '%');
-		
+
 		// Update current step
 		const $currentStep = $(`.step-item[data-step="${step}"]`);
 		$currentStep.addClass('active');
 		$currentStep.find('.step-message').text(message);
-		
+
 		// Mark previous steps as completed
 		for (let i = 1; i < step; i++) {
 			$(`.step-item[data-step="${i}"]`).addClass('completed').removeClass('active');
 		}
-		
+
 		// Add animation to progress bar color based on progress
 		if (percent >= 100) {
 			$progressBar.removeClass('progress-bar-animated').addClass('bg-success');
@@ -1221,23 +1249,23 @@ class BatComAggregatedReport {
 			$progressBar.addClass('bg-info');
 		}
 	}
-	
+
 	show_performance_summary(performance) {
 		const total = performance.total_time || 0;
-		
+
 		// Show subtle toast notification with performance summary
 		frappe.show_alert({
 			message: `Report generated in ${total}s (Fetch: ${performance.spp_report_fetch}s, Process: ${(total - performance.spp_report_fetch).toFixed(2)}s)`,
 			indicator: 'green'
 		}, 5);
-		
+
 		// Log detailed performance to console for developers
 		console.log('📊 SPP Aggregated Report Performance:', performance);
 	}
-	
+
 	apply_styles() {
 		if ($('#spp-aggregated-report-styles').length) return;
-		
+
 		$("<style id='spp-aggregated-report-styles'>")
 			.prop("type", "text/css")
 			.html(`
@@ -1693,7 +1721,7 @@ class BatComAggregatedReport {
 			`)
 			.appendTo("head");
 	}
-	
+
 	export_batch_details_to_excel(common_code, batches) {
 		frappe.show_alert({
 			message: __('Preparing Excel export for batch details...'),
