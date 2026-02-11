@@ -2,6 +2,7 @@ import frappe
 from frappe.utils import flt
 import requests
 import json
+import re
 
 def get_valuation_rate(item_code, item_group=None):
     """
@@ -16,15 +17,27 @@ def get_valuation_rate(item_code, item_group=None):
     
     # 2. Batch
     if item_group == "Batch":
-        return get_bom_rate(item_code)
+        base_code = get_base_code(item_code)
+        rate = get_bom_rate(base_code)
+        if rate == 0 and base_code != item_code:
+            rate = get_bom_rate(item_code)
+        return rate
     
     # 3. Master Batch
     if item_group == "Master Batch":
-        return get_bom_rate(item_code) + 40.0
+        base_code = get_base_code(item_code)
+        rate = get_bom_rate(base_code)
+        if rate == 0 and base_code != item_code:
+            rate = get_bom_rate(item_code)
+        return rate + 40.0
     
     # 4. Compound
     if item_group == "Compound":
-        return get_bom_rate(item_code) + 85.0
+        base_code = get_base_code(item_code)
+        rate = get_bom_rate(base_code)
+        if rate == 0 and base_code != item_code:
+            rate = get_bom_rate(item_code)
+        return rate + 85.0
     
     # Selling Price based categories
     selling_price = None
@@ -70,8 +83,9 @@ def get_bulk_valuation_rates(items_data):
         if item_group in ["Mat", "Products", "Finished Product", "Finished Products"]:
             mat_prod_fg_items.append(item_code)
         else:
-            # RM, Batch, MB, Compound or others - calculate individually (usually fast or DB-local)
-            rates[item_code] = get_valuation_rate(item_code, item_group)
+            rate = get_valuation_rate(item_code, item_group)
+            rates[item_code] = rate
+            rates[item_code] = rate
             
     # Bulk fetch remote prices for MAT/Product/FG
     if mat_prod_fg_items:
@@ -86,12 +100,14 @@ def get_bulk_valuation_rates(items_data):
                                               {'item_code': item_code, 'price_list': 'Standard Selling'}, 
                                               'price_list_rate'))
             
+            factor = 0
             if item_group == "Mat":
-                rates[item_code] = price * 0.50
+                factor = 0.50
             elif item_group == "Products":
-                rates[item_code] = price * 0.75
+                factor = 0.75
             else: # FG
-                rates[item_code] = price * 0.90
+                factor = 0.90
+            rates[item_code] = price * factor
                 
     return rates
 
@@ -128,10 +144,45 @@ def get_last_purchase_rate(item_code):
 
 def get_bom_rate(item_code):
     """Calculate rate based on active and default BOM"""
+    if not item_code: return 0.0
+    
     bom_cost = frappe.db.get_value("BOM", 
                                   {"item": item_code, "is_active": 1, "is_default": 1}, 
                                   "total_cost")
+    
+    # Fallback to any active BOM if no default
+    if not bom_cost:
+        bom_cost = frappe.db.get_value("BOM", 
+                                      {"item": item_code, "is_active": 1}, 
+                                      "total_cost", order_by="creation desc")
+                                      
     return flt(bom_cost)
+
+def get_base_code(item_code):
+    """Extract base code by removing prefixes (B_, MB_, C_, etc.)"""
+    if not item_code: return None
+    
+    item_code = str(item_code).strip()
+    
+    # Prefix list (same as in aggregated_report_core)
+    prefixes = ['CMB_D', 'CMB_', 'MB_', 'B_', 'C_', 'BC_']
+    base_code = item_code
+    
+    for prefix in prefixes:
+        if item_code.upper().startswith(prefix.upper()):
+            base_code = item_code[len(prefix):]
+            break
+            
+    # Handle version suffixes (v1, v2, etc.)
+    version_match = re.search(r'[vV]\d+$', base_code)
+    if version_match:
+        base_code = base_code[:version_match.start()]
+        
+    # Handle spaces
+    if ' ' in base_code:
+        base_code = base_code.split(' ')[0]
+        
+    return base_code
 
 def get_selling_price_rate(item_code):
     """Fetch Selling Price (Remote with Local fallback)"""

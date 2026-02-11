@@ -250,7 +250,6 @@ def get_unified_rejection_data(filters):
 	FROM `tabSPP Inspection Entry` spp
 	LEFT JOIN `tabFV Inspection Entry Item` fv ON fv.parent = spp.name
 	WHERE spp.docstatus != 2 
-		AND spp.inspection_type = 'Final Visual Inspection'
 		{}
 	GROUP BY spp.name
 	""".format(conditions['spp'])
@@ -303,7 +302,6 @@ def get_unified_rejection_data(filters):
 	FROM `tabInspection Entry` ie
 	LEFT JOIN `tabInspection Entry Item` iei ON iei.parent = ie.name
 	WHERE ie.docstatus != 2 
-		AND ie.inspection_type = 'Final Visual Inspection'
 		{}
 	GROUP BY ie.name
 	""".format(conditions['inspection'])
@@ -564,6 +562,7 @@ def get_defect_analysis(filters=None):
 		filters['to_date'] = nowdate()
 	
 	try:
+		conditions = build_filter_conditions(filters)
 		# Get detailed defect data from both SPP and Inspection Entry
 		spp_defects = frappe.db.sql("""
 			SELECT 
@@ -575,13 +574,13 @@ def get_defect_analysis(filters=None):
 			FROM `tabSPP Inspection Entry` spp
 			INNER JOIN `tabFV Inspection Entry Item` fv ON fv.parent = spp.name
 			WHERE spp.docstatus != 2 
-				AND spp.inspection_type = 'Final Visual Inspection'
 				AND fv.rejected_qty > 0
 				AND spp.posting_date >= %(from_date)s
 				AND spp.posting_date <= %(to_date)s
+				{spp_conditions}
 			GROUP BY fv.type_of_defect, spp.product_ref_no
 			ORDER BY total_rejected DESC
-		""", filters, as_dict=True)
+		""".format(spp_conditions=conditions['spp']), filters, as_dict=True)
 		
 		inspection_defects = frappe.db.sql("""
 			SELECT 
@@ -593,13 +592,13 @@ def get_defect_analysis(filters=None):
 			FROM `tabInspection Entry` ie
 			INNER JOIN `tabInspection Entry Item` iei ON iei.parent = ie.name
 			WHERE ie.docstatus != 2 
-				AND ie.inspection_type = 'Final Visual Inspection'
 				AND iei.rejected_qty > 0
 				AND COALESCE(ie.posting_date, ie.creation) >= %(from_date)s
 				AND COALESCE(ie.posting_date, ie.creation) <= %(to_date)s
+				{ie_conditions}
 			GROUP BY iei.type_of_defect, ie.product_ref_no
 			ORDER BY total_rejected DESC
-		""", filters, as_dict=True)
+		""".format(ie_conditions=conditions['inspection']), filters, as_dict=True)
 		
 		return {
 			'status': 'success',
@@ -623,28 +622,28 @@ def get_filter_options():
 	Get filter options for dropdowns - Focus on Final Visual Inspection
 	"""
 	try:
-		# Get inspectors from both doctypes (only Final Visual Inspection)
+		# Get inspectors from both doctypes
 		inspectors = frappe.db.sql("""
 			SELECT DISTINCT inspector_code as value, inspector_code as label
 			FROM (
 				SELECT inspector_code FROM `tabSPP Inspection Entry` 
-				WHERE inspector_code IS NOT NULL AND inspection_type = 'Final Visual Inspection'
+				WHERE inspector_code IS NOT NULL
 				UNION
 				SELECT inspector_code FROM `tabInspection Entry` 
-				WHERE inspector_code IS NOT NULL AND inspection_type = 'Final Visual Inspection'
+				WHERE inspector_code IS NOT NULL
 			) as inspectors
 			ORDER BY inspector_code
 		""", as_dict=True)
 		
-		# Get items/products from both doctypes (only Final Visual Inspection)
+		# Get items/products from both doctypes
 		items = frappe.db.sql("""
 			SELECT DISTINCT product_ref_no as value, product_ref_no as label
 			FROM (
 				SELECT product_ref_no FROM `tabSPP Inspection Entry` 
-				WHERE product_ref_no IS NOT NULL AND inspection_type = 'Final Visual Inspection'
+				WHERE product_ref_no IS NOT NULL
 				UNION
 				SELECT product_ref_no FROM `tabInspection Entry` 
-				WHERE product_ref_no IS NOT NULL AND inspection_type = 'Final Visual Inspection'
+				WHERE product_ref_no IS NOT NULL
 			) as items
 			ORDER BY product_ref_no
 		""", as_dict=True)
@@ -719,7 +718,6 @@ def get_defect_pivot_report_simple(filters=None):
 			FROM `tabSPP Inspection Entry` spp
 			INNER JOIN `tabFV Inspection Entry Item` fv ON fv.parent = spp.name
 			WHERE spp.docstatus != 2 
-				AND spp.inspection_type = 'Final Visual Inspection'
 				AND fv.rejected_qty > 0
 				AND spp.posting_date >= %s
 				AND spp.posting_date <= %s
@@ -752,7 +750,6 @@ def get_defect_pivot_report_simple(filters=None):
 			FROM `tabInspection Entry` ie
 			INNER JOIN `tabInspection Entry Item` iei ON iei.parent = ie.name
 			WHERE ie.docstatus != 2 
-				AND ie.inspection_type = 'Final Visual Inspection'
 				AND iei.rejected_qty > 0
 				AND COALESCE(ie.posting_date, ie.creation) >= %s
 				AND COALESCE(ie.posting_date, ie.creation) <= %s
@@ -869,7 +866,6 @@ def get_all_defect_types():
 		AND type_of_defect != ''
 		AND parent IN (
 			SELECT name FROM `tabSPP Inspection Entry` 
-			WHERE inspection_type = 'Final Visual Inspection'
 		)
 		ORDER BY type_of_defect
 	""", as_list=True)
@@ -882,7 +878,6 @@ def get_all_defect_types():
 		AND type_of_defect != ''
 		AND parent IN (
 			SELECT name FROM `tabInspection Entry` 
-			WHERE inspection_type = 'Final Visual Inspection'
 		)
 		ORDER BY type_of_defect
 	""", as_list=True)
@@ -926,7 +921,6 @@ def get_raw_defect_data(filters):
 	FROM `tabSPP Inspection Entry` spp
 	INNER JOIN `tabFV Inspection Entry Item` fv ON fv.parent = spp.name
 	WHERE spp.docstatus != 2 
-		AND spp.inspection_type = 'Final Visual Inspection'
 		AND fv.rejected_qty > 0
 		{spp_conditions}
 	""".format(spp_conditions=conditions['spp'])
@@ -959,7 +953,6 @@ def get_raw_defect_data(filters):
 	FROM `tabInspection Entry` ie
 	INNER JOIN `tabInspection Entry Item` iei ON iei.parent = ie.name
 	WHERE ie.docstatus != 2 
-		AND ie.inspection_type = 'Final Visual Inspection'
 		AND iei.rejected_qty > 0
 		{ie_conditions}
 	""".format(ie_conditions=conditions['inspection'])
@@ -1000,7 +993,6 @@ def get_raw_defect_data_new(filters):
 		FROM `tabSPP Inspection Entry` spp
 		INNER JOIN `tabFV Inspection Entry Item` fv ON fv.parent = spp.name
 		WHERE spp.docstatus != 2 
-			AND spp.inspection_type = 'Final Visual Inspection'
 			AND fv.rejected_qty > 0
 			AND spp.posting_date >= %s
 			AND spp.posting_date <= %s
@@ -1037,7 +1029,6 @@ def get_raw_defect_data_new(filters):
 		FROM `tabInspection Entry` ie
 		INNER JOIN `tabInspection Entry Item` iei ON iei.parent = ie.name
 		WHERE ie.docstatus != 2 
-			AND ie.inspection_type = 'Final Visual Inspection'
 			AND iei.rejected_qty > 0
 			AND COALESCE(ie.posting_date, ie.creation) >= %s
 			AND COALESCE(ie.posting_date, ie.creation) <= %s

@@ -602,8 +602,8 @@ def aggregate_by_common_code(data, report_type="SPP"):
 		# Initialize grand_total with all unique item groups found
 		grand_total = {}
 		for item_group in unique_item_groups:
-			grand_total[item_group] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
-		grand_total["Total"] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+			grand_total[item_group] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0}
+		grand_total["Total"] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0}
 		
 		for common_code in aggregated['common_code'].unique():
 			code_data = aggregated[aggregated['common_code'] == common_code]
@@ -611,12 +611,12 @@ def aggregate_by_common_code(data, report_type="SPP"):
 			row = {
 				"common_code": common_code,
 				"warehouses": warehouse_tracking.get(common_code, []),
-				"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+				"Total": {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0}
 			}
 			
 			# Initialize all item groups for this row
 			for item_group in unique_item_groups:
-				row[item_group] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0}
+				row[item_group] = {"opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "valuation_rate": 0, "balance_value": 0}
 			
 			for _, group_row in code_data.iterrows():
 				item_group = group_row['item_group']
@@ -625,7 +625,9 @@ def aggregate_by_common_code(data, report_type="SPP"):
 					"opening_qty": float(group_row['opening_qty']),
 					"in_qty": float(group_row['in_qty']),
 					"out_qty": float(group_row['out_qty']),
-					"balance_qty": float(group_row['balance_qty'])
+					"balance_qty": float(group_row['balance_qty']),
+					"balance_value": float(group_row.get('balance_value', 0)),
+					"valuation_rate": float(group_row.get('balance_value', 0) / group_row['balance_qty']) if group_row['balance_qty'] > 0 else 0
 				}
 				
 				# Add to totals
@@ -633,17 +635,20 @@ def aggregate_by_common_code(data, report_type="SPP"):
 				row["Total"]["in_qty"] += float(group_row['in_qty'])
 				row["Total"]["out_qty"] += float(group_row['out_qty'])
 				row["Total"]["balance_qty"] += float(group_row['balance_qty'])
+				row["Total"]["balance_value"] += float(group_row.get('balance_value', 0))
 				
 				# Add to grand totals
 				grand_total[item_group]["opening_qty"] += float(group_row['opening_qty'])
 				grand_total[item_group]["in_qty"] += float(group_row['in_qty'])
 				grand_total[item_group]["out_qty"] += float(group_row['out_qty'])
 				grand_total[item_group]["balance_qty"] += float(group_row['balance_qty'])
+				grand_total[item_group]["balance_value"] += float(group_row.get('balance_value', 0))
 				
 				grand_total["Total"]["opening_qty"] += float(group_row['opening_qty'])
 				grand_total["Total"]["in_qty"] += float(group_row['in_qty'])
 				grand_total["Total"]["out_qty"] += float(group_row['out_qty'])
 				grand_total["Total"]["balance_qty"] += float(group_row['balance_qty'])
+				grand_total["Total"]["balance_value"] += float(group_row.get('balance_value', 0))
 			
 			result.append(row)
 		

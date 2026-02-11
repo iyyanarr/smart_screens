@@ -1,4 +1,4 @@
-frappe.pages['drill-down-rejection-report'].on_page_load = function(wrapper) {
+frappe.pages['drill-down-rejection-report'].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: '📊 Drill Down Rejection Report',
@@ -14,20 +14,20 @@ class DrillDownRejectionReport {
 		this.page = page;
 		this.parent = $(page.body);
 		this.currentView = 'standard'; // 'standard' or 'pivot'
-		
+
 		this.page.set_secondary_action('Refresh', () => this.refresh(), 'fa fa-refresh');
 		this.page.set_primary_action('Export', () => this.export_data(), 'fa fa-download');
-		
+
 		// Add toggle button for pivot view
 		this.page.add_menu_item('📊 Pivot View (Defects as Columns)', () => this.toggle_pivot_view(), true);
-		
+
 		this.make_page();
 	}
 
 	make_page() {
 		// Clear existing content
 		this.parent.empty();
-		
+
 		// Create main container
 		this.parent.html(`
 			<div class="drill-down-container">
@@ -96,9 +96,11 @@ class DrillDownRejectionReport {
 									<option value="Inspection Entry">Inspection Entry</option>
 								</select>
 							</div>
-							<div class="col-md-3 d-flex align-items-end">
 								<button class="btn btn-primary mr-2" onclick="frappe.drill_down_rejection_report.load_data()">
 									<i class="fa fa-search"></i> Load Data
+								</button>
+								<button class="btn btn-info mr-2" onclick="frappe.drill_down_rejection_report.export_data()">
+									<i class="fa fa-download"></i> Export
 								</button>
 								<button class="btn btn-secondary" onclick="frappe.drill_down_rejection_report.reset_filters()">
 									<i class="fa fa-refresh"></i> Reset
@@ -143,10 +145,10 @@ class DrillDownRejectionReport {
 
 		// Set default dates
 		this.set_default_dates();
-		
+
 		// Load filter options
 		this.load_filter_options();
-		
+
 		// Add custom CSS for hierarchical table
 		this.add_custom_styles();
 	}
@@ -154,7 +156,7 @@ class DrillDownRejectionReport {
 	switch_view(view) {
 		this.currentView = view;
 		this.make_page();
-		
+
 		// If we have current data, redisplay it in the new view
 		if (this.currentData) {
 			this.display_results(this.currentData);
@@ -172,7 +174,7 @@ class DrillDownRejectionReport {
 	set_default_dates() {
 		const today = new Date();
 		const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-		
+
 		document.getElementById('to-date').value = today.toISOString().split('T')[0];
 		document.getElementById('from-date').value = thirtyDaysAgo.toISOString().split('T')[0];
 	}
@@ -228,14 +230,14 @@ class DrillDownRejectionReport {
 
 	load_data() {
 		const filters = this.get_filters();
-		
+
 		// Show loading state
 		document.getElementById('loading-section').style.display = 'block';
 		document.getElementById('results-section').style.display = 'none';
 		document.getElementById('no-data-section').style.display = 'none';
 
 		// Choose API method based on current view
-		const method = this.currentView === 'pivot' 
+		const method = this.currentView === 'pivot'
 			? 'smart_screens.smart_screens.page.drill_down_rejection_report.drill_down_rejection_report.get_defect_pivot_report'
 			: 'smart_screens.smart_screens.page.drill_down_rejection_report.drill_down_rejection_report.get_rejection_data';
 
@@ -247,12 +249,12 @@ class DrillDownRejectionReport {
 			},
 			callback: (response) => {
 				document.getElementById('loading-section').style.display = 'none';
-				
+
 				if (response.message && response.message.status === 'success') {
-					const hasData = this.currentView === 'pivot' 
+					const hasData = this.currentView === 'pivot'
 						? (response.message.data && response.message.data.rows && response.message.data.rows.length > 0)
 						: (response.message.data && response.message.data.length > 0);
-					
+
 					if (hasData) {
 						this.display_results(response.message);
 					} else {
@@ -280,17 +282,17 @@ class DrillDownRejectionReport {
 	display_results(result) {
 		// Update record count
 		document.getElementById('record-count').textContent = `${result.data.length} records`;
-		
+
 		// Show results section
 		document.getElementById('results-section').style.display = 'block';
-		
+
 		// Display appropriate view
 		if (this.currentView === 'pivot') {
 			this.display_pivot_view(result);
 		} else {
 			this.display_standard_view(result);
 		}
-		
+
 		// Store current data
 		this.currentData = result;
 	}
@@ -298,10 +300,10 @@ class DrillDownRejectionReport {
 	display_standard_view(result) {
 		// Update table title
 		document.getElementById('table-title').textContent = '📋 Detailed Results';
-		
+
 		// Display standard summary cards
 		this.display_standard_summary_cards(result);
-		
+
 		// Display standard data table
 		this.display_standard_data_table(result.data);
 	}
@@ -309,10 +311,10 @@ class DrillDownRejectionReport {
 	display_pivot_view(result) {
 		// Update table title
 		document.getElementById('table-title').textContent = '📊 Product-Grouped Pivot View with Drill-Down';
-		
+
 		// Display pivot summary cards
 		this.display_pivot_summary_cards(result);
-		
+
 		// Display hierarchical pivot data table
 		this.display_hierarchical_pivot_table(result.data);
 	}
@@ -320,17 +322,17 @@ class DrillDownRejectionReport {
 	display_standard_summary_cards(result) {
 		const data = result.data;
 		const sublotSummary = result.sublot_summary || {};
-		
+
 		const totalInspected = data.reduce((sum, row) => sum + (parseFloat(row.inspected_qty) || 0), 0);
 		const totalRejected = data.reduce((sum, row) => sum + (parseFloat(row.rejected_qty) || 0), 0);
 		const overallRejectionRate = totalInspected > 0 ? (totalRejected / totalInspected * 100).toFixed(2) : 0;
-		
+
 		const uniqueSublots = Object.keys(sublotSummary).length || new Set(data.map(row => `${row.main_lot}-${row.sublot_number}`)).size;
 		const uniqueProducts = new Set(data.map(row => row.item_code)).size;
-		
+
 		let perfectSublots = 0;
 		let criticalSublots = 0;
-		
+
 		if (sublotSummary && Object.keys(sublotSummary).length > 0) {
 			Object.values(sublotSummary).forEach(sublot => {
 				if (sublot.overall_rejection_percentage === 0) perfectSublots++;
@@ -347,7 +349,7 @@ class DrillDownRejectionReport {
 				sublotRates[key].rejected += parseFloat(row.rejected_qty) || 0;
 				sublotRates[key].inspected += parseFloat(row.inspected_qty) || 0;
 			});
-			
+
 			Object.values(sublotRates).forEach(sublot => {
 				const rate = sublot.inspected > 0 ? (sublot.rejected / sublot.inspected * 100) : 0;
 				if (rate === 0) perfectSublots++;
@@ -410,7 +412,7 @@ class DrillDownRejectionReport {
 	display_pivot_summary_cards(result) {
 		const summary = result.data?.summary || result.summary || {};
 		const defectColumns = result.data?.defect_columns || result.defect_columns || [];
-		
+
 		const totalProducts = summary.total_products || 0;
 		const totalLots = summary.total_lots || 0;
 		const totalInspected = summary.total_inspected || 0;
@@ -451,7 +453,7 @@ class DrillDownRejectionReport {
 				</div>
 			</div>
 		`;
-		
+
 		// Add defect types row if available
 		if (defectColumns.length > 0) {
 			const defectTypesCard = `
@@ -472,7 +474,7 @@ class DrillDownRejectionReport {
 
 	display_standard_data_table(data) {
 		const tableContainer = document.getElementById('table-container');
-		
+
 		tableContainer.innerHTML = `
 			<table class="table table-striped table-hover" id="results-table">
 				<thead class="thead-dark">
@@ -501,19 +503,19 @@ class DrillDownRejectionReport {
 		const tableContainer = document.getElementById('table-container');
 		const data = result.rows || [];
 		const defectColumns = result.defect_columns || [];
-		
+
 		// Store data for drill-down functionality
 		this.pivotData = data;
 		this.defectColumns = defectColumns;
 		this.originalPivotData = [...data]; // Store original data for filtering
-		
+
 		// Create headers for defect types with sorting capabilities
 		const defectHeaders = defectColumns.map(defect => {
 			return `<th class="defect-col text-center sortable-header" data-column="${defect}" title="Click to sort by ${defect}">
 				${defect} <i class="fa fa-sort sort-icon"></i>
 			</th>`;
 		}).join('');
-		
+
 		// Create defect filter checkboxes
 		const defectFilters = defectColumns.map(defect => {
 			return `
@@ -523,7 +525,7 @@ class DrillDownRejectionReport {
 				</div>
 			`;
 		}).join('');
-		
+
 		tableContainer.innerHTML = `
 			<div class="defect-controls mb-3">
 				<div class="row">
@@ -609,13 +611,13 @@ class DrillDownRejectionReport {
 				</table>
 			</div>
 		`;
-		
+
 		// Add event listeners for expand/collapse
 		this.add_drill_down_listeners();
-		
+
 		// Add sorting functionality
 		this.add_sorting_listeners();
-		
+
 		// Add defect filter change listeners
 		this.add_defect_filter_listeners();
 	}
@@ -635,7 +637,7 @@ class DrillDownRejectionReport {
 	generate_product_row(row, defectColumns) {
 		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
 		let rowClass = 'product-row';
-		
+
 		if (rejectionRate > 10) {
 			rowClass += ' table-danger';
 		} else if (rejectionRate > 5) {
@@ -645,12 +647,12 @@ class DrillDownRejectionReport {
 		} else {
 			rowClass += ' table-success';
 		}
-		
+
 		// Generate defect columns with color coding based on quantity
 		const defectCells = defectColumns.map(defect => {
 			const qty = row[defect] || 0;
 			let cellClass = 'defect-cell-empty';
-			
+
 			if (qty > 0) {
 				if (qty >= 100) {
 					cellClass = 'defect-cell-critical';
@@ -662,10 +664,10 @@ class DrillDownRejectionReport {
 					cellClass = 'defect-cell-low';
 				}
 			}
-			
+
 			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
 		}).join('');
-		
+
 		return `
 			<tr class="${rowClass}" data-id="${row.id}" data-type="product">
 				<td class="expand-icon" style="cursor: pointer;">
@@ -686,7 +688,7 @@ class DrillDownRejectionReport {
 	generate_main_lot_row(row, defectColumns) {
 		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
 		let rowClass = 'main-lot-row d-none'; // Initially hidden
-		
+
 		if (rejectionRate > 10) {
 			rowClass += ' table-danger';
 		} else if (rejectionRate > 5) {
@@ -696,12 +698,12 @@ class DrillDownRejectionReport {
 		} else {
 			rowClass += ' table-success';
 		}
-		
+
 		// Generate defect columns with color coding based on quantity
 		const defectCells = defectColumns.map(defect => {
 			const qty = row[defect] || 0;
 			let cellClass = 'defect-cell-empty';
-			
+
 			if (qty > 0) {
 				if (qty >= 100) {
 					cellClass = 'defect-cell-critical';
@@ -713,10 +715,10 @@ class DrillDownRejectionReport {
 					cellClass = 'defect-cell-low';
 				}
 			}
-			
+
 			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
 		}).join('');
-		
+
 		return `
 			<tr class="${rowClass}" data-id="${row.id}" data-type="main_lot" data-parent="${row.parent_id}">
 				<td class="expand-icon" style="cursor: pointer; padding-left: 25px;">
@@ -739,7 +741,7 @@ class DrillDownRejectionReport {
 	generate_sublot_row(row, defectColumns) {
 		const rejectionRate = parseFloat(row.rejection_percentage) || 0;
 		let rowClass = 'sublot-row d-none'; // Initially hidden
-		
+
 		if (rejectionRate > 10) {
 			rowClass += ' table-danger';
 		} else if (rejectionRate > 5) {
@@ -749,12 +751,12 @@ class DrillDownRejectionReport {
 		} else {
 			rowClass += ' table-success';
 		}
-		
+
 		// Generate defect columns with color coding based on quantity
 		const defectCells = defectColumns.map(defect => {
 			const qty = row[defect] || 0;
 			let cellClass = 'defect-cell-empty';
-			
+
 			if (qty > 0) {
 				if (qty >= 100) {
 					cellClass = 'defect-cell-critical';
@@ -766,10 +768,10 @@ class DrillDownRejectionReport {
 					cellClass = 'defect-cell-low';
 				}
 			}
-			
+
 			return `<td class="text-center defect-cell-active ${cellClass}">${qty > 0 ? qty : '-'}</td>`;
 		}).join('');
-		
+
 		return `
 			<tr class="${rowClass}" data-id="${row.id}" data-type="sublot" data-parent="${row.parent_id}">
 				<td style="padding-left: 50px;">
@@ -797,7 +799,7 @@ class DrillDownRejectionReport {
 			const rowId = row.data('id');
 			const rowType = row.data('type');
 			const icon = row.find('i');
-			
+
 			// Find child rows based on parent type
 			let childRows;
 			if (rowType === 'product') {
@@ -807,7 +809,7 @@ class DrillDownRejectionReport {
 				// Find sublot rows for this main lot
 				childRows = $(`tr[data-parent="${rowId}"]`);
 			}
-			
+
 			if (icon.hasClass('fa-plus-square')) {
 				// Expand
 				childRows.removeClass('d-none');
@@ -823,7 +825,7 @@ class DrillDownRejectionReport {
 				// Also collapse any expanded grandchildren
 				if (rowType === 'product') {
 					// Collapse all sublots under this product
-					childRows.each(function() {
+					childRows.each(function () {
 						const mainLotId = $(this).data('id');
 						$(`tr[data-parent="${mainLotId}"]`).addClass('d-none');
 						$(this).find('i.fa-minus-square').removeClass('fa-minus-square').addClass('fa-plus-square');
@@ -837,7 +839,7 @@ class DrillDownRejectionReport {
 				}
 			}
 		});
-		
+
 		// Add click listener for sublot rows to show details
 		$(document).off('click', '.sublot-row').on('click', '.sublot-row', (e) => {
 			if ($(e.target).hasClass('expand-icon') || $(e.target).closest('.expand-icon').length) {
@@ -909,7 +911,7 @@ class DrillDownRejectionReport {
 
 		// Remove existing modal if any
 		$('#lotDetailsModal').remove();
-		
+
 		// Add modal to body and show
 		$('body').append(modalContent);
 		$('#lotDetailsModal').modal('show');
@@ -937,23 +939,23 @@ class DrillDownRejectionReport {
 
 		const sortOrder = $('#sort-order-select').val() || 'desc';
 		const productRows = this.originalPivotData.filter(row => row.type === 'product');
-		
+
 		// Sort product rows
 		productRows.sort((a, b) => {
 			let aVal = a[column] || 0;
 			let bVal = b[column] || 0;
-			
+
 			// Handle string sorting for product names
 			if (column === 'product') {
 				aVal = String(aVal).toLowerCase();
 				bVal = String(bVal).toLowerCase();
 				return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
 			}
-			
+
 			// Handle numeric sorting
 			aVal = parseFloat(aVal) || 0;
 			bVal = parseFloat(bVal) || 0;
-			
+
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
 
@@ -961,16 +963,16 @@ class DrillDownRejectionReport {
 		const sortedData = [];
 		productRows.forEach(productRow => {
 			sortedData.push(productRow);
-			
+
 			// Add main lots for this product
-			const mainLots = this.originalPivotData.filter(row => 
+			const mainLots = this.originalPivotData.filter(row =>
 				row.type === 'main_lot' && row.parent_id === productRow.id
 			);
 			mainLots.forEach(mainLotRow => {
 				sortedData.push(mainLotRow);
-				
+
 				// Add sublots for this main lot
-				const sublots = this.originalPivotData.filter(row => 
+				const sublots = this.originalPivotData.filter(row =>
 					row.type === 'sublot' && row.parent_id === mainLotRow.id
 				);
 				sortedData.push(...sublots);
@@ -988,22 +990,22 @@ class DrillDownRejectionReport {
 
 		// Get selected defect types
 		const selectedDefects = [];
-		$('.defect-filter:checked').each(function() {
+		$('.defect-filter:checked').each(function () {
 			selectedDefects.push($(this).val());
 		});
 
 		// Get defect presence filter
 		const presenceFilter = $('#defect-presence-filter').val();
-		
+
 		// Filter data based on selection
 		let filteredData = [...this.originalPivotData];
 
 		if (presenceFilter !== 'any') {
 			filteredData = filteredData.filter(row => {
 				if (row.type !== 'product') return true; // Keep non-product rows for now
-				
+
 				const rejectionRate = parseFloat(row.rejection_percentage) || 0;
-				
+
 				switch (presenceFilter) {
 					case 'none':
 						return rejectionRate === 0;
@@ -1034,7 +1036,7 @@ class DrillDownRejectionReport {
 		});
 
 		// Update defect columns based on selected filters
-		const filteredDefectColumns = this.defectColumns.filter(defect => 
+		const filteredDefectColumns = this.defectColumns.filter(defect =>
 			selectedDefects.includes(defect)
 		);
 
@@ -1049,7 +1051,7 @@ class DrillDownRejectionReport {
 		if (tbody) {
 			tbody.innerHTML = this.generate_hierarchical_pivot_rows(this.pivotData, this.defectColumns);
 		}
-		
+
 		// Update defect headers
 		const table = document.getElementById('hierarchical-pivot-table');
 		if (table) {
@@ -1058,7 +1060,7 @@ class DrillDownRejectionReport {
 					${defect} <i class="fa fa-sort sort-icon"></i>
 				</th>`;
 			}).join('');
-			
+
 			// Update header row
 			const headerRow = table.querySelector('thead tr');
 			if (headerRow) {
@@ -1077,7 +1079,7 @@ class DrillDownRejectionReport {
 	update_sort_indicators(column, order) {
 		// Reset all sort icons
 		$('.sort-icon').removeClass('fa-sort-up fa-sort-down').addClass('fa-sort');
-		
+
 		// Update the sorted column icon
 		const sortIcon = $(`.sortable-header[data-column="${column}"] .sort-icon`);
 		sortIcon.removeClass('fa-sort').addClass(order === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
@@ -1088,7 +1090,7 @@ class DrillDownRejectionReport {
 			const rejectionRate = parseFloat(row.rejection_percentage) || 0;
 			let rowClass = '';
 			let qualityBadgeClass = '';
-			
+
 			if (rejectionRate > 10) {
 				rowClass = 'table-danger';
 				qualityBadgeClass = 'badge-danger';
@@ -1102,9 +1104,9 @@ class DrillDownRejectionReport {
 				rowClass = 'table-success';
 				qualityBadgeClass = 'badge-success';
 			}
-			
+
 			const sourceBadge = row.source_type === 'SPP Inspection Entry' ? 'badge-primary' : 'badge-success';
-			
+
 			// Format defect details
 			let defectDetails = '-';
 			if (row.defect_details && row.defect_details.trim()) {
@@ -1116,7 +1118,7 @@ class DrillDownRejectionReport {
 					}).join('<br/>');
 				}
 			}
-			
+
 			return `
 				<tr class="${rowClass}">
 					<td><span class="badge ${sourceBadge}">${row.source_type.replace(' Entry', '')}</span></td>
@@ -1140,7 +1142,7 @@ class DrillDownRejectionReport {
 			const totalRejected = row.total_rejected || 0;
 			const inspectedQty = row.inspected_qty || 0;
 			const rejectionRate = inspectedQty > 0 ? (totalRejected / inspectedQty * 100).toFixed(2) : 0;
-			
+
 			let rowClass = '';
 			if (rejectionRate > 10) {
 				rowClass = 'table-danger';
@@ -1151,9 +1153,9 @@ class DrillDownRejectionReport {
 			} else {
 				rowClass = 'table-success';
 			}
-			
+
 			const sourceBadge = row.source_type === 'SPP Inspection Entry' ? 'badge-primary' : 'badge-success';
-			
+
 			// Generate defect columns
 			const defectCols = defectTypes.map(defectType => {
 				const cleanName = this.clean_defect_name_js(defectType);
@@ -1161,7 +1163,7 @@ class DrillDownRejectionReport {
 				const cellClass = value > 0 ? 'font-weight-bold text-danger' : 'text-muted';
 				return `<td class="${cellClass}">${value}</td>`;
 			}).join('');
-			
+
 			return `
 				<tr class="${rowClass}">
 					<td><strong>${row.item_code || '-'}</strong></td>
@@ -1179,13 +1181,13 @@ class DrillDownRejectionReport {
 
 	clean_defect_name_js(defectType) {
 		if (!defectType) return "unknown";
-		
+
 		// This should match the Python clean_defect_name function
 		let cleaned = defectType.toLowerCase();
 		cleaned = cleaned.replace(/[^a-zA-Z0-9]/g, '_');
 		cleaned = cleaned.replace(/_+/g, '_');
 		cleaned = cleaned.replace(/^_+|_+$/g, '');
-		
+
 		return cleaned || "unknown";
 	}
 
@@ -1201,9 +1203,9 @@ class DrillDownRejectionReport {
 		document.getElementById('inspection-type-filter').value = 'Final Visual Inspection';
 		document.getElementById('lot-filter').value = '';
 		document.getElementById('source-filter').value = '';
-		
+
 		this.set_default_dates();
-		
+
 		// Hide results
 		document.getElementById('results-section').style.display = 'none';
 		document.getElementById('no-data-section').style.display = 'none';
@@ -1214,8 +1216,43 @@ class DrillDownRejectionReport {
 			frappe.msgprint('No data to export');
 			return;
 		}
-		
-		frappe.msgprint('Export functionality will be implemented in Phase 2');
+
+		const data = this.currentData.data;
+		if (data.length === 0) {
+			frappe.msgprint('No data found to export');
+			return;
+		}
+
+		// Prepare headers
+		const headers = [
+			'Source Type', 'Document', 'Post Date', 'Item Code', 'Main Lot',
+			'Sublot', 'Inspector', 'Type', 'Inspected Qty', 'Rejected Qty',
+			'Rejection %', 'Status', 'Defects'
+		];
+
+		const csv_data = data.map(row => [
+			row.source_type || '',
+			row.document_name || '',
+			row.posting_date || '',
+			row.item_code || '',
+			row.main_lot || '',
+			row.sublot_number || '1',
+			row.inspector_code || '',
+			row.inspection_type || '',
+			row.inspected_qty || 0,
+			row.rejected_qty || 0,
+			row.rejection_percentage || 0,
+			row.quality_status || '',
+			(row.defect_details || '').replace(/;/g, ',')
+		]);
+
+		// Also handle pivot data if in pivot view
+		if (this.currentView === 'pivot' && this.pivotData) {
+			// For pivot view, we might want a different format, but let's start with standard
+			// or provide a separate export for pivot? For now, standard export is fine.
+		}
+
+		frappe.tools.downloadify(csv_data, headers, 'rejection_report');
 	}
 
 	add_custom_styles() {

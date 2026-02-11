@@ -333,10 +333,10 @@ class BatComAggregatedReport {
 			return {
 				data: [],
 				grand_total: {
-					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
+					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 }
 				}
 			};
 		}
@@ -344,10 +344,10 @@ class BatComAggregatedReport {
 		// Re-aggregate by common_code using BatCom extraction
 		const aggregated = {};
 		const grand_total = {
-			"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-			"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-			"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-			"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
+			"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+			"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+			"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 },
+			"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 }
 		};
 
 		warehouse_data.forEach(row => {
@@ -363,10 +363,10 @@ class BatComAggregatedReport {
 				aggregated[common_code] = {
 					common_code: common_code,
 					warehouses: [warehouse],
-					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 },
-					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0 }
+					"Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "valuation_rate": 0, "balance_value": 0 },
+					"Master Batch": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "valuation_rate": 0, "balance_value": 0 },
+					"Compound": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "valuation_rate": 0, "balance_value": 0 },
+					"Total": { "opening_qty": 0, "in_qty": 0, "out_qty": 0, "balance_qty": 0, "balance_value": 0 }
 				};
 			}
 
@@ -383,27 +383,35 @@ class BatComAggregatedReport {
 			const in_qty = parseFloat(row.in_qty) || 0;
 			const out_qty = parseFloat(row.out_qty) || 0;
 			const balance = parseFloat(row.balance_qty) || 0;
+			const value = parseFloat(row.balance_value) || 0;
+			const rate = parseFloat(row.valuation_rate) || 0;
 
 			aggregated[common_code][item_group].opening_qty += opening;
 			aggregated[common_code][item_group].in_qty += in_qty;
 			aggregated[common_code][item_group].out_qty += out_qty;
 			aggregated[common_code][item_group].balance_qty += balance;
+			aggregated[common_code][item_group].balance_value += value;
+			// Since we're aggregating by common_code, we use the rate from one of the items
+			if (rate > 0) aggregated[common_code][item_group].valuation_rate = rate;
 
 			aggregated[common_code].Total.opening_qty += opening;
 			aggregated[common_code].Total.in_qty += in_qty;
 			aggregated[common_code].Total.out_qty += out_qty;
 			aggregated[common_code].Total.balance_qty += balance;
+			aggregated[common_code].Total.balance_value += value;
 
 			// Update grand totals
 			grand_total[item_group].opening_qty += opening;
 			grand_total[item_group].in_qty += in_qty;
 			grand_total[item_group].out_qty += out_qty;
 			grand_total[item_group].balance_qty += balance;
+			grand_total[item_group].balance_value += value;
 
 			grand_total.Total.opening_qty += opening;
 			grand_total.Total.in_qty += in_qty;
 			grand_total.Total.out_qty += out_qty;
 			grand_total.Total.balance_qty += balance;
+			grand_total.Total.balance_value += value;
 		});
 
 		// Convert to array and sort
