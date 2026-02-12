@@ -28,20 +28,26 @@ def get_valuation_rate(item_code, item_group=None):
     
     # 3. Master Batch
     if item_group == "Master Batch":
-        base_code = get_base_code(item_code)
-        # Use Batch BOM as baseline: try B_ prefix then base code
-        rate = get_bom_rate("B_" + base_code)
+        # First try the Master Batch's own BOM (to catch all layers/FB items)
+        rate = get_bom_rate(item_code)
         if rate == 0:
-            rate = get_bom_rate(base_code)
+            base_code = get_base_code(item_code)
+            # Fallback to Batch BOM
+            rate = get_bom_rate("B_" + base_code)
+            if rate == 0:
+                rate = get_bom_rate(base_code)
         return rate + 40.0
     
     # 4. Compound
     if item_group == "Compound":
-        base_code = get_base_code(item_code)
-        # Use Batch BOM as baseline: try B_ prefix then base code
-        rate = get_bom_rate("B_" + base_code)
+        # First try the Compound's own BOM (flattens all layers including FB)
+        rate = get_bom_rate(item_code)
         if rate == 0:
-            rate = get_bom_rate(base_code)
+            base_code = get_base_code(item_code)
+            # Fallback to Batch BOM
+            rate = get_bom_rate("B_" + base_code)
+            if rate == 0:
+                rate = get_bom_rate(base_code)
         return rate + 85.0
     
     # Selling Price based categories
