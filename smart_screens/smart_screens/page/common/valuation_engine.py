@@ -143,20 +143,26 @@ def get_last_purchase_rate(item_code):
     return flt(frappe.db.get_value("Item", item_code, "valuation_rate"))
 
 def get_bom_rate(item_code):
-    """Calculate rate based on active and default BOM"""
+    """Calculate rate (per unit) based on active and default BOM"""
     if not item_code: return 0.0
     
-    bom_cost = frappe.db.get_value("BOM", 
+    bom_data = frappe.db.get_value("BOM", 
                                   {"item": item_code, "is_active": 1, "is_default": 1}, 
-                                  "total_cost")
+                                  ["total_cost", "quantity"], as_dict=1)
     
     # Fallback to any active BOM if no default
-    if not bom_cost:
-        bom_cost = frappe.db.get_value("BOM", 
+    if not bom_data:
+        bom_data = frappe.db.get_value("BOM", 
                                       {"item": item_code, "is_active": 1}, 
-                                      "total_cost", order_by="creation desc")
+                                      ["total_cost", "quantity"], as_dict=1, order_by="creation desc")
                                       
-    return flt(bom_cost)
+    if not bom_data:
+        return 0.0
+        
+    total_cost = flt(bom_data.get("total_cost", 0))
+    qty = flt(bom_data.get("quantity", 1)) # Prevent division by zero
+    
+    return total_cost / qty if qty > 0 else 0.0
 
 def get_base_code(item_code):
     """Extract base code by removing prefixes (B_, MB_, C_, etc.)"""
