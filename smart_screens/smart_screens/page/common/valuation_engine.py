@@ -17,26 +17,31 @@ def get_valuation_rate(item_code, item_group=None):
     
     # 2. Batch
     if item_group == "Batch":
-        base_code = get_base_code(item_code)
-        rate = get_bom_rate(base_code)
-        if rate == 0 and base_code != item_code:
-            rate = get_bom_rate(item_code)
+        # Try specified item code first
+        rate = get_bom_rate(item_code)
+        if rate == 0:
+            base_code = get_base_code(item_code)
+            rate = get_bom_rate(base_code)
+            if rate == 0 and base_code != item_code:
+                rate = get_bom_rate("B_" + base_code)
         return rate
     
     # 3. Master Batch
     if item_group == "Master Batch":
         base_code = get_base_code(item_code)
-        rate = get_bom_rate(base_code)
-        if rate == 0 and base_code != item_code:
-            rate = get_bom_rate(item_code)
+        # Use Batch BOM as baseline: try B_ prefix then base code
+        rate = get_bom_rate("B_" + base_code)
+        if rate == 0:
+            rate = get_bom_rate(base_code)
         return rate + 40.0
     
     # 4. Compound
     if item_group == "Compound":
         base_code = get_base_code(item_code)
-        rate = get_bom_rate(base_code)
-        if rate == 0 and base_code != item_code:
-            rate = get_bom_rate(item_code)
+        # Use Batch BOM as baseline: try B_ prefix then base code
+        rate = get_bom_rate("B_" + base_code)
+        if rate == 0:
+            rate = get_bom_rate(base_code)
         return rate + 85.0
     
     # Selling Price based categories
@@ -84,7 +89,6 @@ def get_bulk_valuation_rates(items_data):
             mat_prod_fg_items.append(item_code)
         else:
             rate = get_valuation_rate(item_code, item_group)
-            rates[item_code] = rate
             rates[item_code] = rate
             
     # Bulk fetch remote prices for MAT/Product/FG
