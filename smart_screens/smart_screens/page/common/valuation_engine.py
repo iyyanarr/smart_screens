@@ -147,26 +147,58 @@ def get_last_purchase_rate(item_code):
     return flt(frappe.db.get_value("Item", item_code, "valuation_rate"))
 
 def get_bom_rate(item_code):
-    """Calculate rate (per unit) based on active and default BOM"""
+    """
+    Calculate rate (per unit) by summing current rates of ingredients 
+    fetching from Purchase Receipts instead of stale BOM.total_cost.
+    """
     if not item_code: return 0.0
     
-    bom_data = frappe.db.get_value("BOM", 
+    # 1. Get the active/default BOM name
+    bom_name = frappe.db.get_value("BOM", 
                                   {"item": item_code, "is_active": 1, "is_default": 1}, 
-                                  ["total_cost", "quantity"], as_dict=1)
+                                  "name")
     
-    # Fallback to any active BOM if no default
-    if not bom_data:
-        bom_data = frappe.db.get_value("BOM", 
+    if not bom_name:
+        bom_name = frappe.db.get_value("BOM", 
                                       {"item": item_code, "is_active": 1}, 
-                                      ["total_cost", "quantity"], as_dict=1, order_by="creation desc")
+                                      "name", order_by="creation desc")
                                       
-    if not bom_data:
+    if not bom_name:
         return 0.0
-        
-    total_cost = flt(bom_data.get("total_cost", 0))
-    qty = flt(bom_data.get("quantity", 1)) # Prevent division by zero
     
-    return total_cost / qty if qty > 0 else 0.0
+    # 2. Get the BOM quantity (batch size)
+    bom_qty = flt(frappe.db.get_value("BOM", bom_name, "quantity")) or 1.0
+
+    # 3. Traverse Exploded Items (the raw materials)
+    exploded_items = frappe.get_all("BOM Explosion Item", 
+                                     filters={"parent": bom_name}, 
+                                     fields=["item_code", "stock_qty"])
+    
+    total_recalculated_cost = 0.0
+    
+    # Batch fetch item groups for ingredients to optimize
+    ingredient_codes = [i.item_code for i in exploded_items]
+    item_groups = {it.name: it.item_group for it in frappe.get_all("Item", 
+                                                                  filters={"name": ["in", ingredient_codes]}, 
+                                                                  fields=["name", "item_group"])}
+    
+    for ingredient in exploded_items:
+        ing_code = ingredient.item_code
+        ing_qty = flt(ingredient.stock_qty)
+        
+        # Get REAL current rate for the ingredient
+        ing_rate = 0.0
+        ing_group = item_groups.get(ing_code)
+        
+        if is_raw_material(ing_group):
+            ing_rate = get_last_purchase_rate(ing_code)
+        else:
+            # For semi-finished ingredients, use standard valuation rate
+            ing_rate = flt(frappe.db.get_value("Item", ing_code, "valuation_rate"))
+            
+        total_recalculated_cost += (ing_qty * ing_rate)
+        
+    return total_recalculated_cost / bom_qty if bom_qty > 0 else 0.0
 
 def get_base_code(item_code):
     """Extract base code by removing prefixes (B_, MB_, C_, etc.)"""
