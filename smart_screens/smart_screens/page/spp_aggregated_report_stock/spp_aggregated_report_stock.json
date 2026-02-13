@@ -1,0 +1,26 @@
+{
+    "creation": "2025-11-14 10:00:00.000000",
+    "docstatus": 0,
+    "doctype": "Page",
+    "idx": 0,
+    "modified": "2025-11-14 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Smart Screens",
+    "name": "spp-aggregated-report-stock",
+    "owner": "Administrator",
+    "page_name": "SPP Aggregated Stock Report",
+    "roles": [
+        {
+            "role": "Stock User"
+        },
+        {
+            "role": "Stock Manager"
+        },
+        {
+            "role": "System Manager"
+        }
+    ],
+    "standard": "No",
+    "system_page": 0,
+    "title": "SPP Aggregated Stock Report"
+}
