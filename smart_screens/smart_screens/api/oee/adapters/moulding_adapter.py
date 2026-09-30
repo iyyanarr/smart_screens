@@ -8,6 +8,28 @@ import frappe
 from frappe.utils import flt, formatdate
 from smart_screens.smart_screens.api.oee.process_adapter import ProcessAdapter
 
+
+def pair_plans_with_production(work_plans, production_data):
+    """
+    Pair each production record with the plan row that issued its job card.
+
+    The job card is the identity both sides share: its batch_code is the barcode the
+    operator scans, so the MPE lot always follows the job card. Work Plan Item.lot_number
+    can drift from that batch code, and matching on the lot string then attaches a lot's
+    production to another row's item and mould.
+    """
+    production_by_job_card = {}
+    for prod in production_data:
+        production_by_job_card.setdefault(prod.get('job_card'), []).append(prod)
+
+    return [
+        (wp, prod)
+        for wp in work_plans
+        if wp.get('job_card')
+        for prod in production_by_job_card.get(wp['job_card'], [])
+    ]
+
+
 class MouldingAdapter(ProcessAdapter):
     """Adapter for Moulding Production Entry process"""
     
@@ -30,16 +52,12 @@ class MouldingAdapter(ProcessAdapter):
         
         # Build filter conditions for Work Planning
         item_condition = ""
-        lot_condition = ""
         shift_condition = ""
-        
+
         if filters:
             if filters.get('item'):
                 item_condition = f"AND wpi.item LIKE '%{filters.get('item')}%'"
-            
-            if filters.get('lot'):
-                lot_condition = f"AND wpi.lot_number LIKE '%{filters.get('lot')}%'"
-            
+
             if filters.get('shift') and filters.get('shift') != 'all':
                 shift_condition = f"AND wp.shift_type = '{filters.get('shift')}'"
         
@@ -50,6 +68,7 @@ class MouldingAdapter(ProcessAdapter):
                 wp.name as work_plan_no,
                 wp.date as planned_date,
                 wpi.lot_number,
+                wpi.job_card,
                 wpi.item as item_code,
                 wpi.mould as mould_ref,
                 (SELECT noof_cavities
@@ -83,7 +102,6 @@ class MouldingAdapter(ProcessAdapter):
             AND wpi.lot_number != ''
             AND wpi.mould IS NOT NULL
             {item_condition}
-            {lot_condition}
             {shift_condition}
         """
         
@@ -96,6 +114,7 @@ class MouldingAdapter(ProcessAdapter):
                 awp.name as work_plan_no,
                 awp.date as planned_date,
                 awpi.lot_number,
+                awpi.job_card,
                 awpi.item as item_code,
                 awpi.mould as mould_ref,
                 (SELECT noof_cavities
@@ -129,7 +148,6 @@ class MouldingAdapter(ProcessAdapter):
             AND awpi.lot_number != ''
             AND awpi.mould IS NOT NULL
             {item_condition.replace('wpi.item', 'awpi.item')}
-            {lot_condition.replace('wpi.lot_number', 'awpi.lot_number')}
             {shift_condition.replace('wp.shift_type', 'awp.shift_type')}
         """
         
@@ -141,20 +159,30 @@ class MouldingAdapter(ProcessAdapter):
         if not all_work_plans:
             return []
         
-        # STEP 3: Get unique lot numbers from work plans
-        work_plan_lot_numbers = list(set([wp['lot_number'] for wp in all_work_plans]))
-        lot_numbers_condition = "'" + "','".join(work_plan_lot_numbers) + "'"
-        
-        # Build machine filter condition for production data
+        # STEP 3: Get the job cards these plan rows issued (see pair_plans_with_production)
+        plan_job_cards = list(set([wp['job_card'] for wp in all_work_plans if wp.get('job_card')]))
+        if not plan_job_cards:
+            return []
+
+        production_params = {'job_cards': plan_job_cards}
+
+        # Build machine and lot filter conditions for production data
         machine_condition = ""
         if filters and filters.get('machine') and filters.get('machine').strip():
-            machine_condition = f"AND jc.workstation LIKE '%{filters.get('machine')}%'"
-        
-        # STEP 4: Get Moulding Production Entry data for these lot numbers
+            machine_condition = "AND jc.workstation LIKE %(machine)s"
+            production_params['machine'] = f"%{filters.get('machine')}%"
+
+        lot_condition = ""
+        if filters and filters.get('lot'):
+            lot_condition = "AND COALESCE(mpe.scan_lot_number, mpe.batch_no) LIKE %(lot)s"
+            production_params['lot'] = f"%{filters.get('lot')}%"
+
+        # STEP 4: Get Moulding Production Entry data for these job cards
         # FIX: Include actual moulding_date from production entry for linked lot detection
-        # NOTE: We DON'T filter by moulding_date anymore - we filter by lot number from work plans
+        # NOTE: We DON'T filter by moulding_date anymore - we filter by job card from work plans
         production_query = f"""
-            SELECT 
+            SELECT
+                mpe.job_card,
                 COALESCE(mpe.scan_lot_number, mpe.batch_no) as lot_number,
                 mpe.mould_reference as mould_ref,
                 mpe.item_to_produce as item_code,
@@ -168,130 +196,76 @@ class MouldingAdapter(ProcessAdapter):
                 GROUP_CONCAT(mpe.name ORDER BY mpe.creation SEPARATOR '|||') as production_entry_names
             FROM `tabMoulding Production Entry` mpe
             LEFT JOIN `tabJob Card` jc ON mpe.job_card = jc.name
-            WHERE COALESCE(mpe.scan_lot_number, mpe.batch_no) IN ({lot_numbers_condition})
+            WHERE mpe.job_card IN %(job_cards)s
             AND mpe.docstatus = 1
             {machine_condition}
-            GROUP BY COALESCE(mpe.scan_lot_number, mpe.batch_no), 
-                     mpe.mould_reference, 
-                     mpe.item_to_produce, 
-                     mpe.employee_name, 
+            {lot_condition}
+            GROUP BY mpe.job_card,
+                     COALESCE(mpe.scan_lot_number, mpe.batch_no),
+                     mpe.mould_reference,
+                     mpe.item_to_produce,
+                     mpe.employee_name,
                      jc.workstation,
                      DATE(mpe.moulding_date)
         """
-        
-        production_data = frappe.db.sql(production_query, as_dict=True)
-        
-        # Create lookup dictionaries
-        # Key: lot_number -> list of work plans
-        work_plan_by_lot = {}
-        for wp in all_work_plans:
-            lot_no = wp['lot_number']
-            if lot_no not in work_plan_by_lot:
-                work_plan_by_lot[lot_no] = []
-            work_plan_by_lot[lot_no].append(wp)
-        
-        # Key: lot_number -> production data
-        production_by_lot = {}
-        for prod in production_data:
-            lot_no = prod['lot_number']
-            if lot_no not in production_by_lot:
-                production_by_lot[lot_no] = []
-            production_by_lot[lot_no].append(prod)
-        
+
+        production_data = frappe.db.sql(production_query, production_params, as_dict=True)
+
         # STEP 5: Merge work plan data with production data
-        # Primary source is Work Planning - if there's no production, we still show the work plan
+        # Plans without production are not reported (no production entry to link to)
         final_results = []
-        
-        for wp in all_work_plans:
-            lot_no = wp['lot_number']
-            
-            # Get production data for this lot (if any)
-            prod_records = production_by_lot.get(lot_no, [])
-            
-            if prod_records:
-                # Production exists - merge with work plan
-                for prod in prod_records:
-                    # Get first production entry name from the comma-separated list
-                    production_entry_names = prod.get('production_entry_names', '')
-                    first_production_entry = production_entry_names.split('|||')[0] if production_entry_names else None
-                    
-                    # Skip if no valid production entry found
-                    if not first_production_entry:
-                        continue
-                    
-                    # Get machine name from Job Card workstation
-                    machine_name = prod.get('machine_name') or 'N/A'
-                    
-                    # Use mould_ref and item_code from Work Planning (primary source)
-                    mould_ref = wp.get('mould_ref', '')
-                    item_code = wp.get('item_code', '')
-                    
-                    # Calculate NoP (Number of Products) = Production Weight / Blank Weight
-                    total_production_weight_kg = flt(prod.get('total_production_weight', 0))
-                    blank_weight_grams = self.get_blank_weight(mould_ref, item_code)
-                    number_of_products = 0
-                    
-                    if blank_weight_grams > 0 and total_production_weight_kg > 0:
-                        total_production_weight_grams = total_production_weight_kg * 1000
-                        number_of_products = int(total_production_weight_grams / blank_weight_grams)
-                    
-                    result = {
-                        'name': first_production_entry,
-                        'production_date': wp['planned_date'],  # Use PLANNED date from Work Planning (for display)
-                        'actual_moulding_date': prod.get('actual_moulding_date'),  # FIX: Add actual production date for linked lot detection
-                        'shift_type': wp['shift_type'],
-                        'mould_reference': mould_ref,
-                        'machine_name': machine_name,
-                        'lot_number': lot_no,
-                        'item_to_produce': item_code,
-                        'number_of_lifts': flt(prod['total_production_lifts']),
-                        'number_of_products': number_of_products,
-                        'production_weight_kg': total_production_weight_kg,
-                        'blank_weight_grams': blank_weight_grams,
-                        'no_of_running_cavities': flt(wp.get('no_of_cavities', 0)),
-                        'downtime_minutes': flt(prod.get('avg_downtime_minutes', 0)),
-                        'operator_name': prod.get('operator_name', ''),
-                        'weight': total_production_weight_kg,  # FIX: Use actual weight instead of 0
-                        'target_lifts': flt(wp.get('target_lifts', 0)),
-                        'total_pieces_produced': flt(prod['total_pieces_produced']),
-                        'work_plan_no': wp.get('work_plan_no', ''),
-                        'production_entry_names': production_entry_names,
-                        'has_production': True  # Flag to indicate real production exists
-                    }
-                    
-                    final_results.append(result)
-            else:
-                # No production found for this work plan - still include it with zero production
-                # NOTE: For no-production cases, we don't create a record in the final results
-                # This prevents errors when trying to link to non-existent production entries
-                # Uncomment below if you want to show planned but not produced items
-                
-                # result = {
-                #     'name': None,  # No production entry exists
-                #     'production_date': wp['planned_date'],
-                #     'shift_type': wp['shift_type'],
-                #     'mould_reference': wp.get('mould_ref', ''),
-                #     'machine_name': 'N/A',
-                #     'lot_number': lot_no,
-                #     'item_to_produce': wp.get('item_code', ''),
-                #     'number_of_lifts': 0,
-                #     'number_of_products': 0,
-                #     'production_weight_kg': 0,
-                #     'blank_weight_grams': 0,
-                #     'no_of_running_cavities': flt(wp.get('no_of_cavities', 0)),
-                #     'downtime_minutes': 0,
-                #     'operator_name': '',
-                #     'weight': 0,
-                #     'target_lifts': flt(wp.get('target_lifts', 0)),
-                #     'total_pieces_produced': 0,
-                #     'work_plan_no': wp.get('work_plan_no', ''),
-                #     'production_entry_names': '',
-                #     'has_production': False  # Flag to indicate no production
-                # }
-                # 
-                # final_results.append(result)
-                pass
-        
+
+        for wp, prod in pair_plans_with_production(all_work_plans, production_data):
+            # Get first production entry name from the comma-separated list
+            production_entry_names = prod.get('production_entry_names', '')
+            first_production_entry = production_entry_names.split('|||')[0] if production_entry_names else None
+
+            # Skip if no valid production entry found
+            if not first_production_entry:
+                continue
+
+            # Get machine name from Job Card workstation
+            machine_name = prod.get('machine_name') or 'N/A'
+
+            # Spec lookups use the plan row that issued this job card; display shows what the MPE recorded
+            mould_ref = wp.get('mould_ref', '')
+            item_code = wp.get('item_code', '')
+
+            # Calculate NoP (Number of Products) = Production Weight / Blank Weight
+            total_production_weight_kg = flt(prod.get('total_production_weight', 0))
+            blank_weight_grams = self.get_blank_weight(mould_ref, item_code)
+            number_of_products = 0
+
+            if blank_weight_grams > 0 and total_production_weight_kg > 0:
+                total_production_weight_grams = total_production_weight_kg * 1000
+                number_of_products = int(total_production_weight_grams / blank_weight_grams)
+
+            result = {
+                'name': first_production_entry,
+                'production_date': wp['planned_date'],  # Use PLANNED date from Work Planning (for display)
+                'actual_moulding_date': prod.get('actual_moulding_date'),  # FIX: Add actual production date for linked lot detection
+                'shift_type': wp['shift_type'],
+                'mould_reference': prod.get('mould_ref') or mould_ref,
+                'machine_name': machine_name,
+                'lot_number': prod['lot_number'],
+                'item_to_produce': prod.get('item_code') or item_code,
+                'number_of_lifts': flt(prod['total_production_lifts']),
+                'number_of_products': number_of_products,
+                'production_weight_kg': total_production_weight_kg,
+                'blank_weight_grams': blank_weight_grams,
+                'no_of_running_cavities': flt(wp.get('no_of_cavities', 0)),
+                'downtime_minutes': flt(prod.get('avg_downtime_minutes', 0)),
+                'operator_name': prod.get('operator_name', ''),
+                'weight': total_production_weight_kg,  # FIX: Use actual weight instead of 0
+                'target_lifts': flt(wp.get('target_lifts', 0)),
+                'total_pieces_produced': flt(prod['total_pieces_produced']),
+                'work_plan_no': wp.get('work_plan_no', ''),
+                'production_entry_names': production_entry_names,
+                'has_production': True  # Flag to indicate real production exists
+            }
+
+            final_results.append(result)
+
         return final_results
     
     def get_linked_lot_data(self, lot_number, production_date, shift_type, machine_reference):
